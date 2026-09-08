@@ -1,0 +1,256 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Rol {
+  idRol    Int       @id @default(autoincrement())
+  nombre   String    @unique
+  usuarios Usuario[]
+}
+
+model Provincia {
+  idProvincia Int         @id @default(autoincrement())
+  nombre      String      @unique
+  localidades Localidad[]
+}
+
+model Localidad {
+  idLocalidad Int       @id @default(autoincrement())
+  nombre      String
+  idProvincia Int
+
+  provincia Provincia @relation(fields: [idProvincia], references: [idProvincia])
+
+  sucursales        Sucursal[]
+  pedidosDelivery   Pedido[]
+  sucursalesDelivery SucursalLocalidad[]
+
+  @@unique([nombre, idProvincia])
+}
+
+model Sucursal {
+  idSucursal Int     @id @default(autoincrement())
+  nombre     String
+  telefono   String?
+  direccion  String
+  horario    String?
+  activa     Boolean @default(true)
+
+  idLocalidad Int
+  localidad   Localidad @relation(fields: [idLocalidad], references: [idLocalidad])
+
+  usuarios           Usuario[]
+  productos          SucursalProducto[]
+  pedidos            Pedido[]
+  localidadesDelivery SucursalLocalidad[]
+}
+
+model SucursalLocalidad {
+  idSucursal  Int
+  idLocalidad Int
+
+  sucursal  Sucursal  @relation(fields: [idSucursal], references: [idSucursal])
+  localidad Localidad @relation(fields: [idLocalidad], references: [idLocalidad])
+
+  @@id([idSucursal, idLocalidad])
+}
+
+model Usuario {
+  idUsuario    Int     @id @default(autoincrement())
+  nombre       String
+  apellido     String
+  email        String  @unique
+  username     String  @unique
+  passwordHash String
+  debeCambiarContrasena Boolean @default(true)
+  activo       Boolean @default(true)
+
+  idRol Int
+  rol   Rol @relation(fields: [idRol], references: [idRol])
+
+  idSucursal Int?
+  sucursal   Sucursal? @relation(fields: [idSucursal], references: [idSucursal])
+
+  pedidosCargados   Pedido[]
+}
+
+model Categoria {
+  idCategoria Int     @id @default(autoincrement())
+  nombre      String  @unique
+  descripcion String?
+  orden       Int
+  activa      Boolean @default(true)
+
+  productos Producto[]
+}
+
+model Producto {
+  idProducto  Int     @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+  precio      Float
+  activo      Boolean @default(true)
+
+  idCategoria Int
+  categoria   Categoria @relation(fields: [idCategoria], references: [idCategoria])
+
+  sucursales      SucursalProducto[]
+  variaciones     Variacion[]
+  extras          ProductoExtra[]
+  detallesPedido  DetallePedido[]
+historialPrecios HistorialPrecioProducto[]
+}
+
+model SucursalProducto {
+  idSucursal Int
+  idProducto Int
+  disponible Boolean @default(true)
+
+  sucursal Sucursal @relation(fields: [idSucursal], references: [idSucursal])
+  producto Producto @relation(fields: [idProducto], references: [idProducto])
+
+  @@id([idSucursal, idProducto])
+}
+
+model Variacion {
+  idVariacion     Int     @id @default(autoincrement())
+  nombre          String
+  precioAdicional Float
+  disponible      Boolean @default(true)
+
+  idProducto Int
+  producto   Producto @relation(fields: [idProducto], references: [idProducto])
+
+  detallesPedido DetallePedido[]
+}
+
+model Extra {
+  idExtra         Int     @id @default(autoincrement())
+  nombre          String
+  precioAdicional Float
+  activo          Boolean @default(true)
+
+  productos       ProductoExtra[]
+  detallesElegidos DetallePedidoExtra[]
+}
+
+model ProductoExtra {
+  idProducto Int
+  idExtra    Int
+
+  producto Producto @relation(fields: [idProducto], references: [idProducto])
+  extra    Extra    @relation(fields: [idExtra], references: [idExtra])
+
+  @@id([idProducto, idExtra])
+}
+
+model Cliente {
+  idCliente Int    @id @default(autoincrement())
+  nombre    String
+  apellido  String?
+  telefono  String
+  email     String?
+
+  pedidos Pedido[]
+}
+
+model TipoEntrega {
+  idTipoEntrega Int    @id @default(autoincrement())
+  nombre        String @unique
+
+  pedidos Pedido[]
+}
+
+model Descuento {
+  idDescuento  Int     @id @default(autoincrement())
+  descripcion  String
+  porcentaje   Float
+  activo       Boolean @default(true)
+
+  pedidos Pedido[]
+}
+
+model Pedido {
+  idPedido Int      @id @default(autoincrement())
+  fecha    DateTime @default(now())
+
+  origenPedido String
+  estadoPedido String
+  metodoPago   String
+  estadoPago   String
+
+  direccion String?
+
+  subtotal  Float
+  total     Float
+
+  idCliente Int
+  cliente   Cliente @relation(fields: [idCliente], references: [idCliente])
+
+  idSucursal Int
+  sucursal   Sucursal @relation(fields: [idSucursal], references: [idSucursal])
+
+  idUsuario Int?
+  usuario   Usuario? @relation(fields: [idUsuario], references: [idUsuario])
+
+  idTipoEntrega Int
+  tipoEntrega   TipoEntrega @relation(fields: [idTipoEntrega], references: [idTipoEntrega])
+
+  idLocalidad Int?
+  localidad   Localidad? @relation(fields: [idLocalidad], references: [idLocalidad])
+
+  idDescuento Int?
+  descuento   Descuento? @relation(fields: [idDescuento], references: [idDescuento])
+
+  detalles  DetallePedido[]
+
+}
+
+model DetallePedido {
+  idDetalle Int @id @default(autoincrement())
+
+  cantidad                Int
+  precioBaseAplicado      Float
+  precioVariacionAplicado Float
+  precioUnitario          Float
+  subtotal                Float
+
+  idPedido Int
+  pedido   Pedido @relation(fields: [idPedido], references: [idPedido])
+
+  idProducto Int
+  producto   Producto @relation(fields: [idProducto], references: [idProducto])
+
+  idVariacion Int?
+  variacion   Variacion? @relation(fields: [idVariacion], references: [idVariacion])
+
+  extras DetallePedidoExtra[]
+}
+
+model DetallePedidoExtra {
+  idDetalle Int
+  idExtra   Int
+
+  precioExtraAplicado Float
+
+  detalle DetallePedido @relation(fields: [idDetalle], references: [idDetalle])
+  extra   Extra         @relation(fields: [idExtra], references: [idExtra])
+
+  @@id([idDetalle, idExtra])
+}
+
+model HistorialPrecioProducto {
+  idHistorial Int      @id @default(autoincrement())
+  precioAnterior Float?
+  precioNuevo    Float
+  fechaCambio      DateTime @default(now())
+
+  idProducto Int
+  producto   Producto @relation(fields: [idProducto], references: [idProducto])
+
+
+}
