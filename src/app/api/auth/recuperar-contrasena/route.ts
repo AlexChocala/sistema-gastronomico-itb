@@ -43,8 +43,8 @@ function firmar(payload: string, passwordHash: string) {
   return crypto.createHmac('sha256', secreto).update(payload).update(passwordHash).digest('base64url')
 }
 
-// Se exportan porque app/api/auth/reset-password/route.ts necesita generar/verificar el
-// mismo token acá. No hay un archivo lib/ aparte para esto en la lista de archivos
+// Se exportan porque app/api/auth/restablecer-contrasena/route.ts necesita generar/verificar
+// el mismo token acá. No hay un archivo lib/ aparte para esto en la lista de archivos
 // permitidos, así que un route.ts importa las funciones del otro.
 export function generarTokenReset(idUsuario: number, passwordHash: string) {
   const expira = Date.now() + DURACION_TOKEN_MS

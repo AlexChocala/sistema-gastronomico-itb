@@ -10,7 +10,16 @@ import { Button } from '@/components/ui/Button'
 
 export function CerrarSesionButton() {
   return (
-    <Button variant="secundario" onClick={() => signOut({ callbackUrl: '/acceso/login' })}>
+    // Button trae `w-full` fijo en su base (así se usa en los forms, adentro de un Card
+    // angosto). Acá no hay ningún Card conteniéndolo, así que sin este override el botón
+    // se estira al ancho de toda la pantalla. El "!" fuerza la anulación de w-full sin
+    // depender del orden en que Tailwind genere las clases (concatenar className a mano,
+    // sin una librería tipo tailwind-merge, no garantiza que la última clase gane).
+    <Button
+      variant="secundario"
+      className="w-auto!"
+      onClick={() => signOut({ callbackUrl: '/acceso/login' })}
+    >
       Cerrar sesión
     </Button>
   )

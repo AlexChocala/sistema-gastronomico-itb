@@ -1,10 +1,10 @@
-// Valida el token recibido (generado en forgot-password/route.ts) y, si es válido,
+// Valida el token recibido (generado en recuperar-contrasena/route.ts) y, si es válido,
 // actualiza la contraseña del usuario correspondiente.
 
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcrypt'
 import { prisma } from '@/lib/prisma'
-import { verificarTokenReset } from '@/app/api/auth/forgot-password/route'
+import { verificarTokenReset } from '@/app/api/auth/recuperar-contrasena/route'
 
 export async function POST(request: Request) {
   const { token, password } = await request.json()

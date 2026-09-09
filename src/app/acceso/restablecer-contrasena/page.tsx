@@ -5,14 +5,14 @@
 // (node_modules/next/dist/docs/.../page.md).
 //
 // Esta validación es solo para la UX (decide qué mostrar). La que de verdad protege el
-// cambio de contraseña sigue siendo la de POST /api/auth/reset-password: el token
+// cambio de contraseña sigue siendo la de POST /api/auth/restablecer-contrasena: el token
 // igual se puede vencer o invalidar en el rato entre que se carga esta página y se
 // aprieta "Guardar" (por ejemplo, si se pide otro link de recupero en el medio), así
 // que el submit vuelve a llamar a verificarTokenReset por su cuenta.
 
 import { Card } from '@/components/ui/Card'
 import { RestablecerContrasenaForm } from '@/components/forms/RestablecerContrasenaForm'
-import { verificarTokenReset } from '@/app/api/auth/forgot-password/route'
+import { verificarTokenReset } from '@/app/api/auth/recuperar-contrasena/route'
 
 export default async function ResetPasswordPage({
   searchParams,

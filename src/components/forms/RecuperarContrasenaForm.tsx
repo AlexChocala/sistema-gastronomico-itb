@@ -1,6 +1,6 @@
 'use client'
 
-// Pide el email y llama a /api/auth/forgot-password. Siempre muestra el mismo mensaje
+// Pide el email y llama a /api/auth/recuperar-contrasena. Siempre muestra el mismo mensaje
 // de éxito, exista o no el email (ver el comentario sobre enumeración de usuarios en
 // esa API).
 
@@ -18,7 +18,7 @@ export function RecuperarContrasenaForm() {
     evento.preventDefault()
     setCargando(true)
 
-    await fetch('/api/auth/forgot-password', {
+    await fetch('/api/auth/recuperar-contrasena', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),

@@ -1,6 +1,6 @@
 'use client'
 
-// Pide la nueva contraseña y llama a /api/auth/reset-password con el token recibido
+// Pide la nueva contraseña y llama a /api/auth/restablecer-contrasena con el token recibido
 // por props. La página servidor (app/acceso/restablecer-contrasena/page.tsx) ya validó
 // ese token con verificarTokenReset antes de renderizar este componente, así que acá
 // no hace falta re-chequear si vino vacío o inválido.
@@ -23,7 +23,7 @@ export function RestablecerContrasenaForm({ token }: { token: string }) {
     setError('')
     setCargando(true)
 
-    const respuesta = await fetch('/api/auth/reset-password', {
+    const respuesta = await fetch('/api/auth/restablecer-contrasena', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, password }),
