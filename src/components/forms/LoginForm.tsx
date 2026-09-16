@@ -24,26 +24,34 @@ export function LoginForm() {
     setError('')
     setCargando(true)
 
-    const resultado = await signIn('credentials', {
-      email,
-      password,
-      redirect: false,
-    })
+    try {
+      const resultado = await signIn('credentials', {
+        email,
+        password,
+        redirect: false,
+      })
 
-    if (!resultado || resultado.error) {
-      setError('Email o contraseña incorrectos')
+      if (!resultado || resultado.error || !resultado.ok) {
+        // Un fallo del servidor no significa que la contraseña sea incorrecta.
+        setError(resultado?.error === 'CredentialsSignin'
+          ? 'Email o contraseña incorrectos'
+          : 'No se pudo iniciar sesión por un problema del sistema. Intentá nuevamente más tarde.')
+        return
+      }
+
+      const sesion = await getSession()
+      if (!sesion?.user) {
+        setError('No se pudo confirmar la sesión. Intentá ingresar nuevamente.')
+        return
+      }
+
+      router.push(sesion.user.debeCambiarContrasena
+        ? '/acceso/cambiar-contrasena'
+        : '/dashboard')
+    } catch {
+      setError('No se pudo conectar con el sistema. Intentá nuevamente más tarde.')
+    } finally {
       setCargando(false)
-      return
-    }
-
-    // signIn no devuelve los datos del usuario: pedimos la sesión recién creada para
-    // saber si hay que forzar el cambio de contraseña antes de entrar al panel.
-    const sesion = await getSession()
-
-    if (sesion?.user.debeCambiarContrasena) {
-      router.push('/acceso/cambiar-contrasena')
-    } else {
-      router.push('/dashboard')
     }
   }
 
