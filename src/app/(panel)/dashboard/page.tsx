@@ -7,6 +7,7 @@
 // esta ruta desprotegida sin que se note.
 
 import { getServerSession } from 'next-auth'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { CerrarSesionButton } from '@/components/layout/CerrarSesionButton'
@@ -21,6 +22,7 @@ export default async function DashboardPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4">
       <p className="text-lg">Dashboard - Bienvenido {sesion.user.name}</p>
+      <Link href="/productos">Administrar productos</Link>
       <CerrarSesionButton />
     </div>
   )
