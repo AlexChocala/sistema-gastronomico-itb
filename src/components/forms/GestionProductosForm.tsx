@@ -1,7 +1,6 @@
 'use client'
 
-import Link from 'next/link'
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
@@ -18,6 +17,7 @@ type Producto = {
 
 type RespuestaListado = { productos: Producto[] }
 type RespuestaError = { error?: string }
+type FiltroEstado = 'todos' | 'activos' | 'inactivos'
 
 const formularioVacio = {
   nombre: '',
@@ -33,6 +33,30 @@ export function GestionProductosForm() {
   const [mensaje, setMensaje] = useState('')
   const [error, setError] = useState('')
   const [cargando, setCargando] = useState(true)
+  const [mostrarFormulario, setMostrarFormulario] = useState(false)
+  const [busqueda, setBusqueda] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos')
+  const [filtroCategoria, setFiltroCategoria] = useState<number | null>(null)
+
+  const categorias = useMemo(() => {
+    const unicas = new Map<number, string>()
+    productos.forEach((producto) => unicas.set(producto.idCategoria, producto.categoria.nombre))
+    return [...unicas.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'))
+  }, [productos])
+
+  const productosFiltrados = useMemo(() => {
+    const texto = busqueda.trim().toLocaleLowerCase('es')
+    return productos.filter((producto) => {
+      const coincideTexto = !texto
+        || producto.nombre.toLocaleLowerCase('es').includes(texto)
+        || producto.descripcion?.toLocaleLowerCase('es').includes(texto)
+      const coincideEstado = filtroEstado === 'todos'
+        || (filtroEstado === 'activos' && producto.activo)
+        || (filtroEstado === 'inactivos' && !producto.activo)
+      const coincideCategoria = filtroCategoria === null || producto.idCategoria === filtroCategoria
+      return coincideTexto && coincideEstado && coincideCategoria
+    })
+  }, [busqueda, filtroCategoria, filtroEstado, productos])
 
   const listar = useCallback(async () => {
     setCargando(true)
@@ -81,9 +105,18 @@ export function GestionProductosForm() {
     setFormulario((actual) => ({ ...actual, [campo]: valor }))
   }
 
-  function limpiarFormulario() {
+  function cerrarFormulario() {
     setFormulario(formularioVacio)
     setIdEdicion(null)
+    setMostrarFormulario(false)
+  }
+
+  function abrirNuevoProducto() {
+    setFormulario(formularioVacio)
+    setIdEdicion(null)
+    setMensaje('')
+    setError('')
+    setMostrarFormulario(true)
   }
 
   function cargarParaEditar(producto: Producto) {
@@ -96,6 +129,7 @@ export function GestionProductosForm() {
     })
     setMensaje('')
     setError('')
+    setMostrarFormulario(true)
   }
 
   async function guardar(evento: FormEvent) {
@@ -121,7 +155,7 @@ export function GestionProductosForm() {
       const datos = await respuesta.json() as RespuestaError
       if (!respuesta.ok) throw new Error(datos.error || 'No se pudo guardar el producto.')
       setMensaje(idEdicion === null ? 'Producto creado.' : 'Producto actualizado.')
-      limpiarFormulario()
+      cerrarFormulario()
       await listar()
     } catch (errorDesconocido) {
       setError(errorDesconocido instanceof Error ? errorDesconocido.message : 'No se pudo guardar el producto.')
@@ -153,57 +187,142 @@ export function GestionProductosForm() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <Link href="/dashboard">Volver al dashboard</Link>
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold">Productos</h1>
+          <p className="mt-1">Administración del menú y productos disponibles.</p>
+        </div>
+        <Button type="button" className="w-auto!" onClick={abrirNuevoProducto} disabled={cargando}>
+          Nuevo producto
+        </Button>
+      </header>
 
-      <Card>
-        <form onSubmit={guardar} className="flex flex-col gap-3">
-          <h1>{idEdicion === null ? 'Crear producto' : `Editar producto ${idEdicion}`}</h1>
-          <Input id="nombre" label="Nombre" value={formulario.nombre}
-            onChange={(evento) => cambiarCampo('nombre', evento.target.value)} disabled={cargando} required />
-          <Input id="descripcion" label="Descripción" value={formulario.descripcion}
-            onChange={(evento) => cambiarCampo('descripcion', evento.target.value)} disabled={cargando} />
-          <Input id="precio" label="Precio" type="number" min="0.01" step="0.01" value={formulario.precio}
-            onChange={(evento) => cambiarCampo('precio', evento.target.value)} disabled={cargando} required />
-          <Input id="categoria" label="Número de categoría" type="number" min="1" step="1"
-            value={formulario.idCategoria}
-            onChange={(evento) => cambiarCampo('idCategoria', evento.target.value)} disabled={cargando} required />
-          <Button type="submit" disabled={cargando}>
-            {cargando ? 'Guardando...' : idEdicion === null ? 'Crear' : 'Guardar cambios'}
-          </Button>
-          {idEdicion !== null && (
-            <Button type="button" variant="secundario" onClick={limpiarFormulario} disabled={cargando}>
-              Cancelar edición
+      <Card className="max-w-none!">
+        <div className="flex flex-col gap-4">
+          <Input
+            id="buscar-producto"
+            label="Buscar producto"
+            placeholder="Nombre o descripción"
+            value={busqueda}
+            onChange={(evento) => setBusqueda(evento.target.value)}
+          />
+          <div className="grid gap-2 sm:grid-cols-3">
+            {(['todos', 'activos', 'inactivos'] as const).map((estado) => (
+              <Button
+                key={estado}
+                type="button"
+                variant={filtroEstado === estado ? 'primario' : 'secundario'}
+                onClick={() => setFiltroEstado(estado)}
+              >
+                {estado[0].toUpperCase() + estado.slice(1)}
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              className="w-auto!"
+              variant={filtroCategoria === null ? 'primario' : 'secundario'}
+              onClick={() => setFiltroCategoria(null)}
+            >
+              Todas las categorías
             </Button>
-          )}
-        </form>
-      </Card>
-
-      <Card>
-        <div className="flex flex-col gap-3" aria-live="polite" aria-busy={cargando}>
-          <h2>Productos</h2>
-          <Button type="button" variant="secundario" onClick={() => void listar()} disabled={cargando}>
-            Actualizar lista
-          </Button>
-          {mensaje && <p>{mensaje}</p>}
-          {error && <p role="alert">{error}</p>}
-          {!cargando && productos.length === 0 && !error && <p>No hay productos cargados.</p>}
-          {productos.map((producto) => (
-            <div key={producto.idProducto} className="flex flex-col gap-2">
-              <p><strong>{producto.nombre}</strong></p>
-              <p>Precio: {producto.precio.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</p>
-              <p>Categoría: {producto.categoria.nombre} (ID {producto.idCategoria})</p>
-              <p>Estado: {producto.activo ? 'Activo' : 'Inactivo'}</p>
-              <Button type="button" onClick={() => cargarParaEditar(producto)} disabled={cargando}>
-                Editar
+            {categorias.map(([idCategoria, nombre]) => (
+              <Button
+                key={idCategoria}
+                type="button"
+                className="w-auto!"
+                variant={filtroCategoria === idCategoria ? 'primario' : 'secundario'}
+                onClick={() => setFiltroCategoria(idCategoria)}
+              >
+                {nombre}
               </Button>
-              <Button type="button" variant="secundario" onClick={() => void cambiarEstado(producto)} disabled={cargando}>
-                {producto.activo ? 'Desactivar' : 'Activar'}
-              </Button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </Card>
+
+      {mostrarFormulario && (
+        <Card className="max-w-none!">
+          <form onSubmit={guardar} className="flex flex-col gap-4">
+            <h2 className="text-xl font-semibold">
+              {idEdicion === null ? 'Nuevo producto' : `Editar producto ${idEdicion}`}
+            </h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input id="nombre" label="Nombre" value={formulario.nombre}
+                onChange={(evento) => cambiarCampo('nombre', evento.target.value)} disabled={cargando} required />
+              <Input id="descripcion" label="Descripción" value={formulario.descripcion}
+                onChange={(evento) => cambiarCampo('descripcion', evento.target.value)} disabled={cargando} />
+              <Input id="precio" label="Precio" type="number" min="0.01" step="0.01" value={formulario.precio}
+                onChange={(evento) => cambiarCampo('precio', evento.target.value)} disabled={cargando} required />
+              <Input id="categoria" label="Número de categoría" type="number" min="1" step="1"
+                value={formulario.idCategoria}
+                onChange={(evento) => cambiarCampo('idCategoria', evento.target.value)} disabled={cargando} required />
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button type="submit" disabled={cargando}>
+                {cargando ? 'Guardando...' : idEdicion === null ? 'Crear producto' : 'Guardar cambios'}
+              </Button>
+              <Button type="button" variant="secundario" onClick={cerrarFormulario} disabled={cargando}>
+                Cancelar
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
+      <section className="flex flex-col gap-4" aria-live="polite" aria-busy={cargando}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">Listado de productos</h2>
+            <p>{productosFiltrados.length} de {productos.length} productos</p>
+          </div>
+          <Button type="button" className="w-auto!" variant="secundario"
+            onClick={() => void listar()} disabled={cargando}>
+            Actualizar lista
+          </Button>
+        </div>
+
+        {mensaje && <p>{mensaje}</p>}
+        {error && <p role="alert">{error}</p>}
+        {cargando && productos.length === 0 && <p>Cargando productos...</p>}
+        {!cargando && productosFiltrados.length === 0 && !error && (
+          <p>No hay productos que coincidan con los filtros.</p>
+        )}
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {productosFiltrados.map((producto) => (
+            <Card key={producto.idProducto} className="max-w-none!">
+              <article className="flex h-full flex-col gap-4">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm">{producto.categoria.nombre}</p>
+                  <p className="text-sm">{producto.activo ? 'Activo' : 'Inactivo'}</p>
+                </div>
+                <div className="flex flex-1 flex-col gap-2 border-y py-4">
+                  <h3 className="text-xl font-semibold">{producto.nombre}</h3>
+                  <p>{producto.descripcion || 'Sin descripción.'}</p>
+                  <p className="mt-auto text-lg font-semibold">
+                    {producto.precio.toLocaleString('es-AR', {
+                      style: 'currency',
+                      currency: 'ARS',
+                    })}
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="button" onClick={() => cargarParaEditar(producto)} disabled={cargando}>
+                    Editar
+                  </Button>
+                  <Button type="button" variant="secundario"
+                    onClick={() => void cambiarEstado(producto)} disabled={cargando}>
+                    {producto.activo ? 'Desactivar' : 'Activar'}
+                  </Button>
+                </div>
+              </article>
+            </Card>
+          ))}
+        </div>
+      </section>
     </div>
   )
 }
