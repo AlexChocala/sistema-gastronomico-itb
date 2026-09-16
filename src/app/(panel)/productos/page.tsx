@@ -1,17 +1,8 @@
-import { getServerSession } from 'next-auth'
-import { redirect } from 'next/navigation'
-import { authOptions } from '@/lib/auth'
 import { GestionProductosForm } from '@/components/forms/GestionProductosForm'
 
-export default async function ProductosPage() {
-  const sesion = await getServerSession(authOptions)
-
-  if (!sesion) {
-    redirect('/acceso/login')
-  }
-
+export default function ProductosPage() {
   return (
-    <main className="p-4" lang="es">
+    <main className="mx-auto w-full max-w-7xl p-4 sm:p-6" lang="es">
       <GestionProductosForm />
     </main>
   )
