@@ -193,7 +193,7 @@ export default function UsuariosPage() {
                 <td className="p-2">{u.username}</td>
                 <td className="p-2">{nombreRol(u.idRol)}</td>
                 <td className="p-2">{nombreSucursal(u.idSucursal)}</td>
-                <td className="p-2">{u.activo ? 'S├¡' : 'No'}</td>
+                           <td className="p-2">{u.activo ? 'Sí' : 'No'}</td>
               </tr>
             ))}
           </tbody>
