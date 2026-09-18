@@ -7,9 +7,10 @@ import { CerrarSesionButton } from '@/components/layout/CerrarSesionButton'
 const enlaces = [
   { href: '/dashboard', texto: 'Dashboard' },
   { href: '/productos', texto: 'Productos' },
+  { href: '/usuarios', texto: 'Usuarios' },
 ]
 
-const seccionesPendientes = ['Pedidos', 'Reportes', 'Usuarios']
+const seccionesPendientes = ['Pedidos', 'Reportes']
 
 export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
   const rutaActual = usePathname()
