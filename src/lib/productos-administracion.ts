@@ -1,5 +1,6 @@
 import type { PrismaClient, Prisma } from '@prisma/client'
 import { ErrorProducto, idValido, leerId, leerCuerpo, validarProducto } from './productos-validacion'
+import { validarCategoria } from './categorias-validacion'
 
 type Sesion = { user: { idUsuario: number } } | null
 const camposProducto = {
@@ -12,6 +13,11 @@ const camposProducto = {
   },
 } satisfies Prisma.ProductoSelect
 
+const camposCategoria = {
+  idCategoria: true, nombre: true, descripcion: true, orden: true, activa: true,
+  _count: { select: { productos: true } },
+} satisfies Prisma.CategoriaSelect
+
 function responder(datos: unknown, estado = 200) {
   return Response.json(datos, { status: estado, headers: { 'Cache-Control': 'no-store' } })
 }
@@ -19,7 +25,8 @@ function responder(datos: unknown, estado = 200) {
 function responderError(error: unknown) {
   if (error instanceof ErrorProducto) return responder({ error: error.message }, error.estado)
   const codigo = typeof error === 'object' && error !== null && 'code' in error ? error.code : null
-  if (codigo === 'P2025') return responder({ error: 'Producto no encontrado.' }, 404)
+  if (codigo === 'P2025') return responder({ error: 'No se encontró el registro solicitado.' }, 404)
+  if (codigo === 'P2002') return responder({ error: 'Ya existe una categoría con ese nombre.' }, 409)
   if (codigo === 'P2003' || codigo === 'P2034') {
     return responder({ error: 'Los datos cambiaron durante la operación. Actualizá e intentá nuevamente.' }, 409)
   }
@@ -176,6 +183,66 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
         where: { idProducto: leerId(id) }, data: { activo: false }, select: camposProducto,
       })
       return responder({ mensaje: 'Producto desactivado.', producto })
+    }),
+
+    listarCategorias: (request: Request) => proteger(request, false, async () => {
+      const categorias = await db.categoria.findMany({
+        select: camposCategoria,
+        orderBy: [{ orden: 'asc' }, { nombre: 'asc' }, { idCategoria: 'asc' }],
+      })
+      return responder({ categorias })
+    }),
+
+    crearCategoria: (request: Request) => proteger(request, true, async () => {
+      const datos = validarCategoria(await leerCuerpo(request), false)
+      const categoria = await db.categoria.create({
+        data: {
+          nombre: datos.nombre!,
+          descripcion: datos.descripcion ?? null,
+          orden: datos.orden!,
+        },
+        select: camposCategoria,
+      })
+      return responder({ categoria }, 201)
+    }),
+
+    editarCategoria: (request: Request, id: string) => proteger(request, true, async () => {
+      const idCategoria = leerId(id)
+      const datos = validarCategoria(await leerCuerpo(request), true)
+      const existe = await db.categoria.findUnique({ where: { idCategoria }, select: { idCategoria: true } })
+      if (!existe) throw new ErrorProducto(404, 'Categoría no encontrada.')
+      if (datos.activa === false) {
+        const productosActivos = await db.producto.count({ where: { idCategoria, activo: true } })
+        if (productosActivos > 0) {
+          throw new ErrorProducto(
+            409,
+            `La categoría tiene ${productosActivos} producto(s) activo(s). Movelos o desactivalos primero.`,
+          )
+        }
+      }
+      const categoria = await db.categoria.update({
+        where: { idCategoria }, data: datos, select: camposCategoria,
+      })
+      return responder({ categoria })
+    }),
+
+    desactivarCategoria: (request: Request, id: string) => proteger(request, true, async () => {
+      const idCategoria = leerId(id)
+      const categoria = await db.$transaction(async (tx) => {
+        const actual = await tx.categoria.findUnique({ where: { idCategoria } })
+        if (!actual) throw new ErrorProducto(404, 'Categoría no encontrada.')
+        const productosActivos = await tx.producto.count({ where: { idCategoria, activo: true } })
+        if (productosActivos > 0) {
+          throw new ErrorProducto(
+            409,
+            `La categoría tiene ${productosActivos} producto(s) activo(s). Movelos o desactivalos primero.`,
+          )
+        }
+        return tx.categoria.update({
+          where: { idCategoria }, data: { activa: false }, select: camposCategoria,
+        })
+      }, { isolationLevel: 'Serializable' })
+      return responder({ mensaje: 'Categoría desactivada.', categoria })
     }),
   }
 }

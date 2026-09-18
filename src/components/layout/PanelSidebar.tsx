@@ -23,7 +23,7 @@ export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
       <nav aria-label="Menú principal" className="flex flex-col gap-2">
         <p className="text-xs uppercase opacity-70">Menú</p>
         {enlaces.map((enlace) => {
-          const activo = rutaActual === enlace.href
+          const activo = rutaActual === enlace.href || rutaActual.startsWith(`${enlace.href}/`)
           return (
             <Link
               key={enlace.href}

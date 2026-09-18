@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
@@ -35,6 +36,7 @@ const formularioVacio = {
 }
 
 export function GestionProductosForm() {
+  const router = useRouter()
   const [productos, setProductos] = useState<Producto[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
@@ -218,9 +220,15 @@ export function GestionProductosForm() {
           <h1 className="text-3xl font-semibold">Productos</h1>
           <p className="mt-1">Administración del menú y productos disponibles.</p>
         </div>
-        <Button type="button" className="w-auto!" onClick={abrirNuevoProducto} disabled={cargando}>
-          Nuevo producto
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button type="button" variant="secundario" className="w-auto!"
+            onClick={() => router.push('/productos/categorias')} disabled={cargando}>
+            Administrar categorías
+          </Button>
+          <Button type="button" className="w-auto!" onClick={abrirNuevoProducto} disabled={cargando}>
+            Nuevo producto
+          </Button>
+        </div>
       </header>
 
       <Card className="max-w-none!">
