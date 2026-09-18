@@ -13,10 +13,16 @@ type Producto = {
   activo: boolean
   idCategoria: number
   categoria: { nombre: string }
+  sucursales: {
+    idSucursal: number
+    disponible: boolean
+    sucursal: { nombre: string }
+  }[]
 }
 
 type Categoria = { idCategoria: number; nombre: string }
-type RespuestaListado = { productos: Producto[]; categorias: Categoria[] }
+type Sucursal = { idSucursal: number; nombre: string }
+type RespuestaListado = { productos: Producto[]; categorias: Categoria[]; sucursales: Sucursal[] }
 type RespuestaError = { error?: string }
 type FiltroEstado = 'todos' | 'activos' | 'inactivos'
 
@@ -25,11 +31,13 @@ const formularioVacio = {
   descripcion: '',
   precio: '',
   idCategoria: '',
+  idSucursales: [] as string[],
 }
 
 export function GestionProductosForm() {
   const [productos, setProductos] = useState<Producto[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
+  const [sucursales, setSucursales] = useState<Sucursal[]>([])
   const [formulario, setFormulario] = useState(formularioVacio)
   const [idEdicion, setIdEdicion] = useState<number | null>(null)
   const [mensaje, setMensaje] = useState('')
@@ -63,6 +71,7 @@ export function GestionProductosForm() {
       if (!respuesta.ok) throw new Error(datos.error || 'No se pudieron cargar los productos.')
       setProductos(datos.productos)
       setCategorias(datos.categorias)
+      setSucursales(datos.sucursales)
     } catch (errorDesconocido) {
       setError(errorDesconocido instanceof Error ? errorDesconocido.message : 'No se pudieron cargar los productos.')
     } finally {
@@ -81,6 +90,7 @@ export function GestionProductosForm() {
         if (paginaActiva) {
           setProductos(datos.productos)
           setCategorias(datos.categorias)
+          setSucursales(datos.sucursales)
         }
       } catch (errorDesconocido) {
         if (paginaActiva) {
@@ -101,8 +111,17 @@ export function GestionProductosForm() {
     }
   }, [])
 
-  function cambiarCampo(campo: keyof typeof formulario, valor: string) {
+  function cambiarCampo(campo: 'nombre' | 'descripcion' | 'precio' | 'idCategoria', valor: string) {
     setFormulario((actual) => ({ ...actual, [campo]: valor }))
+  }
+
+  function cambiarSucursal(idSucursal: string, seleccionada: boolean) {
+    setFormulario((actual) => ({
+      ...actual,
+      idSucursales: seleccionada
+        ? [...actual.idSucursales, idSucursal]
+        : actual.idSucursales.filter((id) => id !== idSucursal),
+    }))
   }
 
   function cerrarFormulario() {
@@ -126,6 +145,7 @@ export function GestionProductosForm() {
       descripcion: producto.descripcion ?? '',
       precio: String(producto.precio),
       idCategoria: String(producto.idCategoria),
+      idSucursales: producto.sucursales.map((sucursal) => String(sucursal.idSucursal)),
     })
     setMensaje('')
     setError('')
@@ -134,6 +154,10 @@ export function GestionProductosForm() {
 
   async function guardar(evento: FormEvent) {
     evento.preventDefault()
+    if (formulario.idSucursales.length === 0) {
+      setError('Elegí al menos una sucursal para el producto.')
+      return
+    }
     setCargando(true)
     setMensaje('')
     setError('')
@@ -149,6 +173,7 @@ export function GestionProductosForm() {
             descripcion: formulario.descripcion,
             precio: Number(formulario.precio),
             idCategoria: Number(formulario.idCategoria),
+            idSucursales: formulario.idSucursales.map(Number),
           }),
         },
       )
@@ -275,9 +300,27 @@ export function GestionProductosForm() {
                 </select>
                 {categorias.length === 0 && <p>No hay categorías activas disponibles.</p>}
               </div>
+              <fieldset className="flex flex-col gap-2 md:col-span-2">
+                <legend className="text-sm font-medium">Disponible en</legend>
+                {sucursales.map((sucursal) => {
+                  const idSucursal = String(sucursal.idSucursal)
+                  return (
+                    <label key={sucursal.idSucursal} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={formulario.idSucursales.includes(idSucursal)}
+                        onChange={(evento) => cambiarSucursal(idSucursal, evento.target.checked)}
+                        disabled={cargando}
+                      />
+                      {sucursal.nombre}
+                    </label>
+                  )
+                })}
+                {sucursales.length === 0 && <p>No hay sucursales activas disponibles.</p>}
+              </fieldset>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="submit" disabled={cargando || categorias.length === 0}>
+              <Button type="submit" disabled={cargando || categorias.length === 0 || sucursales.length === 0}>
                 {cargando ? 'Guardando...' : idEdicion === null ? 'Crear producto' : 'Guardar cambios'}
               </Button>
               <Button type="button" variant="secundario" onClick={cerrarFormulario} disabled={cargando}>
@@ -318,6 +361,11 @@ export function GestionProductosForm() {
                 <div className="flex flex-1 flex-col gap-2 border-y py-4">
                   <h3 className="text-xl font-semibold">{producto.nombre}</h3>
                   <p>{producto.descripcion || 'Sin descripción.'}</p>
+                  <p>
+                    Sucursales: {producto.sucursales.length > 0
+                      ? producto.sucursales.map((sucursal) => sucursal.sucursal.nombre).join(', ')
+                      : 'Sin sucursales disponibles'}
+                  </p>
                   <p className="mt-auto text-lg font-semibold">
                     {producto.precio.toLocaleString('es-AR', {
                       style: 'currency',

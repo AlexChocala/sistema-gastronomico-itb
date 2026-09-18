@@ -21,6 +21,7 @@ type DatosProducto = {
   descripcion?: string | null
   precio?: number
   idCategoria?: number
+  idSucursales?: number[]
   activo?: boolean
 }
 
@@ -30,7 +31,7 @@ export function validarProducto(cuerpo: unknown, parcial: boolean): DatosProduct
     throw new ErrorProducto(400, 'Enviá un objeto JSON con los datos del producto.')
   }
   const datos = cuerpo as Record<string, unknown>
-  const permitidos = ['nombre', 'descripcion', 'precio', 'idCategoria', ...(parcial ? ['activo'] : [])]
+  const permitidos = ['nombre', 'descripcion', 'precio', 'idCategoria', 'idSucursales', ...(parcial ? ['activo'] : [])]
   if (Object.keys(datos).length === 0 || Object.keys(datos).some((campo) => !permitidos.includes(campo))) {
     throw new ErrorProducto(400, 'Enviá al menos un campo válido del producto.')
   }
@@ -56,6 +57,18 @@ export function validarProducto(cuerpo: unknown, parcial: boolean): DatosProduct
   if (!parcial || 'idCategoria' in datos) {
     if (!idValido(datos.idCategoria)) throw new ErrorProducto(400, 'Indicá una categoría válida.')
     salida.idCategoria = datos.idCategoria
+  }
+  if (!parcial || 'idSucursales' in datos) {
+    if (
+      !Array.isArray(datos.idSucursales) ||
+      datos.idSucursales.length === 0 ||
+      datos.idSucursales.length > 100 ||
+      datos.idSucursales.some((id) => !idValido(id)) ||
+      new Set(datos.idSucursales).size !== datos.idSucursales.length
+    ) {
+      throw new ErrorProducto(400, 'Elegí al menos una sucursal válida, sin repetirla.')
+    }
+    salida.idSucursales = datos.idSucursales as number[]
   }
   if ('activo' in datos) {
     if (typeof datos.activo !== 'boolean') throw new ErrorProducto(400, 'Activo debe ser true o false.')

@@ -5,6 +5,11 @@ type Sesion = { user: { idUsuario: number } } | null
 const camposProducto = {
   idProducto: true, nombre: true, descripcion: true, precio: true, activo: true,
   idCategoria: true, categoria: { select: { idCategoria: true, nombre: true, activa: true } },
+  sucursales: {
+    where: { disponible: true, sucursal: { activa: true } },
+    select: { idSucursal: true, disponible: true, sucursal: { select: { nombre: true } } },
+    orderBy: { idSucursal: 'asc' },
+  },
 } satisfies Prisma.ProductoSelect
 
 function responder(datos: unknown, estado = 200) {
@@ -24,6 +29,15 @@ function responderError(error: unknown) {
 async function categoriaActiva(tx: Prisma.TransactionClient, idCategoria: number) {
   const categoria = await tx.categoria.findUnique({ where: { idCategoria }, select: { activa: true } })
   if (!categoria?.activa) throw new ErrorProducto(400, 'La categoría debe existir y estar activa.')
+}
+
+async function sucursalesActivas(tx: Prisma.TransactionClient, idSucursales: number[]) {
+  const cantidad = await tx.sucursal.count({
+    where: { idSucursal: { in: idSucursales }, activa: true },
+  })
+  if (cantidad !== idSucursales.length) {
+    throw new ErrorProducto(400, 'Todas las sucursales elegidas deben existir y estar activas.')
+  }
 }
 
 export function crearControladorProductos(db: PrismaClient, leerSesion: () => Promise<Sesion>) {
@@ -80,6 +94,11 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
           select: { idCategoria: true, nombre: true },
           orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
         }),
+        sucursales: await tx.sucursal.findMany({
+          where: { activa: true },
+          select: { idSucursal: true, nombre: true },
+          orderBy: [{ nombre: 'asc' }, { idSucursal: 'asc' }],
+        }),
         total: await tx.producto.count({ where }),
       }), { isolationLevel: 'RepeatableRead' })
       return responder({ ...resultado, pagina, limite })
@@ -95,12 +114,15 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
       const datos = validarProducto(await leerCuerpo(request), false)
       const producto = await db.$transaction(async (tx) => {
         await categoriaActiva(tx, datos.idCategoria!)
-        // Crear un producto no lo asigna automáticamente a ninguna sucursal.
+        await sucursalesActivas(tx, datos.idSucursales!)
         return tx.producto.create({
           data: {
             nombre: datos.nombre!, descripcion: datos.descripcion ?? null,
             precio: datos.precio!, idCategoria: datos.idCategoria!,
             historialPrecios: { create: { precioAnterior: null, precioNuevo: datos.precio! } },
+            sucursales: {
+              create: datos.idSucursales!.map((idSucursal) => ({ idSucursal, disponible: true })),
+            },
           },
           select: camposProducto,
         })
@@ -117,17 +139,33 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
         if (datos.idCategoria !== undefined || datos.activo === true) {
           await categoriaActiva(tx, datos.idCategoria ?? actual.idCategoria)
         }
+        if (datos.idSucursales !== undefined) {
+          await sucursalesActivas(tx, datos.idSucursales)
+        }
+        const { idSucursales, ...cambiosProducto } = datos
         // El nuevo precio y su historial se guardan juntos; los pedidos previos conservan sus importes.
-        return tx.producto.update({
+        await tx.producto.update({
           where: { idProducto },
           data: {
-            ...datos,
+            ...cambiosProducto,
             ...(datos.precio !== undefined && datos.precio !== actual.precio ? {
               historialPrecios: { create: { precioAnterior: actual.precio, precioNuevo: datos.precio } },
             } : {}),
           },
-          select: camposProducto,
         })
+        if (idSucursales !== undefined) {
+          // Conservamos las relaciones existentes y cambiamos su disponibilidad.
+          await tx.sucursalProducto.updateMany({
+            where: { idProducto, idSucursal: { notIn: idSucursales } },
+            data: { disponible: false },
+          })
+          await Promise.all(idSucursales.map((idSucursal) => tx.sucursalProducto.upsert({
+            where: { idSucursal_idProducto: { idSucursal, idProducto } },
+            update: { disponible: true },
+            create: { idSucursal, idProducto, disponible: true },
+          })))
+        }
+        return tx.producto.findUniqueOrThrow({ where: { idProducto }, select: camposProducto })
       }, { isolationLevel: 'Serializable' })
       return responder({ producto })
     }),
