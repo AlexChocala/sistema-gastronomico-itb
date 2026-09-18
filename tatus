@@ -1,0 +1,10 @@
+[33m09f7d39[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mbackend/api-usuarios[m[33m, [m[1;31morigin/develop[m[33m, [m[1;31morigin/backend/api-usuarios[m[33m, [m[1;32mdevelop[m[33m)[m Merge pull request #3 from AlexChocala/frontend/productos-panel
+[33mf3d068a[m[33m ([m[1;31morigin/frontend/productos-panel[m[33m)[m Mejora la interfaz de administración de productos
+[33m0b509f1[m Merge pull request #2 from AlexChocala/backend/crud-productos
+[33m9b247b7[m Merge pull request #1 from AlexChocala/backend/productos-sucursal
+[33ma2dda9f[m[33m ([m[1;31morigin/backend/crud-productos[m[33m)[m Agrega CRUD de productos para administradores y supervisores
+[33m7067e91[m[33m ([m[1;31morigin/backend/productos-sucursal[m[33m)[m Agrega datos de prueba y pantalla para consultar productos por sucursal
+[33mdb63b62[m wip
+[33md4a887e[m[33m ([m[1;31morigin/ui-login[m[33m, [m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32musuarios[m[33m, [m[1;32mmaster[m[33m)[m actualizacion gitignore
+[33m39c936f[m refactor: unificar nombres de API routes de auth a español
+[33m0ad850a[m feat: login y recupero de contraseña completo
