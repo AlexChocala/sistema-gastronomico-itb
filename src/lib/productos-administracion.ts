@@ -74,6 +74,12 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
           where, select: camposProducto, orderBy: [{ nombre: 'asc' }, { idProducto: 'asc' }],
           skip: (pagina - 1) * limite, take: limite,
         }),
+        // El formulario necesita también categorías que todavía no tienen productos.
+        categorias: await tx.categoria.findMany({
+          where: { activa: true },
+          select: { idCategoria: true, nombre: true },
+          orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+        }),
         total: await tx.producto.count({ where }),
       }), { isolationLevel: 'RepeatableRead' })
       return responder({ ...resultado, pagina, limite })

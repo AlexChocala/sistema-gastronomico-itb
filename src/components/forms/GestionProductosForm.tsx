@@ -15,7 +15,8 @@ type Producto = {
   categoria: { nombre: string }
 }
 
-type RespuestaListado = { productos: Producto[] }
+type Categoria = { idCategoria: number; nombre: string }
+type RespuestaListado = { productos: Producto[]; categorias: Categoria[] }
 type RespuestaError = { error?: string }
 type FiltroEstado = 'todos' | 'activos' | 'inactivos'
 
@@ -28,6 +29,7 @@ const formularioVacio = {
 
 export function GestionProductosForm() {
   const [productos, setProductos] = useState<Producto[]>([])
+  const [categorias, setCategorias] = useState<Categoria[]>([])
   const [formulario, setFormulario] = useState(formularioVacio)
   const [idEdicion, setIdEdicion] = useState<number | null>(null)
   const [mensaje, setMensaje] = useState('')
@@ -37,12 +39,6 @@ export function GestionProductosForm() {
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos')
   const [filtroCategoria, setFiltroCategoria] = useState<number | null>(null)
-
-  const categorias = useMemo(() => {
-    const unicas = new Map<number, string>()
-    productos.forEach((producto) => unicas.set(producto.idCategoria, producto.categoria.nombre))
-    return [...unicas.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'))
-  }, [productos])
 
   const productosFiltrados = useMemo(() => {
     const texto = busqueda.trim().toLocaleLowerCase('es')
@@ -66,6 +62,7 @@ export function GestionProductosForm() {
       const datos = await respuesta.json() as RespuestaListado & RespuestaError
       if (!respuesta.ok) throw new Error(datos.error || 'No se pudieron cargar los productos.')
       setProductos(datos.productos)
+      setCategorias(datos.categorias)
     } catch (errorDesconocido) {
       setError(errorDesconocido instanceof Error ? errorDesconocido.message : 'No se pudieron cargar los productos.')
     } finally {
@@ -81,7 +78,10 @@ export function GestionProductosForm() {
         const respuesta = await fetch('/api/productos/gestion?estado=todos', { cache: 'no-store' })
         const datos = await respuesta.json() as RespuestaListado & RespuestaError
         if (!respuesta.ok) throw new Error(datos.error || 'No se pudieron cargar los productos.')
-        if (paginaActiva) setProductos(datos.productos)
+        if (paginaActiva) {
+          setProductos(datos.productos)
+          setCategorias(datos.categorias)
+        }
       } catch (errorDesconocido) {
         if (paginaActiva) {
           setError(
@@ -228,15 +228,15 @@ export function GestionProductosForm() {
             >
               Todas las categorías
             </Button>
-            {categorias.map(([idCategoria, nombre]) => (
+            {categorias.map((categoria) => (
               <Button
-                key={idCategoria}
+                key={categoria.idCategoria}
                 type="button"
                 className="w-auto!"
-                variant={filtroCategoria === idCategoria ? 'primario' : 'secundario'}
-                onClick={() => setFiltroCategoria(idCategoria)}
+                variant={filtroCategoria === categoria.idCategoria ? 'primario' : 'secundario'}
+                onClick={() => setFiltroCategoria(categoria.idCategoria)}
               >
-                {nombre}
+                {categoria.nombre}
               </Button>
             ))}
           </div>
@@ -256,12 +256,28 @@ export function GestionProductosForm() {
                 onChange={(evento) => cambiarCampo('descripcion', evento.target.value)} disabled={cargando} />
               <Input id="precio" label="Precio" type="number" min="0.01" step="0.01" value={formulario.precio}
                 onChange={(evento) => cambiarCampo('precio', evento.target.value)} disabled={cargando} required />
-              <Input id="categoria" label="Número de categoría" type="number" min="1" step="1"
-                value={formulario.idCategoria}
-                onChange={(evento) => cambiarCampo('idCategoria', evento.target.value)} disabled={cargando} required />
+              <div className="flex flex-col gap-1">
+                <label htmlFor="categoria" className="text-sm font-medium">Categoría</label>
+                <select
+                  id="categoria"
+                  value={formulario.idCategoria}
+                  onChange={(evento) => cambiarCampo('idCategoria', evento.target.value)}
+                  disabled={cargando || categorias.length === 0}
+                  required
+                  className="rounded-md border px-3 py-2"
+                >
+                  <option value="">Seleccioná una categoría</option>
+                  {categorias.map((categoria) => (
+                    <option key={categoria.idCategoria} value={categoria.idCategoria}>
+                      {categoria.nombre}
+                    </option>
+                  ))}
+                </select>
+                {categorias.length === 0 && <p>No hay categorías activas disponibles.</p>}
+              </div>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="submit" disabled={cargando}>
+              <Button type="submit" disabled={cargando || categorias.length === 0}>
                 {cargando ? 'Guardando...' : idEdicion === null ? 'Crear producto' : 'Guardar cambios'}
               </Button>
               <Button type="button" variant="secundario" onClick={cerrarFormulario} disabled={cargando}>
