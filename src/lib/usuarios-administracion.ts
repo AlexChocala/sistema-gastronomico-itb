@@ -81,7 +81,11 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
 
   return {
     // Ver el listado: admin y supervisor.
-    listar: (request: Request) => proteger(request, ['admin', 'supervisor'], false, async () => {
+    listar: (request: Request) => proteger(request, ['admin', 'supervisor'], false, async (idUsuarioSesion) => {
+      const sesionCompleta = await db.usuario.findUnique({
+        where: { idUsuario: idUsuarioSesion },
+        select: { rol: { select: { nombre: true } } },
+      })
       const [usuarios, roles, sucursales] = await db.$transaction([
         db.usuario.findMany({ select: camposUsuario, orderBy: [{ nombre: 'asc' }, { idUsuario: 'asc' }] }),
         db.rol.findMany({ select: { idRol: true, nombre: true }, orderBy: { idRol: 'asc' } }),
@@ -91,7 +95,10 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
           orderBy: [{ nombre: 'asc' }, { idSucursal: 'asc' }],
         }),
       ])
-      return responder({ usuarios, roles, sucursales })
+      return responder({
+        usuarios, roles, sucursales,
+        esAdmin: sesionCompleta?.rol.nombre === 'admin',
+      })
     }),
 
     // Crear, editar y desactivar/activar: solo admin.

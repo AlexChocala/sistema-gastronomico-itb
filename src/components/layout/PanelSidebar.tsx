@@ -7,13 +7,15 @@ import { CerrarSesionButton } from '@/components/layout/CerrarSesionButton'
 const enlaces = [
   { href: '/dashboard', texto: 'Dashboard' },
   { href: '/productos', texto: 'Productos' },
-  { href: '/usuarios', texto: 'Usuarios' },
+  { href: '/usuarios', texto: 'Usuarios', roles: ['admin', 'supervisor'] },
 ]
 
 const seccionesPendientes = ['Pedidos', 'Reportes']
 
 export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
   const rutaActual = usePathname()
+
+  const enlacesVisibles = enlaces.filter((enlace) => !enlace.roles || enlace.roles.includes(rol))
 
   return (
     <aside className="flex flex-col gap-6 border-b p-4 md:min-h-screen md:border-r md:border-b-0">
@@ -23,7 +25,7 @@ export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
 
       <nav aria-label="Menú principal" className="flex flex-col gap-2">
         <p className="text-xs uppercase opacity-70">Menú</p>
-        {enlaces.map((enlace) => {
+        {enlacesVisibles.map((enlace) => {
           const activo = rutaActual === enlace.href || rutaActual.startsWith(`${enlace.href}/`)
           return (
             <Link

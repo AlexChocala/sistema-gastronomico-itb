@@ -2,6 +2,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
@@ -39,9 +40,12 @@ const formVacio = {
 }
 
 export default function UsuariosPage() {
+  const router = useRouter()
+
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [roles, setRoles] = useState<Rol[]>([])
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
+  const [esAdmin, setEsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState<number | null>(null)
@@ -53,10 +57,17 @@ export default function UsuariosPage() {
   async function cargarDatos() {
     setLoading(true)
     const res = await fetch('/api/usuarios')
+
+    if (res.status === 403 || res.status === 401) {
+      router.replace('/dashboard')
+      return
+    }
+
     const data = await res.json()
     setUsuarios(data.usuarios ?? [])
     setRoles(data.roles ?? [])
     setSucursales(data.sucursales ?? [])
+    setEsAdmin(data.esAdmin ?? false)
     setLoading(false)
   }
 
@@ -140,16 +151,22 @@ export default function UsuariosPage() {
     cargarDatos()
   }
 
+  if (loading) {
+    return <div className="p-6 max-w-4xl mx-auto"><p>Cargando...</p></div>
+  }
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Usuarios</h1>
-        <Button className="w-auto" onClick={mostrarForm ? cerrarForm : abrirNuevo}>
-          {mostrarForm ? 'Cancelar' : 'Nuevo usuario'}
-        </Button>
+        {esAdmin && (
+          <Button className="w-auto" onClick={mostrarForm ? cerrarForm : abrirNuevo}>
+            {mostrarForm ? 'Cancelar' : 'Nuevo usuario'}
+          </Button>
+        )}
       </div>
 
-      {mostrarForm && (
+      {mostrarForm && esAdmin && (
         <Card className="max-w-none mb-6">
           <form onSubmit={handleSubmit} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -213,30 +230,28 @@ export default function UsuariosPage() {
         <p className="text-sm text-red-600 mb-4">{error}</p>
       )}
 
-      {loading ? (
-        <p>Cargando...</p>
-      ) : (
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="text-left border-b">
-              <th className="p-2">Nombre</th>
-              <th className="p-2">Email</th>
-              <th className="p-2">Username</th>
-              <th className="p-2">Rol</th>
-              <th className="p-2">Sucursal</th>
-              <th className="p-2">Activo</th>
-              <th className="p-2">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {usuarios.map((u) => (
-              <tr key={u.idUsuario} className="border-b">
-                <td className="p-2">{u.nombre} {u.apellido}</td>
-                <td className="p-2">{u.email}</td>
-                <td className="p-2">{u.username}</td>
-                <td className="p-2">{u.rol.nombre}</td>
-                <td className="p-2">{u.sucursal ? u.sucursal.nombre.replace('Prueba - ', '') : '-'}</td>
-                <td className="p-2">{u.activo ? 'Sí' : 'No'}</td>
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="text-left border-b">
+            <th className="p-2">Nombre</th>
+            <th className="p-2">Email</th>
+            <th className="p-2">Username</th>
+            <th className="p-2">Rol</th>
+            <th className="p-2">Sucursal</th>
+            <th className="p-2">Activo</th>
+            {esAdmin && <th className="p-2">Acciones</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {usuarios.map((u) => (
+            <tr key={u.idUsuario} className="border-b">
+              <td className="p-2">{u.nombre} {u.apellido}</td>
+              <td className="p-2">{u.email}</td>
+              <td className="p-2">{u.username}</td>
+              <td className="p-2">{u.rol.nombre}</td>
+              <td className="p-2">{u.sucursal ? u.sucursal.nombre.replace('Prueba - ', '') : '-'}</td>
+              <td className="p-2">{u.activo ? 'Sí' : 'No'}</td>
+              {esAdmin && (
                 <td className="p-2 flex gap-2">
                   <Button variant="secundario" className="w-auto text-xs px-2 py-1" onClick={() => abrirEditar(u)}>
                     Editar
@@ -245,11 +260,11 @@ export default function UsuariosPage() {
                     {u.activo ? 'Desactivar' : 'Activar'}
                   </Button>
                 </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
