@@ -14,46 +14,49 @@ interface Usuario {
   username: string
   activo: boolean
   idRol: number
+  rol: { idRol: number; nombre: string }
   idSucursal: number | null
+  sucursal: { idSucursal: number; nombre: string } | null
+}
+
+interface Rol {
+  idRol: number
+  nombre: string
 }
 
 interface Sucursal {
   idSucursal: number
   nombre: string
-  activa: boolean
 }
 
-const ROLES = [
-  { idRol: 1, nombre: 'admin' },
-  { idRol: 2, nombre: 'supervisor' },
-  { idRol: 3, nombre: 'empleado' },
-]
+const formVacio = {
+  nombre: '',
+  apellido: '',
+  email: '',
+  username: '',
+  idRol: '',
+  idSucursal: '',
+}
 
 export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [roles, setRoles] = useState<Rol[]>([])
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
+  const [editandoId, setEditandoId] = useState<number | null>(null)
   const [passwordGenerada, setPasswordGenerada] = useState<string | null>(null)
   const [error, setError] = useState('')
 
-  const [form, setForm] = useState({
-    nombre: '',
-    apellido: '',
-    email: '',
-    username: '',
-    idRol: '',
-    idSucursal: '',
-  })
+  const [form, setForm] = useState(formVacio)
 
   async function cargarDatos() {
     setLoading(true)
-    const [resUsuarios, resSucursales] = await Promise.all([
-      fetch('/api/usuarios'),
-      fetch('/api/sucursales'),
-    ])
-    setUsuarios(await resUsuarios.json())
-    setSucursales(await resSucursales.json())
+    const res = await fetch('/api/usuarios')
+    const data = await res.json()
+    setUsuarios(data.usuarios ?? [])
+    setRoles(data.roles ?? [])
+    setSucursales(data.sucursales ?? [])
     setLoading(false)
   }
 
@@ -65,12 +68,44 @@ export default function UsuariosPage() {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
+  function abrirNuevo() {
+    setEditandoId(null)
+    setForm(formVacio)
+    setError('')
+    setMostrarForm(true)
+  }
+
+  function abrirEditar(u: Usuario) {
+    setEditandoId(u.idUsuario)
+    setForm({
+      nombre: u.nombre,
+      apellido: u.apellido,
+      email: u.email,
+      username: u.username,
+      idRol: String(u.idRol),
+      idSucursal: u.idSucursal ? String(u.idSucursal) : '',
+    })
+    setError('')
+    setMostrarForm(true)
+  }
+
+  function cerrarForm() {
+    setMostrarForm(false)
+    setEditandoId(null)
+    setForm(formVacio)
+    setError('')
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
 
-    const res = await fetch('/api/usuarios', {
-      method: 'POST',
+    const esEdicion = editandoId !== null
+    const url = esEdicion ? `/api/usuarios/${editandoId}` : '/api/usuarios'
+    const method = esEdicion ? 'PUT' : 'POST'
+
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...form,
@@ -82,31 +117,34 @@ export default function UsuariosPage() {
     const data = await res.json()
 
     if (!res.ok) {
-      setError(data.error || 'Error al crear el usuario')
+      setError(data.error || 'Error al guardar el usuario')
       return
     }
 
-    setPasswordGenerada(data.passwordGenerada)
-    setForm({ nombre: '', apellido: '', email: '', username: '', idRol: '', idSucursal: '' })
-    setMostrarForm(false)
+    if (!esEdicion && data.passwordGenerada) {
+      setPasswordGenerada(data.passwordGenerada)
+    }
+    cerrarForm()
     cargarDatos()
   }
 
-  function nombreRol(idRol: number) {
-    return ROLES.find((r) => r.idRol === idRol)?.nombre ?? idRol
-  }
-
-  function nombreSucursal(idSucursal: number | null) {
-    if (!idSucursal) return '-'
-    const nombre = sucursales.find((s) => s.idSucursal === idSucursal)?.nombre
-    return nombre?.replace('Prueba - ', '') ?? idSucursal
+  async function toggleActivo(u: Usuario) {
+    setError('')
+    const method = u.activo ? 'DELETE' : 'PATCH'
+    const res = await fetch(`/api/usuarios/${u.idUsuario}`, { method })
+    const data = await res.json()
+    if (!res.ok) {
+      setError(data.error || 'No se pudo cambiar el estado del usuario')
+      return
+    }
+    cargarDatos()
   }
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Usuarios</h1>
-        <Button className="w-auto" onClick={() => setMostrarForm(!mostrarForm)}>
+        <Button className="w-auto" onClick={mostrarForm ? cerrarForm : abrirNuevo}>
           {mostrarForm ? 'Cancelar' : 'Nuevo usuario'}
         </Button>
       </div>
@@ -131,7 +169,7 @@ export default function UsuariosPage() {
                   className="rounded-md border border-neutral-300 px-3 py-2 text-neutral-900 outline-none focus:border-neutral-900"
                 >
                   <option value="" disabled hidden>Seleccionar rol</option>
-                  {ROLES.map((r) => (
+                  {roles.map((r) => (
                     <option key={r.idRol} value={r.idRol}>{r.nombre}</option>
                   ))}
                 </select>
@@ -155,7 +193,7 @@ export default function UsuariosPage() {
               </div>
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button type="submit">Crear usuario</Button>
+            <Button type="submit">{editandoId !== null ? 'Guardar cambios' : 'Crear usuario'}</Button>
           </form>
         </Card>
       )}
@@ -163,12 +201,16 @@ export default function UsuariosPage() {
       {passwordGenerada && (
         <Card className="max-w-none mb-6 bg-yellow-50 border-yellow-400">
           <p>
-            Usuario creado. Contrase├▒a generada: <strong>{passwordGenerada}</strong>
+            Usuario creado. Contraseña generada: <strong>{passwordGenerada}</strong>
           </p>
           <Button variant="secundario" className="w-auto mt-3" onClick={() => setPasswordGenerada(null)}>
             Cerrar
           </Button>
         </Card>
+      )}
+
+      {error && !mostrarForm && (
+        <p className="text-sm text-red-600 mb-4">{error}</p>
       )}
 
       {loading ? (
@@ -183,6 +225,7 @@ export default function UsuariosPage() {
               <th className="p-2">Rol</th>
               <th className="p-2">Sucursal</th>
               <th className="p-2">Activo</th>
+              <th className="p-2">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -191,9 +234,17 @@ export default function UsuariosPage() {
                 <td className="p-2">{u.nombre} {u.apellido}</td>
                 <td className="p-2">{u.email}</td>
                 <td className="p-2">{u.username}</td>
-                <td className="p-2">{nombreRol(u.idRol)}</td>
-                <td className="p-2">{nombreSucursal(u.idSucursal)}</td>
-                           <td className="p-2">{u.activo ? 'Sí' : 'No'}</td>
+                <td className="p-2">{u.rol.nombre}</td>
+                <td className="p-2">{u.sucursal ? u.sucursal.nombre.replace('Prueba - ', '') : '-'}</td>
+                <td className="p-2">{u.activo ? 'Sí' : 'No'}</td>
+                <td className="p-2 flex gap-2">
+                  <Button variant="secundario" className="w-auto text-xs px-2 py-1" onClick={() => abrirEditar(u)}>
+                    Editar
+                  </Button>
+                  <Button variant="secundario" className="w-auto text-xs px-2 py-1" onClick={() => toggleActivo(u)}>
+                    {u.activo ? 'Desactivar' : 'Activar'}
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>
