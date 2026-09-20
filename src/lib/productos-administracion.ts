@@ -47,6 +47,26 @@ async function sucursalesActivas(tx: Prisma.TransactionClient, idSucursales: num
   }
 }
 
+async function nombreDisponible(
+  tx: Prisma.TransactionClient,
+  nombre: string,
+  idCategoria: number,
+  idProductoActual?: number,
+) {
+  // El mismo nombre puede utilizarse en otra categoría, pero no repetirse dentro de esta.
+  const existente = await tx.producto.findFirst({
+    where: {
+      nombre: { equals: nombre, mode: 'insensitive' },
+      idCategoria,
+      ...(idProductoActual === undefined ? {} : { idProducto: { not: idProductoActual } }),
+    },
+    select: { idProducto: true },
+  })
+  if (existente) {
+    throw new ErrorProducto(409, 'Ya existe un producto con ese nombre en la categoría seleccionada.')
+  }
+}
+
 export function crearControladorProductos(db: PrismaClient, leerSesion: () => Promise<Sesion>) {
   async function proteger(request: Request, escritura: boolean, accion: () => Promise<Response>) {
     try {
@@ -122,6 +142,7 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
       const producto = await db.$transaction(async (tx) => {
         await categoriaActiva(tx, datos.idCategoria!)
         await sucursalesActivas(tx, datos.idSucursales!)
+        await nombreDisponible(tx, datos.nombre!, datos.idCategoria!)
         return tx.producto.create({
           data: {
             nombre: datos.nombre!, descripcion: datos.descripcion ?? null,
@@ -149,6 +170,12 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
         if (datos.idSucursales !== undefined) {
           await sucursalesActivas(tx, datos.idSucursales)
         }
+        await nombreDisponible(
+          tx,
+          datos.nombre ?? actual.nombre,
+          datos.idCategoria ?? actual.idCategoria,
+          idProducto,
+        )
         const { idSucursales, ...cambiosProducto } = datos
         // El nuevo precio y su historial se guardan juntos; los pedidos previos conservan sus importes.
         await tx.producto.update({
