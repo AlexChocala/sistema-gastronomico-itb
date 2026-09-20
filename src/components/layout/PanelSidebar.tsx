@@ -6,7 +6,8 @@ import { CerrarSesionButton } from '@/components/layout/CerrarSesionButton'
 
 const enlaces = [
   { href: '/dashboard', texto: 'Dashboard' },
-  { href: '/productos', texto: 'Productos' },
+  { href: '/productos', texto: 'Productos', roles: ['admin', 'supervisor'] },
+  { href: '/productos/menu', texto: 'Consultar menú', roles: ['empleado'] },
   { href: '/usuarios', texto: 'Usuarios', roles: ['admin', 'supervisor'] },
 ]
 
