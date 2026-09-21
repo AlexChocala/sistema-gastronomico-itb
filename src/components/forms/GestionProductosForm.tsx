@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -23,7 +23,14 @@ type Producto = {
 
 type Categoria = { idCategoria: number; nombre: string }
 type Sucursal = { idSucursal: number; nombre: string }
-type RespuestaListado = { productos: Producto[]; categorias: Categoria[]; sucursales: Sucursal[] }
+type RespuestaListado = {
+  productos: Producto[]
+  categorias: Categoria[]
+  sucursales: Sucursal[]
+  total: number
+  pagina: number
+  limite: number
+}
 type RespuestaError = { error?: string }
 type FiltroEstado = 'todos' | 'activos' | 'inactivos'
 
@@ -47,52 +54,42 @@ export function GestionProductosForm() {
   const [cargando, setCargando] = useState(true)
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
   const [busqueda, setBusqueda] = useState('')
+  const [busquedaAplicada, setBusquedaAplicada] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos')
   const [filtroCategoria, setFiltroCategoria] = useState<number | null>(null)
+  const [pagina, setPagina] = useState(1)
+  const [limite, setLimite] = useState(20)
+  const [total, setTotal] = useState(0)
+  const [recarga, setRecarga] = useState(0)
 
-  const productosFiltrados = useMemo(() => {
-    const texto = busqueda.trim().toLocaleLowerCase('es')
-    return productos.filter((producto) => {
-      const coincideTexto = !texto
-        || producto.nombre.toLocaleLowerCase('es').includes(texto)
-        || producto.descripcion?.toLocaleLowerCase('es').includes(texto)
-      const coincideEstado = filtroEstado === 'todos'
-        || (filtroEstado === 'activos' && producto.activo)
-        || (filtroEstado === 'inactivos' && !producto.activo)
-      const coincideCategoria = filtroCategoria === null || producto.idCategoria === filtroCategoria
-      return coincideTexto && coincideEstado && coincideCategoria
-    })
-  }, [busqueda, filtroCategoria, filtroEstado, productos])
-
-  const listar = useCallback(async () => {
-    setCargando(true)
-    setError('')
-    try {
-      const respuesta = await fetch('/api/productos/gestion?estado=todos', { cache: 'no-store' })
-      const datos = await respuesta.json() as RespuestaListado & RespuestaError
-      if (!respuesta.ok) throw new Error(datos.error || 'No se pudieron cargar los productos.')
-      setProductos(datos.productos)
-      setCategorias(datos.categorias)
-      setSucursales(datos.sucursales)
-    } catch (errorDesconocido) {
-      setError(errorDesconocido instanceof Error ? errorDesconocido.message : 'No se pudieron cargar los productos.')
-    } finally {
-      setCargando(false)
-    }
-  }, [])
+  const totalPaginas = Math.max(1, Math.ceil(total / limite))
 
   useEffect(() => {
     let paginaActiva = true
 
-    async function cargarInicial() {
+    async function cargarListado() {
+      setCargando(true)
+      setError('')
       try {
-        const respuesta = await fetch('/api/productos/gestion?estado=todos', { cache: 'no-store' })
+        const parametros = new URLSearchParams({
+          pagina: String(pagina),
+          limite: String(limite),
+          estado: filtroEstado,
+        })
+        if (busquedaAplicada) parametros.set('busqueda', busquedaAplicada)
+        if (filtroCategoria !== null) parametros.set('idCategoria', String(filtroCategoria))
+
+        const respuesta = await fetch(`/api/productos/gestion?${parametros}`, { cache: 'no-store' })
         const datos = await respuesta.json() as RespuestaListado & RespuestaError
         if (!respuesta.ok) throw new Error(datos.error || 'No se pudieron cargar los productos.')
         if (paginaActiva) {
           setProductos(datos.productos)
           setCategorias(datos.categorias)
           setSucursales(datos.sucursales)
+          setTotal(datos.total)
+          setLimite(datos.limite)
+          const ultimaPagina = Math.max(1, Math.ceil(datos.total / datos.limite))
+          if (pagina > ultimaPagina) setPagina(ultimaPagina)
         }
       } catch (errorDesconocido) {
         if (paginaActiva) {
@@ -107,11 +104,31 @@ export function GestionProductosForm() {
       }
     }
 
-    void cargarInicial()
+    void cargarListado()
     return () => {
       paginaActiva = false
     }
-  }, [])
+  }, [busquedaAplicada, filtroCategoria, filtroEstado, limite, pagina, recarga])
+
+  function buscar(evento: FormEvent) {
+    evento.preventDefault()
+    const nuevaBusqueda = busqueda.trim()
+    setPagina(1)
+    setBusquedaAplicada(nuevaBusqueda)
+    if (pagina === 1 && nuevaBusqueda === busquedaAplicada) {
+      setRecarga((actual) => actual + 1)
+    }
+  }
+
+  function cambiarFiltroEstado(estado: FiltroEstado) {
+    setPagina(1)
+    setFiltroEstado(estado)
+  }
+
+  function cambiarFiltroCategoria(idCategoria: number | null) {
+    setPagina(1)
+    setFiltroCategoria(idCategoria)
+  }
 
   function cambiarCampo(campo: 'nombre' | 'descripcion' | 'precio' | 'idCategoria', valor: string) {
     setFormulario((actual) => ({ ...actual, [campo]: valor }))
@@ -183,7 +200,7 @@ export function GestionProductosForm() {
       if (!respuesta.ok) throw new Error(datos.error || 'No se pudo guardar el producto.')
       setMensaje(idEdicion === null ? 'Producto creado.' : 'Producto actualizado.')
       cerrarFormulario()
-      await listar()
+      setRecarga((actual) => actual + 1)
     } catch (errorDesconocido) {
       setError(errorDesconocido instanceof Error ? errorDesconocido.message : 'No se pudo guardar el producto.')
     } finally {
@@ -205,7 +222,7 @@ export function GestionProductosForm() {
       const datos = await respuesta.json() as RespuestaError
       if (!respuesta.ok) throw new Error(datos.error || 'No se pudo cambiar el estado del producto.')
       setMensaje(producto.activo ? 'Producto desactivado.' : 'Producto activado.')
-      await listar()
+      setRecarga((actual) => actual + 1)
     } catch (errorDesconocido) {
       setError(errorDesconocido instanceof Error ? errorDesconocido.message : 'No se pudo cambiar el estado.')
     } finally {
@@ -233,20 +250,28 @@ export function GestionProductosForm() {
 
       <Card className="max-w-none!">
         <div className="flex flex-col gap-4">
-          <Input
-            id="buscar-producto"
-            label="Buscar producto"
-            placeholder="Nombre o descripción"
-            value={busqueda}
-            onChange={(evento) => setBusqueda(evento.target.value)}
-          />
+          <form onSubmit={buscar} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <Input
+                id="buscar-producto"
+                label="Buscar producto"
+                placeholder="Nombre o descripción"
+                value={busqueda}
+                onChange={(evento) => setBusqueda(evento.target.value)}
+                className="w-full"
+              />
+            </div>
+            <Button type="submit" className="w-auto!" disabled={cargando}>
+              Buscar
+            </Button>
+          </form>
           <div className="grid gap-2 sm:grid-cols-3">
             {(['todos', 'activos', 'inactivos'] as const).map((estado) => (
               <Button
                 key={estado}
                 type="button"
                 variant={filtroEstado === estado ? 'primario' : 'secundario'}
-                onClick={() => setFiltroEstado(estado)}
+                onClick={() => cambiarFiltroEstado(estado)}
               >
                 {estado[0].toUpperCase() + estado.slice(1)}
               </Button>
@@ -257,7 +282,7 @@ export function GestionProductosForm() {
               type="button"
               className="w-auto!"
               variant={filtroCategoria === null ? 'primario' : 'secundario'}
-              onClick={() => setFiltroCategoria(null)}
+              onClick={() => cambiarFiltroCategoria(null)}
             >
               Todas las categorías
             </Button>
@@ -267,7 +292,7 @@ export function GestionProductosForm() {
                 type="button"
                 className="w-auto!"
                 variant={filtroCategoria === categoria.idCategoria ? 'primario' : 'secundario'}
-                onClick={() => setFiltroCategoria(categoria.idCategoria)}
+                onClick={() => cambiarFiltroCategoria(categoria.idCategoria)}
               >
                 {categoria.nombre}
               </Button>
@@ -343,10 +368,10 @@ export function GestionProductosForm() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xl font-semibold">Listado de productos</h2>
-            <p>{productosFiltrados.length} de {productos.length} productos</p>
+            <p>Mostrando {productos.length} de {total} productos</p>
           </div>
           <Button type="button" className="w-auto!" variant="secundario"
-            onClick={() => void listar()} disabled={cargando}>
+            onClick={() => setRecarga((actual) => actual + 1)} disabled={cargando}>
             Actualizar lista
           </Button>
         </div>
@@ -354,12 +379,12 @@ export function GestionProductosForm() {
         {mensaje && <p>{mensaje}</p>}
         {error && <p role="alert">{error}</p>}
         {cargando && productos.length === 0 && <p>Cargando productos...</p>}
-        {!cargando && productosFiltrados.length === 0 && !error && (
+        {!cargando && productos.length === 0 && !error && (
           <p>No hay productos que coincidan con los filtros.</p>
         )}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {productosFiltrados.map((producto) => (
+          {productos.map((producto) => (
             <Card key={producto.idProducto} className="max-w-none!">
               <article className="flex h-full flex-col gap-4">
                 <div className="flex items-start justify-between gap-3">
@@ -393,6 +418,28 @@ export function GestionProductosForm() {
               </article>
             </Card>
           ))}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Button
+            type="button"
+            variant="secundario"
+            className="w-auto!"
+            disabled={cargando || pagina <= 1}
+            onClick={() => setPagina((actual) => Math.max(1, actual - 1))}
+          >
+            Anterior
+          </Button>
+          <p>Página {pagina} de {totalPaginas}</p>
+          <Button
+            type="button"
+            variant="secundario"
+            className="w-auto!"
+            disabled={cargando || pagina >= totalPaginas}
+            onClick={() => setPagina((actual) => Math.min(totalPaginas, actual + 1))}
+          >
+            Siguiente
+          </Button>
         </div>
       </section>
     </div>

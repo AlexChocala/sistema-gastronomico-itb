@@ -100,16 +100,33 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
   return {
     listar: (request: Request) => proteger(request, false, async () => {
       const parametros = new URL(request.url).searchParams
-      if ([...parametros.keys()].some((clave) => !['pagina', 'limite', 'estado'].includes(clave) || parametros.getAll(clave).length > 1)) {
+      const parametrosPermitidos = ['pagina', 'limite', 'estado', 'busqueda', 'idCategoria']
+      if ([...parametros.keys()].some((clave) => !parametrosPermitidos.includes(clave) || parametros.getAll(clave).length > 1)) {
         throw new ErrorProducto(400, 'Los parámetros de listado no son válidos.')
       }
       const pagina = leerId(parametros.get('pagina') ?? '1')
       const limite = leerId(parametros.get('limite') ?? '20')
       const estado = parametros.get('estado') ?? 'todos'
+      const busqueda = (parametros.get('busqueda') ?? '').trim()
+      const valorCategoria = parametros.get('idCategoria')
+      const idCategoria = valorCategoria ? leerId(valorCategoria) : null
       if (limite > 100 || !['todos', 'activos', 'inactivos'].includes(estado) || (pagina - 1) * limite > 2147483647) {
         throw new ErrorProducto(400, 'Usá un límite de hasta 100 y estado todos, activos o inactivos.')
       }
-      const where = estado === 'todos' ? {} : { activo: estado === 'activos' }
+      if (busqueda.length > 120) {
+        throw new ErrorProducto(400, 'La búsqueda puede tener hasta 120 caracteres.')
+      }
+      // Los mismos filtros se usan para obtener la página y calcular el total real.
+      const where: Prisma.ProductoWhereInput = {
+        ...(estado === 'todos' ? {} : { activo: estado === 'activos' }),
+        ...(idCategoria === null ? {} : { idCategoria }),
+        ...(busqueda ? {
+          OR: [
+            { nombre: { contains: busqueda, mode: 'insensitive' } },
+            { descripcion: { contains: busqueda, mode: 'insensitive' } },
+          ],
+        } : {}),
+      }
       const resultado = await db.$transaction(async (tx) => ({
         productos: await tx.producto.findMany({
           where, select: camposProducto, orderBy: [{ nombre: 'asc' }, { idProducto: 'asc' }],
