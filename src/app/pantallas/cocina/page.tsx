@@ -3,7 +3,7 @@
 // Pantalla de Cocina (pestaña aparte, sin sidebar). Muestra los pedidos a preparar y
 // cambia su estado; ese mismo estado es el que lee la pantalla de Pedidos Mostrador.
 
-import { Bike, Check, CircleUserRound, RotateCcw, ShoppingBag } from '@/components/icons'
+import { Bike, Check, CircleUserRound, ShoppingBag } from '@/components/icons'
 import { PastillaSucursal, useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import { puedeIrACocina, usePedidosPantalla, type PedidoPantalla } from '@/lib/pedidos-pantallas'
 
