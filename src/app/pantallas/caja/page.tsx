@@ -17,7 +17,6 @@ import {
   type PedidoPantalla,
   type TipoEntregaPantalla,
 } from '@/lib/pedidos-pantallas'
-import { useProductosCaja, type ProductoCaja } from '@/lib/productos-caja'
 
 const TODAS = 'Todos'
 
@@ -26,6 +25,19 @@ const formatoPrecio = new Intl.NumberFormat('es-AR', {
   currency: 'ARS',
   maximumFractionDigits: 0,
 })
+
+type ProductoCaja = {
+  idProducto: number
+  nombre: string
+  categoria: string
+  precio: number
+  disponible: boolean
+}
+
+type RespuestaProductosCaja = {
+  productos?: ProductoCaja[]
+  error?: string
+}
 
 type LineaCarrito = { producto: ProductoCaja; cantidad: number }
 
@@ -257,8 +269,11 @@ function PanelCobro({
 type Cobrado = { pedido: PedidoPantalla; pagaCon: number | null }
 
 export default function CajaPage() {
-  const { productos } = useProductosCaja()
   const { pedidos, crearPedidoMostrador } = usePedidosPantalla()
+
+  const [productos, setProductos] = useState<ProductoCaja[]>([])
+  const [cargandoProductos, setCargandoProductos] = useState(true)
+  const [errorProductos, setErrorProductos] = useState('')
 
   const [categoria, setCategoria] = useState(TODAS)
   const [busqueda, setBusqueda] = useState('')
@@ -275,6 +290,37 @@ export default function CajaPage() {
   const [ultimoCobrado, setUltimoCobrado] = useState<Cobrado | null>(null)
   // Cada incremento dispara una impresión (después de que los tickets se renderizan).
   const [ordenImpresion, setOrdenImpresion] = useState(0)
+
+  useEffect(() => {
+    let paginaActiva = true
+
+    async function cargarProductos() {
+      try {
+        const respuesta = await fetch('/api/productos/caja', { cache: 'no-store' })
+        if (!respuesta.headers.get('content-type')?.includes('application/json')) {
+          throw new Error('El servidor devolvió una respuesta inesperada.')
+        }
+        const datos = await respuesta.json() as RespuestaProductosCaja
+        if (!respuesta.ok) throw new Error(datos.error || 'No se pudieron cargar los productos.')
+        if (paginaActiva) setProductos(datos.productos ?? [])
+      } catch (errorDesconocido) {
+        if (paginaActiva) {
+          setErrorProductos(
+            errorDesconocido instanceof Error
+              ? errorDesconocido.message
+              : 'No se pudieron cargar los productos.',
+          )
+        }
+      } finally {
+        if (paginaActiva) setCargandoProductos(false)
+      }
+    }
+
+    void cargarProductos()
+    return () => {
+      paginaActiva = false
+    }
+  }, [])
 
   useEffect(() => {
     if (ordenImpresion > 0) window.print()
@@ -393,7 +439,13 @@ export default function CajaPage() {
             </label>
           </div>
 
-          {productosVisibles.length === 0 ? (
+          {errorProductos ? (
+            <p role="alert" className="rounded-3xl bg-surface p-10 text-center text-danger">
+              {errorProductos}
+            </p>
+          ) : cargandoProductos ? (
+            <p className="rounded-3xl bg-surface p-10 text-center text-muted">Cargando productos...</p>
+          ) : productosVisibles.length === 0 ? (
             <p className="rounded-3xl bg-surface p-10 text-center text-muted">No hay productos para mostrar.</p>
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-4">
