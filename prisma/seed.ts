@@ -41,12 +41,12 @@ async function main() {
       update: {},
       create: { nombre: 'admin' },
     })
-    await tx.rol.upsert({
+    const supervisor = await tx.rol.upsert({
       where: { nombre: 'supervisor' },
       update: {},
       create: { nombre: 'supervisor' },
     })
-    await tx.rol.upsert({
+    const empleado = await tx.rol.upsert({
       where: { nombre: 'empleado' },
       update: {},
       create: { nombre: 'empleado' },
@@ -103,6 +103,30 @@ async function main() {
       const sucursal = await tx.sucursal.findFirst({ where: datos })
         ?? await tx.sucursal.create({ data: datos })
       sucursales.push(sucursal)
+    }
+
+    // Usuarios de ejemplo para el panel de Usuarios (contraseña fija para todos: "prueba123")
+    const passwordEjemplos = await bcrypt.hash('prueba123', 10)
+    const usuariosEjemplo = [
+      { nombre: 'Esteban', apellido: 'Car', email: 'esteban.car@ejemplo.com', username: 'estebancar', idRol: supervisor.idRol },
+      { nombre: 'Carlos', apellido: 'Trip', email: 'carlos.trip@ejemplo.com', username: 'carlostrip', idRol: admin.idRol },
+      { nombre: 'Santiago', apellido: 'Carles', email: 'santiago.carles@ejemplo.com', username: 'santiago', idRol: empleado.idRol },
+    ]
+    for (const [indice, u] of usuariosEjemplo.entries()) {
+      await tx.usuario.upsert({
+        where: { email: u.email },
+        update: {},
+        create: {
+          nombre: u.nombre,
+          apellido: u.apellido,
+          email: u.email,
+          username: u.username,
+          passwordHash: passwordEjemplos,
+          idRol: u.idRol,
+          idSucursal: sucursales[indice % sucursales.length].idSucursal,
+          debeCambiarContrasena: true,
+        },
+      })
     }
 
     const ejemplos = [
