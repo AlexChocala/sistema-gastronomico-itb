@@ -4,6 +4,7 @@
 // cambia su estado; ese mismo estado es el que lee la pantalla de Pedidos Mostrador.
 
 import { Bike, Check, CircleUserRound, RotateCcw, ShoppingBag } from '@/components/icons'
+import { PastillaSucursal, useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import { puedeIrACocina, usePedidosPantalla, type PedidoPantalla } from '@/lib/pedidos-pantallas'
 
 const etiquetaEntrega = {
@@ -81,7 +82,8 @@ function TarjetaPedido({
 }
 
 export default function CocinaPage() {
-  const { pedidos, marcarEnPreparacion, marcarListo, reiniciarDatosDePrueba } = usePedidosPantalla()
+  const { sucursal } = useSucursalActiva()
+  const { pedidos, marcarEnPreparacion, marcarListo } = usePedidosPantalla(sucursal?.idSucursal ?? null)
 
   // Cocina solo llega hasta "listo": enviado y entregado ya son de Caja.
   const pedidosActivos = pedidos.filter(
@@ -95,21 +97,14 @@ export default function CocinaPage() {
       <section className="flex flex-col gap-6">
         <header className="flex items-end justify-between gap-4">
           <div>
-            <h1 className="screen-title">Cocina</h1>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="screen-title">Cocina</h1>
+              <PastillaSucursal />
+            </div>
             <p className="mt-1 text-muted">
               {pedidosActivos.length} {pedidosActivos.length === 1 ? 'pedido' : 'pedidos'} en curso
             </p>
           </div>
-          {process.env.NODE_ENV === 'development' && (
-            <button
-              type="button"
-              onClick={reiniciarDatosDePrueba}
-              className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border px-4 py-2 text-sm text-muted hover:bg-surface"
-            >
-              <RotateCcw className="size-4" />
-              Reiniciar datos de prueba
-            </button>
-          )}
         </header>
 
         {pedidosActivos.length === 0 ? (

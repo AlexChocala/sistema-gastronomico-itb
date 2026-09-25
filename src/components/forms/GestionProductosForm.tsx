@@ -3,9 +3,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Power, RotateCcw, Search, Store, Tags, X,
+  ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Power, Search, Store, Tags, X,
 } from '@/components/icons'
 import { IconoCategoria } from '@/components/icons/IconoCategoria'
+import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 
 type Producto = {
   idProducto: number
@@ -41,12 +42,6 @@ const formatoPrecio = new Intl.NumberFormat('es-AR', {
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 })
-
-const filtrosEstado = [
-  { valor: 'todos', texto: 'Todos' },
-  { valor: 'activos', texto: 'Activos' },
-  { valor: 'inactivos', texto: 'Inactivos' },
-] as const
 
 const claseCampo =
   'w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent disabled:opacity-60'
@@ -86,6 +81,11 @@ export function GestionProductosForm() {
   const [limite, setLimite] = useState(20)
   const [total, setTotal] = useState(0)
   const [recarga, setRecarga] = useState(0)
+  // Por defecto, productos de la sucursal activa. Solo el admin puede ver el catálogo
+  // completo (incluye productos sin sucursal, para poder asignarles una).
+  const { sucursal, puedeElegir } = useSucursalActiva()
+  const [verTodasLasSucursales, setVerTodasLasSucursales] = useState(false)
+  const idSucursalFiltro = puedeElegir && verTodasLasSucursales ? null : (sucursal?.idSucursal ?? null)
 
   const totalPaginas = Math.max(1, Math.ceil(total / limite))
 
@@ -103,6 +103,7 @@ export function GestionProductosForm() {
         })
         if (busquedaAplicada) parametros.set('busqueda', busquedaAplicada)
         if (filtroCategoria !== null) parametros.set('idCategoria', String(filtroCategoria))
+        if (idSucursalFiltro !== null) parametros.set('idSucursal', String(idSucursalFiltro))
 
         const respuesta = await fetch(`/api/productos/gestion?${parametros}`, { cache: 'no-store' })
         const datos = await respuesta.json() as RespuestaListado & RespuestaError
@@ -133,7 +134,7 @@ export function GestionProductosForm() {
     return () => {
       paginaActiva = false
     }
-  }, [busquedaAplicada, filtroCategoria, filtroEstado, limite, pagina, recarga])
+  }, [busquedaAplicada, filtroCategoria, filtroEstado, idSucursalFiltro, limite, pagina, recarga])
 
   // El modal del formulario se cierra con Escape (salvo mientras guarda).
   useEffect(() => {
@@ -273,7 +274,10 @@ export function GestionProductosForm() {
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="page-title">Productos</h1>
-          <p className="mt-1 text-sm text-muted">Administrá el menú y los productos disponibles.</p>
+          <p className="mt-1 text-sm text-muted">
+            <span className="text-text">{total}</span> {total === 1 ? 'producto' : 'productos'}{' '}
+            {idSucursalFiltro === null ? 'en todas las sucursales' : `en ${sucursal?.nombre ?? 'tu sucursal'}`}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className={claseBotonSecundario}
@@ -290,34 +294,56 @@ export function GestionProductosForm() {
 
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="grid grid-cols-3 gap-1 rounded-full bg-surface-muted/60 p-1 text-sm">
-            {filtrosEstado.map(({ valor, texto }) => (
-              <button
-                key={valor}
-                type="button"
-                onClick={() => cambiarFiltroEstado(valor)}
-                aria-pressed={filtroEstado === valor}
-                className={claseChip(filtroEstado === valor)}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Toggle y no desplegable: se va y vuelve seguido entre la sucursal y el catálogo completo. */}
+            {puedeElegir && sucursal && (
+              <div className="grid grid-cols-2 gap-1 rounded-full bg-surface-muted/60 p-1 text-sm">
+                {[
+                  { todas: false, texto: sucursal.nombre },
+                  { todas: true, texto: 'Todas las sucursales' },
+                ].map(({ todas, texto }) => (
+                  <button
+                    key={texto}
+                    type="button"
+                    onClick={() => {
+                      setPagina(1)
+                      setVerTodasLasSucursales(todas)
+                    }}
+                    aria-pressed={verTodasLasSucursales === todas}
+                    className={`inline-flex cursor-pointer items-center justify-center gap-1.5 truncate rounded-full px-3 py-1.5 transition-colors ${verTodasLasSucursales === todas ? 'bg-surface text-text shadow-sm' : 'text-muted hover:text-text'}`}
+                  >
+                    {!todas && <Store className="size-3.5 shrink-0 text-accent" />}
+                    {texto}
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* Activos/Inactivos se cambia poco: desplegable en vez de una fila de botones. */}
+            <div className="relative">
+              <select
+                value={filtroEstado}
+                onChange={(evento) => cambiarFiltroEstado(evento.target.value as FiltroEstado)}
+                aria-label="Filtrar por estado"
+                className="cursor-pointer appearance-none rounded-full bg-surface py-2 pr-9 pl-4 text-sm shadow-sm outline-none focus:ring-2 focus:ring-accent"
               >
-                {texto}
-              </button>
-            ))}
+                <option value="todos">Todos los estados</option>
+                <option value="activos">Solo activos</option>
+                <option value="inactivos">Solo inactivos</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted" />
+            </div>
           </div>
           <form onSubmit={buscar} role="search"
-            className="flex w-full items-center gap-2 rounded-full bg-surface py-1 pr-1 pl-4 shadow-sm sm:w-72">
+            className="flex w-full items-center gap-2 rounded-full bg-surface px-4 py-2 shadow-sm sm:w-72">
             <Search className="size-4 shrink-0 text-muted" />
             <input
               type="search"
               value={busqueda}
               onChange={(evento) => setBusqueda(evento.target.value)}
-              placeholder="Buscar por nombre o descripción"
-              aria-label="Buscar producto"
-              className="w-full bg-transparent py-1 text-sm outline-none placeholder:text-muted"
+              placeholder="Buscar producto y Enter"
+              aria-label="Buscar producto por nombre o descripción"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-muted"
             />
-            <button type="submit" disabled={cargando}
-              className="shrink-0 cursor-pointer rounded-full bg-accent-soft px-3 py-1 text-sm text-accent transition-colors hover:bg-accent hover:text-on-accent disabled:cursor-not-allowed disabled:opacity-50">
-              Buscar
-            </button>
           </form>
         </div>
 
@@ -341,18 +367,6 @@ export function GestionProductosForm() {
       </div>
 
       <section className="flex flex-col gap-4" aria-live="polite" aria-busy={cargando}>
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-muted">
-            Mostrando <span className="text-text">{productos.length}</span> de{' '}
-            <span className="text-text">{total}</span> productos
-          </p>
-          <button type="button" onClick={() => setRecarga((actual) => actual + 1)} disabled={cargando}
-            className={claseBotonSecundario}>
-            <RotateCcw className={`size-4 ${cargando ? 'animate-spin [animation-direction:reverse]' : ''}`} />
-            Actualizar
-          </button>
-        </div>
-
         {mensaje && (
           <p className="rounded-2xl bg-success/10 px-4 py-3 text-sm text-success">{mensaje}</p>
         )}
@@ -376,7 +390,7 @@ export function GestionProductosForm() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className={`inline-flex items-center gap-1.5 text-xs ${producto.activo ? 'text-success' : 'text-muted'}`}>
-                    <span className={`size-1.5 rounded-full ${producto.activo ? 'bg-success' : 'bg-order-delivered'}`} />
+                    <span className={`size-1.5 rounded-full ${producto.activo ? 'bg-success' : 'bg-muted'}`} />
                     {producto.activo ? 'Activo' : 'Inactivo'}
                   </span>
                   <span className="rounded-full bg-bg px-2.5 py-1 text-xs text-muted">

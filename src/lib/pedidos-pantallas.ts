@@ -5,17 +5,18 @@
 //   estadoPago (la plata): pendiente → pagado
 //
 // Quién mueve cada paso:
-//   Caja     crea el pedido (recibido) y marca pagado / enviado / entregado.
+//   Caja     crea el pedido (recibido, ya pagado).
 //   Cocina   "Pendiente" → en_preparacion (recién ahí aparece en Mostrador).
 //            "Listo"     → listo (pasa a "Para retirar" en Mostrador).
+//   Pedidos  verifica transferencias (pagado), enviado (solo delivery) y entregado.
 //
 // Todavía no existe la API de pedidos, así que por ahora el estado vive en localStorage
-// con datos de prueba. El evento `storage` avisa a las otras pestañas del mismo navegador.
+// (arranca vacío; los pedidos los crea Caja). El evento `storage` avisa a las otras pestañas del mismo navegador.
 //
 // Cuando el backend esté listo, se reemplaza SOLO este archivo (ver los TODO): las
 // pantallas usan `usePedidosPantalla()` y no saben de dónde salen los datos.
 
-import { useCallback, useSyncExternalStore } from 'react'
+import { useCallback, useMemo, useSyncExternalStore } from 'react'
 
 export type EstadoPedidoPantalla = 'recibido' | 'en_preparacion' | 'listo' | 'enviado' | 'entregado'
 export type EstadoPagoPantalla = 'pendiente' | 'pagado'
@@ -31,6 +32,7 @@ export interface ItemPedidoPantalla {
 
 export interface PedidoPantalla {
   idPedido: number
+  idSucursal: number
   fecha: string // ISO
   origen: OrigenPedidoPantalla
   cliente: string
@@ -57,99 +59,29 @@ export function calcularTotal(items: ItemPedidoPantalla[]) {
   return items.reduce((suma, item) => suma + item.precioUnitario * item.cantidad, 0)
 }
 
-function pedidoDePrueba(
-  datos: Omit<PedidoPantalla, 'total' | 'fecha' | 'origen' | 'metodoPago' | 'estadoPago'> &
-    Partial<Pick<PedidoPantalla, 'origen' | 'metodoPago' | 'estadoPago'>>,
-): PedidoPantalla {
-  return {
-    fecha: '2026-09-24T12:30:00-03:00',
-    origen: 'mostrador',
-    metodoPago: 'efectivo',
-    estadoPago: 'pagado',
-    ...datos,
-    total: calcularTotal(datos.items),
-  }
-}
-
-// TODO: borrar cuando exista la API de pedidos.
-const pedidosDePrueba: PedidoPantalla[] = [
-  pedidoDePrueba({
-    idPedido: 123,
-    cliente: 'Damián',
-    tipoEntrega: 'retiro',
-    estado: 'recibido',
-    items: [
-      { cantidad: 1, producto: 'Hamburguesa doble completa', precioUnitario: 11200 },
-      { cantidad: 1, producto: 'Hamburguesa triple simple', precioUnitario: 12900 },
-      { cantidad: 1, producto: 'Pizza muzzarella', precioUnitario: 9800 },
-    ],
-  }),
-  pedidoDePrueba({
-    idPedido: 124,
-    cliente: 'Nicolás',
-    tipoEntrega: 'delivery',
-    estado: 'recibido',
-    origen: 'online',
-    estadoPago: 'pendiente', // paga en efectivo al cadete
-    items: [
-      { cantidad: 1, producto: 'Pizza jamón y morrón', precioUnitario: 11500 },
-      { cantidad: 1, producto: 'Hamburguesa simple', precioUnitario: 7500 },
-    ],
-  }),
-  pedidoDePrueba({
-    idPedido: 125,
-    cliente: 'Erika',
-    tipoEntrega: 'retiro',
-    estado: 'en_preparacion',
-    metodoPago: 'transferencia',
-    items: [
-      { cantidad: 2, producto: 'Empanada de carne', precioUnitario: 1600 },
-      { cantidad: 1, producto: 'Coca-Cola 500 ml', precioUnitario: 2500 },
-    ],
-  }),
-  pedidoDePrueba({
-    idPedido: 126,
-    cliente: 'Lucía',
-    tipoEntrega: 'delivery',
-    estado: 'recibido',
-    origen: 'online',
-    metodoPago: 'transferencia',
-    estadoPago: 'pendiente', // comprobante sin verificar: todavía NO aparece en Cocina
-    items: [
-      { cantidad: 1, producto: 'Milanesa napolitana con papas', precioUnitario: 13500 },
-      { cantidad: 1, producto: 'Flan con dulce de leche', precioUnitario: 4200 },
-    ],
-  }),
-  pedidoDePrueba({
-    idPedido: 122,
-    cliente: 'Martín',
-    tipoEntrega: 'retiro',
-    estado: 'listo',
-    items: [{ cantidad: 1, producto: 'Pizza fugazzeta', precioUnitario: 10900 }],
-  }),
-]
-
-// La versión en la clave descarta datos guardados con el formato anterior.
-const CLAVE_STORAGE = 'pedidos-pantallas-v2'
+// La versión en la clave descarta datos guardados anteriormente (v3 incluía pedidos de
+// prueba generados automáticamente).
+const CLAVE_STORAGE = 'pedidos-pantallas-v4'
 const EVENTO_LOCAL = 'pedidos-pantallas:cambio'
 
 // useSyncExternalStore exige devolver la misma referencia mientras no cambien los datos.
+// null = todavía no se guardó nada (no hay pedidos).
 let ultimoCrudo: string | null = null
-let ultimoValor: PedidoPantalla[] = pedidosDePrueba
+let ultimoValor: PedidoPantalla[] | null = null
 
-function leer(): PedidoPantalla[] {
+function leer(): PedidoPantalla[] | null {
   let crudo: string | null = null
   try {
     crudo = localStorage.getItem(CLAVE_STORAGE)
   } catch {
-    return pedidosDePrueba
+    return null
   }
   if (crudo === ultimoCrudo) return ultimoValor
   ultimoCrudo = crudo
   try {
-    ultimoValor = crudo ? (JSON.parse(crudo) as PedidoPantalla[]) : pedidosDePrueba
+    ultimoValor = crudo ? (JSON.parse(crudo) as PedidoPantalla[]) : null
   } catch {
-    ultimoValor = pedidosDePrueba
+    ultimoValor = null
   }
   return ultimoValor
 }
@@ -175,40 +107,83 @@ function suscribir(avisar: () => void) {
 
 export type NuevoPedidoMostrador = Pick<PedidoPantalla, 'cliente' | 'tipoEntrega' | 'metodoPago' | 'items'>
 
-export function usePedidosPantalla() {
-  // TODO: con backend, reemplazar por un fetch a la API de pedidos de la sucursal
-  // (con polling cada pocos segundos o SSE) en lugar de localStorage.
-  const pedidos = useSyncExternalStore(suscribir, leer, () => pedidosDePrueba)
+function siguienteId(pedidos: PedidoPantalla[], minimo = 0) {
+  return Math.max(minimo, ...pedidos.map((pedido) => pedido.idPedido)) + 1
+}
 
-  const cambiarEstado = useCallback((idPedido: number, estado: EstadoPedidoPantalla) => {
-    // TODO: con backend, reemplazar por PATCH /api/pedidos/{idPedido} con { estado }.
-    guardar(leer().map((pedido) => (pedido.idPedido === idPedido ? { ...pedido, estado } : pedido)))
-  }, [])
+// Pedidos de UNA sucursal. `idSucursal` sale de la sesión (panel, Caja, Cocina) o de la
+// URL (monitor público de Mostrador). Con null (usuario sin sucursal) no muestra nada.
+export function usePedidosPantalla(idSucursal: number | null) {
+  // TODO: con backend, reemplazar por un fetch a GET /api/pedidos (la sucursal la toma el
+  // servidor de la sesión), con polling cada pocos segundos o SSE, en lugar de localStorage.
+  const guardados = useSyncExternalStore(suscribir, leer, () => null)
+
+  // Todos los pedidos (de todas las sucursales), para escribir y para numerar.
+  const todos = useMemo(() => guardados ?? [], [guardados])
+  const pedidos = useMemo(
+    () => todos.filter((pedido) => pedido.idSucursal === idSucursal),
+    [todos, idSucursal],
+  )
+
+  // Lo que hay guardado, o nada si todavía no se guardó ningún pedido.
+  const base = useCallback(() => leer() ?? [], [])
+
+  // Cambios de estado, entrega y cobro.
+  const actualizar = useCallback(
+    (idPedido: number, cambios: Partial<Pick<PedidoPantalla, 'estado' | 'estadoPago' | 'tipoEntrega'>>) => {
+      // TODO: con backend, reemplazar por PATCH /api/pedidos/{idPedido} con `cambios`.
+      guardar(base().map((pedido) => (pedido.idPedido === idPedido ? { ...pedido, ...cambios } : pedido)))
+    },
+    [base],
+  )
 
   // Caja cobra ANTES de crear el pedido: entra pagado y en estado "recibido".
-  const crearPedidoMostrador = useCallback((datos: NuevoPedidoMostrador): PedidoPantalla => {
-    // TODO: con backend, reemplazar por POST /api/pedidos; el id y la fecha los asigna la base.
-    const actuales = leer()
-    const pedido: PedidoPantalla = {
-      ...datos,
-      idPedido: Math.max(0, ...actuales.map((p) => p.idPedido)) + 1,
-      fecha: new Date().toISOString(),
-      origen: 'mostrador',
-      estado: 'recibido',
-      estadoPago: 'pagado',
-      total: calcularTotal(datos.items),
-    }
-    guardar([...actuales, pedido])
-    return pedido
-  }, [])
+  const crearPedidoMostrador = useCallback(
+    (datos: NuevoPedidoMostrador): PedidoPantalla => {
+      // TODO: con backend, reemplazar por POST /api/pedidos; el id, la fecha y la sucursal
+      // los asigna el servidor.
+      if (idSucursal === null) throw new Error('No hay una sucursal asignada para cargar pedidos')
+      const actuales = base()
+      const pedido: PedidoPantalla = {
+        ...datos,
+        idPedido: siguienteId(actuales),
+        idSucursal,
+        fecha: new Date().toISOString(),
+        origen: 'mostrador',
+        estado: 'recibido',
+        estadoPago: 'pagado',
+        total: calcularTotal(datos.items),
+      }
+      guardar([...actuales, pedido])
+      return pedido
+    },
+    [base, idSucursal],
+  )
 
-  const reiniciarDatosDePrueba = useCallback(() => guardar(pedidosDePrueba), [])
+  // Vuelve un pedido a una copia anterior (para "Deshacer" una acción recién hecha).
+  const restaurarPedido = useCallback(
+    (anterior: PedidoPantalla) => {
+      // TODO: con backend, reemplazar por PATCH /api/pedidos/{idPedido} con el estado anterior.
+      guardar(base().map((pedido) => (pedido.idPedido === anterior.idPedido ? anterior : pedido)))
+    },
+    [base],
+  )
 
   return {
     pedidos,
+    // Número estimado del próximo pedido: los números son únicos entre sucursales.
+    proximoIdPedido: siguienteId(todos),
     crearPedidoMostrador,
-    marcarEnPreparacion: (idPedido: number) => cambiarEstado(idPedido, 'en_preparacion'),
-    marcarListo: (idPedido: number) => cambiarEstado(idPedido, 'listo'),
-    reiniciarDatosDePrueba,
+    marcarEnPreparacion: (idPedido: number) => actualizar(idPedido, { estado: 'en_preparacion' }),
+    marcarListo: (idPedido: number) => actualizar(idPedido, { estado: 'listo' }),
+    // Solo delivery: el cadete sale con el pedido.
+    marcarEnviado: (idPedido: number) => actualizar(idPedido, { estado: 'enviado' }),
+    // Si el pago estaba pendiente (efectivo al entregar), entregar también lo cobra.
+    marcarEntregado: (idPedido: number) => actualizar(idPedido, { estado: 'entregado', estadoPago: 'pagado' }),
+    // Transferencia verificada: recién ahí el pedido puede ir a Cocina.
+    marcarPagado: (idPedido: number) => actualizar(idPedido, { estadoPago: 'pagado' }),
+    cambiarTipoEntrega: (idPedido: number, tipoEntrega: TipoEntregaPantalla) =>
+      actualizar(idPedido, { tipoEntrega }),
+    restaurarPedido,
   }
 }

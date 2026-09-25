@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { NextResponse } from 'next/server'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { obtenerSucursalActiva } from '@/lib/sucursal-activa'
 
 export async function GET() {
   const sesion = await getServerSession(authOptions)
@@ -13,7 +14,7 @@ export async function GET() {
     // La sucursal se relee de la base para no depender de una sesión desactualizada.
     const usuario = await prisma.usuario.findUnique({
       where: { idUsuario: sesion.user.idUsuario },
-      select: { activo: true, debeCambiarContrasena: true, idSucursal: true },
+      select: { activo: true, debeCambiarContrasena: true },
     })
     if (!usuario?.activo) {
       return NextResponse.json({ error: 'El usuario no está habilitado.' }, { status: 403 })
@@ -21,12 +22,14 @@ export async function GET() {
     if (usuario.debeCambiarContrasena) {
       return NextResponse.json({ error: 'Primero tenés que cambiar tu contraseña.' }, { status: 403 })
     }
-    if (usuario.idSucursal === null) {
+    // Admin: la sucursal elegida en el selector; el resto: la asignada a su usuario.
+    const { sucursal: activa } = await obtenerSucursalActiva(sesion)
+    if (activa === null) {
       return NextResponse.json({ error: 'Tu usuario no tiene una sucursal asignada.' }, { status: 400 })
     }
 
     const sucursal = await prisma.sucursal.findFirst({
-      where: { idSucursal: usuario.idSucursal, activa: true },
+      where: { idSucursal: activa.idSucursal, activa: true },
       select: {
         idSucursal: true,
         nombre: true,

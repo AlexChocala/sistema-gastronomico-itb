@@ -23,7 +23,7 @@ export { Banknote, Landmark, ArrowLeft, Printer, CircleCheck } from 'lucide-reac
 export { Pencil, Power, Store, Tags, X, ChevronLeft, ChevronRight } from 'lucide-react'
 
 // Dashboard
-export { Receipt, Flame, Globe, CalendarDays, Clock } from 'lucide-react'
+export { Receipt, Flame, Globe, CalendarDays, Clock, CheckCheck } from 'lucide-react'
 
 // Acceso (login y contraseñas)
 export { Mail, MailCheck, LockKeyhole, Eye, EyeOff, ArrowRight, ShieldCheck, TriangleAlert } from 'lucide-react'

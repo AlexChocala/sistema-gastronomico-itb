@@ -4,6 +4,7 @@
 // que ven los clientes. Solo muestra número y nombre: nada de precios ni productos.
 // Lee el mismo estado que cambia la pantalla de Cocina.
 
+import { use } from 'react'
 import { usePedidosPantalla, type PedidoPantalla } from '@/lib/pedidos-pantallas'
 
 function Columna({
@@ -35,8 +36,26 @@ function Columna({
   )
 }
 
-export default function PedidosMostradorPage() {
-  const { pedidos } = usePedidosPantalla()
+// Es pública (sin sesión), así que la sucursal viaja en la URL: ?sucursal=ID. El link
+// del sidebar ya la incluye.
+export default function PedidosMostradorPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sucursal?: string }>
+}) {
+  const idSucursal = Number(use(searchParams).sucursal)
+  const sucursalValida = Number.isInteger(idSucursal) && idSucursal > 0
+  const { pedidos } = usePedidosPantalla(sucursalValida ? idSucursal : null)
+
+  if (!sucursalValida) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-bg p-6">
+        <p className="screen-item rounded-3xl bg-surface p-10 text-center text-muted">
+          Abrí esta pantalla desde el panel para elegir la sucursal.
+        </p>
+      </main>
+    )
+  }
 
   // Los pedidos "nuevo" no se muestran: nadie confirmó todavía que se están preparando.
   const enPreparacion = pedidos.filter((pedido) => pedido.estado === 'en_preparacion')

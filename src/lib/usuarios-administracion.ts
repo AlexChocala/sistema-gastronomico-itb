@@ -5,7 +5,7 @@ import { ErrorUsuario, idValido, leerId, leerCuerpo, validarUsuario } from './us
 type Sesion = { user: { idUsuario: number } } | null
 
 const camposUsuario = {
-  idUsuario: true, nombre: true, apellido: true, email: true, username: true, activo: true,
+  idUsuario: true, nombre: true, apellido: true, email: true, activo: true, fotoPerfilPath: true,
   idRol: true, rol: { select: { idRol: true, nombre: true } },
   idSucursal: true, sucursal: { select: { idSucursal: true, nombre: true } },
 } satisfies Prisma.UsuarioSelect
@@ -27,7 +27,7 @@ function responderError(error: unknown) {
   if (error instanceof ErrorUsuario) return responder({ error: error.message }, error.estado)
   const codigo = typeof error === 'object' && error !== null && 'code' in error ? error.code : null
   if (codigo === 'P2025') return responder({ error: 'No se encontró el registro solicitado.' }, 404)
-  if (codigo === 'P2002') return responder({ error: 'El email o username ya está en uso.' }, 409)
+  if (codigo === 'P2002') return responder({ error: 'El email ya está en uso.' }, 409)
   if (codigo === 'P2003' || codigo === 'P2034') {
     return responder({ error: 'Los datos cambiaron durante la operación. Actualizá e intentá nuevamente.' }, 409)
   }
@@ -98,6 +98,7 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
       return responder({
         usuarios, roles, sucursales,
         esAdmin: sesionCompleta?.rol.nombre === 'admin',
+        idUsuarioSesion,
       })
     }),
 
@@ -115,7 +116,6 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
             nombre: datos.nombre!,
             apellido: datos.apellido!,
             email: datos.email!,
-            username: datos.username!,
             passwordHash,
             idRol: datos.idRol!,
             idSucursal: datos.idSucursal!,
@@ -160,6 +160,34 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
         where: { idUsuario: leerId(id) }, data: { activo: true }, select: camposUsuario,
       })
       return responder({ mensaje: 'Usuario activado.', usuario })
+    }),
+
+    // Restablecer la contraseña de otro usuario: solo admin.
+    restablecerContrasena: (request: Request, id: string) => proteger(request, ['admin'], true, async (idUsuarioSesion) => {
+      const idUsuario = leerId(id)
+      if (idUsuario === idUsuarioSesion) {
+        throw new ErrorUsuario(400, 'No podés restablecer tu propia contraseña. Usá la opción de cambiar contraseña.')
+      }
+      const passwordGenerada = generarPasswordAleatoria()
+      const passwordHash = await bcrypt.hash(passwordGenerada, 10)
+      // Los enlaces de recupero pendientes se firman con el passwordHash anterior
+      // (ver api/auth/recuperar-contrasena), así que al cambiarlo dejan de ser válidos.
+      const usuario = await db.usuario.update({
+        where: { idUsuario },
+        data: { passwordHash, debeCambiarContrasena: true },
+        select: camposUsuario,
+      })
+      return responder({ mensaje: 'Contraseña restablecida.', usuario, passwordGenerada })
+    }),
+
+    // Quitar la foto de perfil de un usuario: solo admin.
+    quitarFotoPerfil: (request: Request, id: string) => proteger(request, ['admin'], true, async () => {
+      // Por ahora solo se borra la ruta. Borrar el archivo del bucket se agrega
+      // cuando se conecte Supabase Storage.
+      const usuario = await db.usuario.update({
+        where: { idUsuario: leerId(id) }, data: { fotoPerfilPath: null }, select: camposUsuario,
+      })
+      return responder({ mensaje: 'Foto de perfil eliminada.', usuario })
     }),
   }
 }

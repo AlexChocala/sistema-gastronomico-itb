@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { CerrarSesionButton } from '@/components/layout/CerrarSesionButton'
+import { SelectorSucursal, useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import {
-  BookOpen, ChartColumn, ChefHat, ChevronDown, ClipboardList, ExternalLink, LayoutDashboard,
+  ChartColumn, ChefHat, ChevronDown, ClipboardList, ExternalLink, LayoutDashboard,
   Monitor, MonitorPlay, Package, Settings, Store, User, Users, UtensilsCrossed, Wallet,
   type LucideIcon,
 } from '@/components/icons'
@@ -25,9 +26,9 @@ const secciones: Seccion[] = [
     titulo: 'Principal',
     enlaces: [
       { href: '/dashboard', texto: 'Dashboard', icono: LayoutDashboard },
-      { href: '/productos/menu', texto: 'Consultar menú', icono: BookOpen, roles: ['empleado'] },
+      { href: '/pedidos', texto: 'Pedidos', icono: ClipboardList },
     ],
-    pendientes: [{ texto: 'Pedidos', icono: ClipboardList }],
+    pendientes: [],
     conPantallas: true,
   },
   {
@@ -73,7 +74,15 @@ const trazoIcono = 1.75
 
 export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
   const rutaActual = usePathname()
+  const { sucursal } = useSucursalActiva()
   const seccionesVisibles = secciones.filter((seccion) => esVisible(seccion.roles, rol))
+
+  // El monitor de Mostrador es público (sin sesión): la sucursal viaja en la URL.
+  function hrefPantalla(href: string) {
+    return href === '/pantallas/pedidos-mostrador' && sucursal
+      ? `${href}?sucursal=${sucursal.idSucursal}`
+      : href
+  }
 
   return (
     <aside className="flex flex-col gap-8 p-4 md:sticky md:top-0 md:h-screen md:overflow-y-auto scrollbar-oculta">
@@ -83,6 +92,8 @@ export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
         </span>
         <span className="font-semibold tracking-tight">Mise</span>
       </div>
+
+      <SelectorSucursal />
 
       <nav aria-label="Menú principal" className="flex flex-col gap-6">
         {seccionesVisibles.map((seccion) => (
@@ -118,7 +129,7 @@ export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
                   {pantallas.map((pantalla) => {
                     const Icono = pantalla.icono
                     return (
-                      <a key={pantalla.href} href={pantalla.href} target="_blank" rel="noopener noreferrer" className={claseSubItem + ' text-muted hover:bg-surface-muted/60 hover:text-text'}>
+                      <a key={pantalla.href} href={hrefPantalla(pantalla.href)} target="_blank" rel="noopener noreferrer" className={claseSubItem + ' text-muted hover:bg-surface-muted/60 hover:text-text'}>
                         <Icono strokeWidth={trazoIcono} className={claseIcono} />
                         {pantalla.texto}
                         <ExternalLink size={14} strokeWidth={trazoIcono} className="ml-auto opacity-60" />
@@ -144,10 +155,10 @@ export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
         </div>
         <nav aria-label="Menú de usuario" className="flex flex-col gap-1">
           <p className="section-label mb-1 px-4">General</p>
-          <span className={claseItem + ' cursor-not-allowed text-muted opacity-50'} aria-disabled="true">
-            <User strokeWidth={trazoIcono} className={claseIcono} />
+          <Link href="/perfil" aria-current={rutaActual === '/perfil' ? 'page' : undefined} className={claseItem + ' ' + (rutaActual === '/perfil' ? 'bg-surface-muted font-medium text-text' : 'text-muted hover:bg-surface-muted/60 hover:text-text')}>
+            <User strokeWidth={trazoIcono} className={claseIcono + ' ' + (rutaActual === '/perfil' ? 'text-accent' : '')} />
             Perfil
-          </span>
+          </Link>
           <CerrarSesionButton />
         </nav>
       </div>

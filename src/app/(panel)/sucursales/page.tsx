@@ -160,7 +160,7 @@ export default function SucursalesPage() {
 
   return (
     <main className="min-h-screen bg-bg p-6">
-      <div className="mx-auto flex max-w-5xl flex-col gap-6">
+      <div className="flex flex-col gap-6">
         <header className="flex items-center justify-between gap-3">
           <div>
             <h1 className="page-title">Sucursales</h1>

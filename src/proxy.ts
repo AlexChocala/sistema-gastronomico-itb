@@ -40,6 +40,7 @@ export const config = {
     '/productos/:path*',
     '/usuarios/:path*',
     '/reportes/:path*',
+    '/perfil/:path*',
     // Pantallas de pestaña aparte. Pedidos Mostrador queda afuera a propósito: es pública.
     '/pantallas/caja/:path*',
     '/pantallas/cocina/:path*',

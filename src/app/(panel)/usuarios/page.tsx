@@ -3,15 +3,15 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, Copy, KeyRound, Pencil, Plus, Power, Store, X } from '@/components/icons'
+import { ChevronDown, Copy, KeyRound, Pencil, Plus, Power, Store, Trash2, X } from '@/components/icons'
 
 interface Usuario {
   idUsuario: number
   nombre: string
   apellido: string
   email: string
-  username: string
   activo: boolean
+  fotoPerfilPath: string | null
   idRol: number
   rol: { idRol: number; nombre: string }
   idSucursal: number | null
@@ -77,7 +77,6 @@ const formVacio = {
   nombre: '',
   apellido: '',
   email: '',
-  username: '',
   idRol: '',
   idSucursal: '',
 }
@@ -89,11 +88,17 @@ export default function UsuariosPage() {
   const [roles, setRoles] = useState<Rol[]>([])
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
   const [esAdmin, setEsAdmin] = useState(false)
+  const [idUsuarioSesion, setIdUsuarioSesion] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState<number | null>(null)
-  const [passwordGenerada, setPasswordGenerada] = useState<string | null>(null)
+  // Contraseña temporal a mostrar, junto con el texto que explica de dónde viene
+  // (alta de usuario o restablecimiento).
+  const [passwordGenerada, setPasswordGenerada] = useState<{ password: string; texto: string } | null>(null)
+  const [confirmarRestablecer, setConfirmarRestablecer] = useState<Usuario | null>(null)
   const [error, setError] = useState('')
+
+  const usuarioEditado = usuarios.find((u) => u.idUsuario === editandoId) ?? null
 
   const [form, setForm] = useState(formVacio)
 
@@ -111,6 +116,7 @@ export default function UsuariosPage() {
     setRoles(data.roles ?? [])
     setSucursales(data.sucursales ?? [])
     setEsAdmin(data.esAdmin ?? false)
+    setIdUsuarioSesion(data.idUsuarioSesion ?? null)
     setLoading(false)
   }
 
@@ -132,6 +138,16 @@ export default function UsuariosPage() {
     return () => window.removeEventListener('keydown', alPresionarTecla)
   }, [mostrarForm])
 
+  // La confirmación de restablecer contraseña también se cierra con Escape.
+  useEffect(() => {
+    if (!confirmarRestablecer) return
+    function alPresionarTecla(e: KeyboardEvent) {
+      if (e.key === 'Escape') setConfirmarRestablecer(null)
+    }
+    window.addEventListener('keydown', alPresionarTecla)
+    return () => window.removeEventListener('keydown', alPresionarTecla)
+  }, [confirmarRestablecer])
+
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
@@ -149,7 +165,6 @@ export default function UsuariosPage() {
       nombre: u.nombre,
       apellido: u.apellido,
       email: u.email,
-      username: u.username,
       idRol: String(u.idRol),
       idSucursal: u.idSucursal ? String(u.idSucursal) : '',
     })
@@ -190,7 +205,7 @@ export default function UsuariosPage() {
     }
 
     if (!esEdicion && data.passwordGenerada) {
-      setPasswordGenerada(data.passwordGenerada)
+      setPasswordGenerada({ password: data.passwordGenerada, texto: 'Usuario creado. Compartí esta contraseña temporal:' })
     }
     cerrarForm()
     cargarDatos()
@@ -203,6 +218,32 @@ export default function UsuariosPage() {
     const data = await res.json()
     if (!res.ok) {
       setError(data.error || 'No se pudo cambiar el estado del usuario')
+      return
+    }
+    cargarDatos()
+  }
+
+  async function restablecerContrasena(u: Usuario) {
+    setError('')
+    setConfirmarRestablecer(null)
+    const res = await fetch(`/api/usuarios/${u.idUsuario}/restablecer-contrasena`, { method: 'POST' })
+    const data = await res.json()
+    if (!res.ok) {
+      setError(data.error || 'No se pudo restablecer la contraseña')
+      return
+    }
+    setPasswordGenerada({
+      password: data.passwordGenerada,
+      texto: `Contraseña de ${u.nombre} ${u.apellido} restablecida. Compartí esta contraseña temporal:`,
+    })
+  }
+
+  async function quitarFotoPerfil(u: Usuario) {
+    setError('')
+    const res = await fetch(`/api/usuarios/${u.idUsuario}/foto-perfil`, { method: 'DELETE' })
+    const data = await res.json()
+    if (!res.ok) {
+      setError(data.error || 'No se pudo quitar la foto de perfil')
       return
     }
     cargarDatos()
@@ -242,14 +283,14 @@ export default function UsuariosPage() {
             <KeyRound className="size-5" />
           </span>
           <div className="flex-1">
-            <p className="text-sm">Usuario creado. Compartí esta contraseña temporal:</p>
-            <p className="mt-1 font-mono text-lg font-bold tracking-wide">{passwordGenerada}</p>
+            <p className="text-sm">{passwordGenerada.texto}</p>
+            <p className="mt-1 font-mono text-lg font-bold tracking-wide">{passwordGenerada.password}</p>
           </div>
           <div className="flex gap-2">
             <button
               type="button"
               className={claseBotonSecundario}
-              onClick={() => void navigator.clipboard?.writeText(passwordGenerada)}
+              onClick={() => void navigator.clipboard?.writeText(passwordGenerada.password)}
             >
               <Copy className="size-4" />
               Copiar
@@ -283,7 +324,6 @@ export default function UsuariosPage() {
               <thead>
                 <tr className="text-xs text-muted">
                   <th className="px-4 py-3 font-medium">Usuario</th>
-                  <th className="px-4 py-3 font-medium">Username</th>
                   <th className="px-4 py-3 font-medium">Rol</th>
                   <th className="px-4 py-3 font-medium">Sucursal</th>
                   <th className="px-4 py-3 font-medium">Estado</th>
@@ -309,7 +349,6 @@ export default function UsuariosPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-muted">@{u.username}</td>
                     <td className="px-4 py-3">
                       <span className="rounded-full bg-bg px-2.5 py-1 text-xs capitalize">{u.rol.nombre}</span>
                     </td>
@@ -325,7 +364,7 @@ export default function UsuariosPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1.5 text-xs ${u.activo ? 'text-success' : 'text-muted'}`}>
-                        <span className={`size-1.5 rounded-full ${u.activo ? 'bg-success' : 'bg-order-delivered'}`} />
+                        <span className={`size-1.5 rounded-full ${u.activo ? 'bg-success' : 'bg-muted'}`} />
                         {u.activo ? 'Activo' : 'Inactivo'}
                       </span>
                     </td>
@@ -341,6 +380,18 @@ export default function UsuariosPage() {
                           >
                             <Pencil className="size-4" />
                           </button>
+                          {/* La propia contraseña se cambia desde el flujo normal, no desde acá. */}
+                          {u.idUsuario !== idUsuarioSesion && (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmarRestablecer(u)}
+                              aria-label={`Restablecer contraseña de ${u.nombre} ${u.apellido}`}
+                              title="Restablecer contraseña"
+                              className={`${claseBotonIcono} text-muted hover:bg-bg hover:text-text`}
+                            >
+                              <KeyRound className="size-4" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => toggleActivo(u)}
@@ -397,9 +448,6 @@ export default function UsuariosPage() {
               <Campo id="email" label="Email">
                 <input id="email" name="email" type="email" value={form.email} onChange={handleChange} required className={claseCampo} />
               </Campo>
-              <Campo id="username" label="Username">
-                <input id="username" name="username" value={form.username} onChange={handleChange} required className={claseCampo} />
-              </Campo>
               <Campo id="idRol" label="Rol">
                 <Selector id="idRol" name="idRol" value={form.idRol} onChange={handleChange} required>
                   <option value="" disabled hidden>Seleccionar rol</option>
@@ -418,6 +466,20 @@ export default function UsuariosPage() {
               </Campo>
             </div>
 
+            {usuarioEditado?.fotoPerfilPath && (
+              <div className="flex items-center justify-between gap-3 rounded-2xl bg-bg px-4 py-3">
+                <p className="text-sm text-muted">El usuario tiene una foto de perfil cargada.</p>
+                <button
+                  type="button"
+                  onClick={() => quitarFotoPerfil(usuarioEditado)}
+                  className={`${claseBotonSecundario} text-danger hover:bg-danger/10`}
+                >
+                  <Trash2 className="size-4" />
+                  Quitar foto de perfil
+                </button>
+              </div>
+            )}
+
             {error && (
               <p role="alert" className="rounded-2xl bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
             )}
@@ -431,6 +493,39 @@ export default function UsuariosPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {confirmarRestablecer && esAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-text/40 p-4">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="titulo-restablecer-contrasena"
+            aria-describedby="detalle-restablecer-contrasena"
+            className="flex w-full max-w-md flex-col gap-5 rounded-3xl bg-surface p-6 shadow-xl"
+          >
+            <div className="flex items-start gap-3">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-warning-surface text-warning">
+                <KeyRound className="size-5" />
+              </span>
+              <div>
+                <h2 id="titulo-restablecer-contrasena" className="text-lg">Restablecer contraseña</h2>
+                <p id="detalle-restablecer-contrasena" className="mt-1 text-sm text-muted">
+                  Se va a generar una contraseña temporal para {confirmarRestablecer.nombre} {confirmarRestablecer.apellido}.
+                  La actual deja de funcionar y va a tener que cambiarla al ingresar.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-[auto_1fr] gap-2">
+              <button type="button" onClick={() => setConfirmarRestablecer(null)} className={`${claseBotonSecundario} px-5 py-3`}>
+                Cancelar
+              </button>
+              <button type="button" onClick={() => restablecerContrasena(confirmarRestablecer)} className={`${claseBotonAcento} py-3`}>
+                Restablecer contraseña
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </main>

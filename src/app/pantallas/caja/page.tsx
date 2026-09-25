@@ -11,6 +11,7 @@ import {
 } from '@/components/icons'
 import { IconoCategoria } from '@/components/icons/IconoCategoria'
 import { TicketsPedido } from '@/components/pantallas/TicketsPedido'
+import { PastillaSucursal, useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import {
   usePedidosPantalla,
   type MetodoPagoPantalla,
@@ -269,7 +270,8 @@ function PanelCobro({
 type Cobrado = { pedido: PedidoPantalla; pagaCon: number | null }
 
 export default function CajaPage() {
-  const { pedidos, crearPedidoMostrador } = usePedidosPantalla()
+  const { sucursal } = useSucursalActiva()
+  const { proximoIdPedido, crearPedidoMostrador } = usePedidosPantalla(sucursal?.idSucursal ?? null)
 
   const [productos, setProductos] = useState<ProductoCaja[]>([])
   const [cargandoProductos, setCargandoProductos] = useState(true)
@@ -338,7 +340,7 @@ export default function CajaPage() {
   )
 
   // Número estimado del próximo pedido (con backend lo asigna la base).
-  const proximoNumero = Math.max(0, ...pedidos.map((pedido) => pedido.idPedido)) + 1
+  const proximoNumero = proximoIdPedido
   const cantidadItems = carrito.reduce((suma, linea) => suma + linea.cantidad, 0)
   const total = carrito.reduce((suma, linea) => suma + linea.producto.precio * linea.cantidad, 0)
   const faltaCliente = cliente.trim() === ''
@@ -409,8 +411,10 @@ export default function CajaPage() {
       <main className="grid min-h-screen gap-6 bg-bg p-6 print:hidden lg:grid-cols-[minmax(0,1fr)_24rem]">
         <section className="flex flex-col gap-5">
           <header>
-            <h1 className="page-title">Caja</h1>
-            <p className="mt-1 text-sm text-muted">Armá el pedido, cobralo y se envía a cocina.</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="page-title">Caja</h1>
+              <PastillaSucursal />
+            </div>
           </header>
 
           <div className="flex flex-wrap items-center justify-between gap-3">

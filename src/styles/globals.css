@@ -52,7 +52,7 @@
 :root {
   --order-preparing: #ca8a04;
   --order-ready: #16a34a;
-  --order-delivered: #71717a;
+  --order-delivered: #3e7bff; /* azul "verificado": distinto del verde de "Listo" */
 }
 
 /* =========================================

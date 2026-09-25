@@ -224,7 +224,7 @@ export function GestionCategoriasForm() {
             >
               <div className="flex items-center justify-between gap-3">
                 <span className={`inline-flex items-center gap-1.5 text-xs ${categoria.activa ? 'text-success' : 'text-muted'}`}>
-                  <span className={`size-1.5 rounded-full ${categoria.activa ? 'bg-success' : 'bg-order-delivered'}`} />
+                  <span className={`size-1.5 rounded-full ${categoria.activa ? 'bg-success' : 'bg-muted'}`} />
                   {categoria.activa ? 'Activa' : 'Inactiva'}
                 </span>
                 <span className="rounded-full bg-bg px-2.5 py-1 text-xs text-muted" title="Orden en el menú">

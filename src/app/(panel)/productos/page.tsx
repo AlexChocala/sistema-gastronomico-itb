@@ -10,9 +10,9 @@ export default async function ProductosPage() {
     redirect('/acceso/login')
   }
 
-  // Los empleados consultan el menú de su sucursal sin acceder al CRUD.
+  // Los empleados no administran productos: los ven al cargar pedidos en Caja.
   if (sesion.user.rol === 'empleado') {
-    redirect('/productos/menu')
+    redirect('/dashboard')
   }
 
   return (

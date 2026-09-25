@@ -9,23 +9,14 @@ const prisma = new PrismaClient({ adapter })
 async function main() {
   // Comprueba la estructura y los datos necesarios sin escribir en la base.
   if (process.argv.includes('--check')) {
-    const [usuario, usernameOcupado] = await Promise.all([
-      prisma.usuario.findUnique({
-        where: { email: 'admin@burguer.com' },
-        include: { rol: true },
-      }),
-      prisma.usuario.findUnique({
-        where: { username: 'admin' },
-        select: { email: true },
-      }),
-    ])
+    const usuario = await prisma.usuario.findUnique({
+      where: { email: 'admin@burguer.com' },
+      include: { rol: true },
+    })
     await prisma.rol.count()
     await prisma.categoria.count()
     await prisma.sucursal.findFirst()
     await prisma.producto.findFirst({ include: { sucursales: true } })
-    if (!usuario && usernameOcupado) {
-      throw new Error('El nombre admin ya pertenece a otro email. Revisá el seed antes de cargarlo.')
-    }
     console.log('Conexión y consultas del seed: correctas.')
     console.log(usuario
       ? 'El usuario inicial ya existe; se conservarán sus datos y contraseña.'
@@ -61,7 +52,6 @@ async function main() {
         nombre: 'Alex',
         apellido: 'Chocala',
         email: 'admin@burguer.com',
-        username: 'admin',
         passwordHash,
         idRol: admin.idRol,
         debeCambiarContrasena: true,
@@ -128,9 +118,9 @@ async function main() {
     // Usuarios de ejemplo para el panel de Usuarios (contraseña fija para todos: "prueba123")
     const passwordEjemplos = await bcrypt.hash('prueba123', 10)
     const usuariosEjemplo = [
-      { nombre: 'Esteban', apellido: 'Car', email: 'esteban.car@ejemplo.com', username: 'estebancar', idRol: supervisor.idRol },
-      { nombre: 'Carlos', apellido: 'Trip', email: 'carlos.trip@ejemplo.com', username: 'carlostrip', idRol: admin.idRol },
-      { nombre: 'Santiago', apellido: 'Carles', email: 'santiago.carles@ejemplo.com', username: 'santiago', idRol: empleado.idRol },
+      { nombre: 'Esteban', apellido: 'Car', email: 'esteban.car@ejemplo.com', idRol: supervisor.idRol },
+      { nombre: 'Carlos', apellido: 'Trip', email: 'carlos.trip@ejemplo.com', idRol: admin.idRol },
+      { nombre: 'Santiago', apellido: 'Carles', email: 'santiago.carles@ejemplo.com', idRol: empleado.idRol },
     ]
     for (const [indice, u] of usuariosEjemplo.entries()) {
       await tx.usuario.upsert({
@@ -140,7 +130,6 @@ async function main() {
           nombre: u.nombre,
           apellido: u.apellido,
           email: u.email,
-          username: u.username,
           passwordHash: passwordEjemplos,
           idRol: u.idRol,
           idSucursal: sucursales[indice % sucursales.length].idSucursal,

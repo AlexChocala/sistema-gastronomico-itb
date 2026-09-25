@@ -13,9 +13,10 @@ export interface Usuario {
   nombre: string
   apellido: string
   email: string
-  username: string
   debeCambiarContrasena: boolean
   activo: boolean
+  // Ruta dentro del bucket de Supabase Storage; null si usa el avatar por defecto.
+  fotoPerfilPath: string | null
   idRol: number
   // Nombre del rol (no el objeto de relación completo de Prisma). Se resuelve con un
   // include: { rol: true } en la consulta y sirve para chequear permisos por nombre

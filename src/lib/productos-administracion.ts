@@ -100,7 +100,7 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
   return {
     listar: (request: Request) => proteger(request, false, async () => {
       const parametros = new URL(request.url).searchParams
-      const parametrosPermitidos = ['pagina', 'limite', 'estado', 'busqueda', 'idCategoria']
+      const parametrosPermitidos = ['pagina', 'limite', 'estado', 'busqueda', 'idCategoria', 'idSucursal']
       if ([...parametros.keys()].some((clave) => !parametrosPermitidos.includes(clave) || parametros.getAll(clave).length > 1)) {
         throw new ErrorProducto(400, 'Los parámetros de listado no son válidos.')
       }
@@ -110,6 +110,8 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
       const busqueda = (parametros.get('busqueda') ?? '').trim()
       const valorCategoria = parametros.get('idCategoria')
       const idCategoria = valorCategoria ? leerId(valorCategoria) : null
+      const valorSucursal = parametros.get('idSucursal')
+      const idSucursal = valorSucursal ? leerId(valorSucursal) : null
       if (limite > 100 || !['todos', 'activos', 'inactivos'].includes(estado) || (pagina - 1) * limite > 2147483647) {
         throw new ErrorProducto(400, 'Usá un límite de hasta 100 y estado todos, activos o inactivos.')
       }
@@ -120,6 +122,8 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
       const where: Prisma.ProductoWhereInput = {
         ...(estado === 'todos' ? {} : { activo: estado === 'activos' }),
         ...(idCategoria === null ? {} : { idCategoria }),
+        // Productos ofrecidos en esa sucursal (el selector de sucursal del panel).
+        ...(idSucursal === null ? {} : { sucursales: { some: { idSucursal, disponible: true } } }),
         ...(busqueda ? {
           OR: [
             { nombre: { contains: busqueda, mode: 'insensitive' } },

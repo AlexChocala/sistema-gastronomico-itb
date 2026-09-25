@@ -6,9 +6,10 @@
 
 import { useSyncExternalStore, type ReactNode } from 'react'
 import {
-  Banknote, Bike, CalendarDays, ChefHat, CircleCheck, Clock, ClipboardList, ExternalLink, Flame,
+  Banknote, Bike, CalendarDays, CheckCheck, ChefHat, CircleCheck, Clock, ClipboardList, ExternalLink, Flame,
   Globe, Landmark, Receipt, ShoppingBag, Store, Wallet, type LucideIcon,
 } from '@/components/icons'
+import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import {
   usePedidosPantalla,
   type EstadoPedidoPantalla,
@@ -94,7 +95,8 @@ function EncabezadoTarjeta({ titulo, subtitulo }: { titulo: string; subtitulo: s
 const sinSuscripcion = () => () => {}
 
 export function ResumenDelDia({ nombre }: { nombre: string }) {
-  const { pedidos } = usePedidosPantalla()
+  const { sucursal } = useSucursalActiva()
+  const { pedidos } = usePedidosPantalla(sucursal?.idSucursal ?? null)
   // "Hoy" y las horas dependen de la zona horaria del navegador: se calculan solo en el
   // cliente para no generar diferencias de hidratación con el render del servidor.
   const enCliente = useSyncExternalStore(sinSuscripcion, () => true, () => false)
@@ -114,6 +116,8 @@ export function ResumenDelDia({ nombre }: { nombre: string }) {
   const ticketPromedio = cobrados.length > 0 ? ventas / cobrados.length : 0
   const online = deHoy.filter((pedido) => pedido.origen === 'online').length
   const enCurso = deHoy.filter((pedido) => pedido.estado !== 'entregado').length
+  const entregados = deHoy.filter((pedido) => pedido.estado === 'entregado')
+  const entregadosRetiro = entregados.filter((pedido) => pedido.tipoEntrega === 'retiro').length
 
   const porEstado = (estado: EstadoPedidoPantalla) =>
     deHoy.filter((pedido) => pedido.estado === estado).length
@@ -194,9 +198,10 @@ export function ResumenDelDia({ nombre }: { nombre: string }) {
         <Tarjeta className="lg:col-span-2">
           <EncabezadoTarjeta
             titulo="Pedidos ahora"
-            subtitulo={`${enCurso} ${enCurso === 1 ? 'pedido' : 'pedidos'} sin entregar`}
+            subtitulo={`${enCurso} en curso · ${entregados.length} ${entregados.length === 1 ? 'entregado' : 'entregados'} hoy`}
           />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/* Los 4 estados en curso y, separado por una línea, el cierre del flujo. */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto_minmax(0,1fr)]">
             {([
               { estado: 'recibido', icono: ClipboardList },
               { estado: 'en_preparacion', icono: ChefHat },
@@ -211,6 +216,17 @@ export function ResumenDelDia({ nombre }: { nombre: string }) {
                 <span className="text-4xl font-bold">{porEstado(estado)}</span>
               </div>
             ))}
+            <span aria-hidden="true" className="hidden w-px self-stretch bg-border sm:block" />
+            <div className="col-span-2 flex flex-col gap-3 rounded-2xl border border-border p-4 sm:col-span-1">
+              <span className={`inline-flex items-center gap-1.5 text-xs ${estados.entregado.color}`}>
+                <CheckCheck className="size-4" />
+                Entregados hoy
+              </span>
+              <span className="text-4xl font-bold">{entregados.length}</span>
+              <span className="-mt-1 text-xs text-muted">
+                {entregadosRetiro} retiro · {entregados.length - entregadosRetiro} delivery
+              </span>
+            </div>
           </div>
         </Tarjeta>
 
@@ -281,7 +297,8 @@ export function ResumenDelDia({ nombre }: { nombre: string }) {
                       </p>
                       <p className="text-xs text-muted">
                         {formatoHora.format(new Date(pedido.fecha))} ·{' '}
-                        {pedido.origen === 'online' ? 'Online' : 'Mostrador'}
+                        {pedido.tipoEntrega === 'delivery' ? 'Delivery' : 'Retiro'}
+                        {pedido.origen === 'online' && ' · Online'}
                         {pedido.estadoPago === 'pendiente' && <span className="text-warning"> · Pago pendiente</span>}
                       </p>
                     </div>

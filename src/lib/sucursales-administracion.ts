@@ -85,7 +85,8 @@ export function crearControladorSucursales(db: PrismaClient, leerSesion: () => P
           idLocalidad = localidad.idLocalidad
         }
 
-        const datos = validarSucursal({ ...cuerpo, idLocalidad }, false)
+        const { localidadNueva: _, ...camposSucursalBody } = cuerpo
+        const datos = validarSucursal({ ...camposSucursalBody, idLocalidad }, false)
         return tx.sucursal.create({ data: datos as any, select: camposSucursal })
       }, { isolationLevel: 'Serializable' })
 

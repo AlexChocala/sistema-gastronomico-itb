@@ -11,7 +11,7 @@ export default async function CategoriasPage() {
   }
 
   if (sesion.user.rol === 'empleado') {
-    redirect('/productos/menu')
+    redirect('/dashboard')
   }
 
   return (

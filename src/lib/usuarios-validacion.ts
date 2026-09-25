@@ -22,7 +22,6 @@ type DatosUsuario = {
   nombre?: string
   apellido?: string
   email?: string
-  username?: string
   idRol?: number
   idSucursal?: number
   activo?: boolean
@@ -34,7 +33,7 @@ export function validarUsuario(cuerpo: unknown, parcial: boolean): DatosUsuario 
     throw new ErrorUsuario(400, 'Enviá un objeto JSON con los datos del usuario.')
   }
   const datos = cuerpo as Record<string, unknown>
-  const permitidos = ['nombre', 'apellido', 'email', 'username', 'idRol', 'idSucursal', ...(parcial ? ['activo'] : [])]
+  const permitidos = ['nombre', 'apellido', 'email', 'idRol', 'idSucursal', ...(parcial ? ['activo'] : [])]
   if (Object.keys(datos).length === 0 || Object.keys(datos).some((campo) => !permitidos.includes(campo))) {
     throw new ErrorUsuario(400, 'Enviá al menos un campo válido del usuario.')
   }
@@ -56,12 +55,6 @@ export function validarUsuario(cuerpo: unknown, parcial: boolean): DatosUsuario 
       throw new ErrorUsuario(400, 'Indicá un email válido.')
     }
     salida.email = datos.email.trim().toLowerCase()
-  }
-  if (!parcial || 'username' in datos) {
-    if (typeof datos.username !== 'string' || !/^[a-zA-Z0-9._-]{3,30}$/.test(datos.username.trim())) {
-      throw new ErrorUsuario(400, 'El username debe tener entre 3 y 30 caracteres (letras, números, punto, guión o guión bajo).')
-    }
-    salida.username = datos.username.trim()
   }
   if (!parcial || 'idRol' in datos) {
     if (!idValido(datos.idRol)) throw new ErrorUsuario(400, 'Indicá un rol válido.')
