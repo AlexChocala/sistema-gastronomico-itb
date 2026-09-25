@@ -79,6 +79,26 @@ async function main() {
       update: {},
       create: { nombre: 'Hamburguesas', orden: 2 },
     })
+    const pizzas = await tx.categoria.upsert({
+      where: { nombre: 'Pizzas' },
+      update: {},
+      create: { nombre: 'Pizzas', orden: 3 },
+    })
+    const empanadas = await tx.categoria.upsert({
+      where: { nombre: 'Empanadas' },
+      update: {},
+      create: { nombre: 'Empanadas', orden: 4 },
+    })
+    const platos = await tx.categoria.upsert({
+      where: { nombre: 'Platos' },
+      update: {},
+      create: { nombre: 'Platos', orden: 5 },
+    })
+    const postres = await tx.categoria.upsert({
+      where: { nombre: 'Postres' },
+      update: {},
+      create: { nombre: 'Postres', orden: 6 },
+    })
 
     const oculta = await tx.categoria.upsert({
       where: { nombre: 'Prueba - Categoría inactiva' },
@@ -156,6 +176,49 @@ async function main() {
           } },
           update: {},
           create: { idSucursal: sucursal.idSucursal, idProducto: producto.idProducto, disponible },
+        })
+      }
+    }
+
+    const productosCaja = [
+      { nombre: 'Hamburguesa simple', categoria: hamburguesas, precio: 7500, disponible: true },
+      { nombre: 'Hamburguesa doble completa', categoria: hamburguesas, precio: 11200, disponible: true },
+      { nombre: 'Hamburguesa triple simple', categoria: hamburguesas, precio: 12900, disponible: false },
+      { nombre: 'Pizza muzzarella', categoria: pizzas, precio: 9800, disponible: true },
+      { nombre: 'Pizza jamón y morrón', categoria: pizzas, precio: 11500, disponible: true },
+      { nombre: 'Pizza fugazzeta', categoria: pizzas, precio: 10900, disponible: true },
+      { nombre: 'Empanada de carne', categoria: empanadas, precio: 1600, disponible: true },
+      { nombre: 'Empanada de jamón y queso', categoria: empanadas, precio: 1600, disponible: false },
+      { nombre: 'Milanesa napolitana con papas', categoria: platos, precio: 13500, disponible: true },
+      { nombre: 'Ensalada César', categoria: platos, precio: 8200, disponible: true },
+      { nombre: 'Coca-Cola 500 ml', categoria: bebidas, precio: 2500, disponible: true },
+      { nombre: 'Agua sin gas 500 ml', categoria: bebidas, precio: 1800, disponible: true },
+      { nombre: 'Flan con dulce de leche', categoria: postres, precio: 4200, disponible: true },
+      { nombre: 'Helado 2 gustos', categoria: postres, precio: 3900, disponible: false },
+    ]
+    for (const datos of productosCaja) {
+      const producto = await tx.producto.findFirst({
+        where: { nombre: datos.nombre, idCategoria: datos.categoria.idCategoria },
+      }) ?? await tx.producto.create({
+        data: {
+          nombre: datos.nombre,
+          descripcion: 'Producto de ejemplo para la pantalla de Caja.',
+          precio: datos.precio,
+          idCategoria: datos.categoria.idCategoria,
+        },
+      })
+      for (const sucursal of sucursales) {
+        await tx.sucursalProducto.upsert({
+          where: { idSucursal_idProducto: {
+            idSucursal: sucursal.idSucursal,
+            idProducto: producto.idProducto,
+          } },
+          update: {},
+          create: {
+            idSucursal: sucursal.idSucursal,
+            idProducto: producto.idProducto,
+            disponible: datos.disponible,
+          },
         })
       }
     }
