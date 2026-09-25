@@ -1,14 +1,9 @@
-﻿import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+﻿import { sucursalesAdmin } from './sucursales-admin-api'
 
-export async function GET() {
-  const sucursales = await prisma.sucursal.findMany({
-    select: {
-      idSucursal: true,
-      nombre: true,
-      activa: true,
-    },
-  })
+export async function GET(request: Request) {
+  return sucursalesAdmin.listar(request)
+}
 
-  return NextResponse.json(sucursales)
+export async function POST(request: Request) {
+  return sucursalesAdmin.crear(request)
 }
