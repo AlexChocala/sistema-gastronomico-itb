@@ -2,17 +2,20 @@
 // al formulario de login.
 
 import Link from 'next/link'
+import { claseBotonAcento, TarjetaAcceso } from '@/components/acceso/ElementosAcceso'
+import { ArrowRight, UtensilsCrossed } from '@/components/icons'
 
 export default function AccesoPage() {
   return (
-    <div className="flex flex-col items-center gap-6 text-center">
-      <h2 className="text-2xl font-semibold">Sistema Restaurante</h2>
-      <Link
-        href="/acceso/login"
-        className="rounded-md bg-neutral-900 px-6 py-2 font-medium text-white hover:bg-neutral-700"
-      >
+    <TarjetaAcceso
+      icono={UtensilsCrossed}
+      titulo="Bienvenido a Mise"
+      descripcion="Gestioná pedidos, caja, cocina y sucursales desde un solo lugar."
+    >
+      <Link href="/acceso/login" className={claseBotonAcento}>
         Ingresar
+        <ArrowRight className="size-4" />
       </Link>
-    </div>
+    </TarjetaAcceso>
   )
 }

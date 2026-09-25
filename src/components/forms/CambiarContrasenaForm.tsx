@@ -6,9 +6,9 @@
 
 import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Input } from '@/components/ui/Input'
-import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
+import { CampoAcceso } from '@/components/acceso/CampoAcceso'
+import { AvisoError, claseBotonAcento, TarjetaAcceso } from '@/components/acceso/ElementosAcceso'
+import { LockKeyhole, ShieldCheck } from '@/components/icons'
 
 interface CambiarContrasenaFormProps {
   accion: (password: string) => Promise<void>
@@ -41,39 +41,42 @@ export function CambiarContrasenaForm({ accion }: CambiarContrasenaFormProps) {
   }
 
   return (
-    <Card>
-      <form onSubmit={manejarSubmit} className="flex flex-col gap-4">
-        <h2 className="text-xl font-semibold">Cambiá tu contraseña</h2>
-        <p className="text-sm text-neutral-600">
-          Es tu primer ingreso: tenés que definir una contraseña nueva antes de continuar.
-        </p>
-
-        <Input
+    <TarjetaAcceso
+      icono={ShieldCheck}
+      titulo="Cambiá tu contraseña"
+      descripcion="Es tu primer ingreso: definí una contraseña nueva de al menos 6 caracteres antes de continuar."
+    >
+      <form onSubmit={manejarSubmit} className="flex flex-col gap-5">
+        <CampoAcceso
           id="password"
           label="Nueva contraseña"
           type="password"
+          icono={LockKeyhole}
+          autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           minLength={6}
           required
         />
 
-        <Input
+        <CampoAcceso
           id="confirmacion"
           label="Confirmar contraseña"
           type="password"
+          icono={LockKeyhole}
+          autoComplete="new-password"
           value={confirmacion}
           onChange={(e) => setConfirmacion(e.target.value)}
           minLength={6}
           required
         />
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <AvisoError>{error}</AvisoError>}
 
-        <Button type="submit" disabled={cargando}>
+        <button type="submit" disabled={cargando} className={claseBotonAcento}>
           {cargando ? 'Guardando...' : 'Guardar y continuar'}
-        </Button>
+        </button>
       </form>
-    </Card>
+    </TarjetaAcceso>
   )
 }

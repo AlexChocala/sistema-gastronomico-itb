@@ -5,9 +5,21 @@
 // esa API).
 
 import { useState, type FormEvent } from 'react'
-import { Input } from '@/components/ui/Input'
-import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
+import Link from 'next/link'
+import { CampoAcceso } from '@/components/acceso/CampoAcceso'
+import {
+  claseBotonAcento, claseEnlaceSecundario, TarjetaAcceso,
+} from '@/components/acceso/ElementosAcceso'
+import { ArrowLeft, KeyRound, Mail, MailCheck } from '@/components/icons'
+
+function VolverAlLogin() {
+  return (
+    <Link href="/acceso/login" className={`${claseEnlaceSecundario} w-full`}>
+      <ArrowLeft className="size-4" />
+      Volver a ingresar
+    </Link>
+  )
+}
 
 export function RecuperarContrasenaForm() {
   const [email, setEmail] = useState('')
@@ -30,33 +42,48 @@ export function RecuperarContrasenaForm() {
 
   if (enviado) {
     return (
-      <Card>
-        <p className="text-center text-sm text-neutral-700">
-          Si el email existe, vas a recibir un link de recupero. Revisá la consola del
-          servidor (todavía no hay un proveedor de email real configurado).
-        </p>
-      </Card>
+      <TarjetaAcceso
+        icono={MailCheck}
+        tono="exito"
+        titulo="Revisá tu email"
+        descripcion={
+          <>
+            Si <strong className="text-text">{email}</strong> está registrado, vas a recibir un link
+            para restablecer tu contraseña. Por ahora el link se muestra en la consola del servidor
+            (todavía no hay un proveedor de email real configurado).
+          </>
+        }
+      >
+        <VolverAlLogin />
+      </TarjetaAcceso>
     )
   }
 
   return (
-    <Card>
-      <form onSubmit={manejarSubmit} className="flex flex-col gap-4">
-        <h2 className="text-xl font-semibold">Recuperar contraseña</h2>
-
-        <Input
+    <TarjetaAcceso
+      icono={KeyRound}
+      titulo="Recuperá tu contraseña"
+      descripcion="Ingresá tu email y te enviamos un link para crear una nueva."
+    >
+      <form onSubmit={manejarSubmit} className="flex flex-col gap-5">
+        <CampoAcceso
           id="email"
           label="Email"
           type="email"
+          icono={Mail}
+          placeholder="tu@email.com"
+          autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
         />
 
-        <Button type="submit" disabled={cargando}>
+        <button type="submit" disabled={cargando} className={claseBotonAcento}>
           {cargando ? 'Enviando...' : 'Enviar link de recupero'}
-        </Button>
+        </button>
+
+        <VolverAlLogin />
       </form>
-    </Card>
+    </TarjetaAcceso>
   )
 }

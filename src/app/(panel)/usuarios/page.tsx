@@ -3,9 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
-import { Card } from '@/components/ui/Card'
+import { ChevronDown, Copy, KeyRound, Pencil, Plus, Power, Store, X } from '@/components/icons'
 
 interface Usuario {
   idUsuario: number
@@ -28,6 +26,51 @@ interface Rol {
 interface Sucursal {
   idSucursal: number
   nombre: string
+}
+
+const claseCampo =
+  'w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent'
+const claseBotonSecundario =
+  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-border bg-surface px-4 py-2.5 text-sm transition-colors hover:bg-bg'
+const claseBotonAcento =
+  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm text-on-accent transition-colors hover:bg-accent-hover'
+const claseBotonIcono =
+  'flex size-9 cursor-pointer items-center justify-center rounded-full transition-colors'
+
+function nombreSucursal(nombre: string) {
+  return nombre.replace('Prueba - ', '')
+}
+
+function iniciales(u: Usuario) {
+  return `${u.nombre[0] ?? ''}${u.apellido[0] ?? ''}`.toUpperCase()
+}
+
+// Campo con label para el modal del formulario.
+function Campo({
+  id,
+  label,
+  children,
+}: {
+  id: string
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor={id} className="text-sm">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+// Select con la misma forma de pastilla que los inputs.
+function Selector(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <div className="relative">
+      <select {...props} className={`${claseCampo} cursor-pointer appearance-none pr-10`} />
+      <ChevronDown className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted" />
+    </div>
+  )
 }
 
 const formVacio = {
@@ -74,6 +117,20 @@ export default function UsuariosPage() {
   useEffect(() => {
     cargarDatos()
   }, [])
+
+  // El modal del formulario se cierra con Escape.
+  useEffect(() => {
+    if (!mostrarForm) return
+    function alPresionarTecla(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      setMostrarForm(false)
+      setEditandoId(null)
+      setForm(formVacio)
+      setError('')
+    }
+    window.addEventListener('keydown', alPresionarTecla)
+    return () => window.removeEventListener('keydown', alPresionarTecla)
+  }, [mostrarForm])
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     setForm({ ...form, [e.target.name]: e.target.value })
@@ -151,120 +208,232 @@ export default function UsuariosPage() {
     cargarDatos()
   }
 
+  const encabezado = (
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h1 className="page-title">Usuarios</h1>
+        <p className="mt-1 text-sm text-muted">Administrá las cuentas, roles y sucursales del personal.</p>
+      </div>
+      {esAdmin && (
+        <button type="button" className={claseBotonAcento} onClick={abrirNuevo}>
+          <Plus className="size-4" />
+          Nuevo usuario
+        </button>
+      )}
+    </header>
+  )
+
   if (loading) {
-    return <div className="p-6 max-w-4xl mx-auto"><p>Cargando...</p></div>
+    return (
+      <main className="flex flex-col gap-6 p-6">
+        {encabezado}
+        <p className="rounded-3xl bg-surface p-10 text-center text-muted">Cargando usuarios...</p>
+      </main>
+    )
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">Usuarios</h1>
-        {esAdmin && (
-          <Button className="w-auto" onClick={mostrarForm ? cerrarForm : abrirNuevo}>
-            {mostrarForm ? 'Cancelar' : 'Nuevo usuario'}
-          </Button>
+    <main className="flex flex-col gap-6 p-6">
+      {encabezado}
+
+      {passwordGenerada && (
+        <div className="flex flex-col gap-3 rounded-3xl bg-warning-surface p-5 sm:flex-row sm:items-center">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-surface text-warning">
+            <KeyRound className="size-5" />
+          </span>
+          <div className="flex-1">
+            <p className="text-sm">Usuario creado. Compartí esta contraseña temporal:</p>
+            <p className="mt-1 font-mono text-lg font-bold tracking-wide">{passwordGenerada}</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={claseBotonSecundario}
+              onClick={() => void navigator.clipboard?.writeText(passwordGenerada)}
+            >
+              <Copy className="size-4" />
+              Copiar
+            </button>
+            <button
+              type="button"
+              aria-label="Cerrar aviso"
+              className={`${claseBotonIcono} text-muted hover:bg-surface hover:text-text`}
+              onClick={() => setPasswordGenerada(null)}
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && !mostrarForm && (
+        <p role="alert" className="rounded-2xl bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
+      )}
+
+      <section className="flex flex-col gap-3">
+        <p className="text-sm text-muted">
+          <span className="text-text">{usuarios.length}</span> {usuarios.length === 1 ? 'usuario' : 'usuarios'}
+        </p>
+
+        {usuarios.length === 0 ? (
+          <p className="rounded-3xl bg-surface p-10 text-center text-muted">No hay usuarios para mostrar.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-3xl bg-surface p-2 shadow-sm">
+            <table className="w-full min-w-[44rem] text-left text-sm">
+              <thead>
+                <tr className="text-xs text-muted">
+                  <th className="px-4 py-3 font-medium">Usuario</th>
+                  <th className="px-4 py-3 font-medium">Username</th>
+                  <th className="px-4 py-3 font-medium">Rol</th>
+                  <th className="px-4 py-3 font-medium">Sucursal</th>
+                  <th className="px-4 py-3 font-medium">Estado</th>
+                  {esAdmin && <th className="px-4 py-3 text-right font-medium">Acciones</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {usuarios.map((u) => (
+                  <tr
+                    key={u.idUsuario}
+                    className={`border-t border-bg transition-colors hover:bg-bg/60 ${u.activo ? '' : 'text-muted'}`}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`flex size-10 shrink-0 items-center justify-center rounded-full text-sm ${u.activo ? 'bg-accent-soft text-accent' : 'bg-bg text-muted'}`}
+                        >
+                          {iniciales(u)}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate">{u.nombre} {u.apellido}</p>
+                          <p className="truncate text-xs text-muted">{u.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-muted">@{u.username}</td>
+                    <td className="px-4 py-3">
+                      <span className="rounded-full bg-bg px-2.5 py-1 text-xs capitalize">{u.rol.nombre}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.sucursal ? (
+                        <span className="inline-flex items-center gap-1.5 text-muted">
+                          <Store className="size-4" />
+                          {nombreSucursal(u.sucursal.nombre)}
+                        </span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1.5 text-xs ${u.activo ? 'text-success' : 'text-muted'}`}>
+                        <span className={`size-1.5 rounded-full ${u.activo ? 'bg-success' : 'bg-order-delivered'}`} />
+                        {u.activo ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </td>
+                    {esAdmin && (
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => abrirEditar(u)}
+                            aria-label={`Editar ${u.nombre} ${u.apellido}`}
+                            title="Editar"
+                            className={`${claseBotonIcono} text-muted hover:bg-bg hover:text-text`}
+                          >
+                            <Pencil className="size-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleActivo(u)}
+                            aria-label={`${u.activo ? 'Desactivar' : 'Activar'} ${u.nombre} ${u.apellido}`}
+                            title={u.activo ? 'Desactivar' : 'Activar'}
+                            className={`${claseBotonIcono} ${u.activo ? 'text-danger hover:bg-danger/10' : 'text-success hover:bg-success/10'}`}
+                          >
+                            <Power className="size-4" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
+      </section>
 
       {mostrarForm && esAdmin && (
-        <Card className="max-w-none mb-6">
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Input id="nombre" name="nombre" label="Nombre" value={form.nombre} onChange={handleChange} required />
-              <Input id="apellido" name="apellido" label="Apellido" value={form.apellido} onChange={handleChange} required />
-              <Input id="email" name="email" type="email" label="Email" value={form.email} onChange={handleChange} required />
-              <Input id="username" name="username" label="Username" value={form.username} onChange={handleChange} required />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-text/40 p-4">
+          <form
+            onSubmit={handleSubmit}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-formulario-usuario"
+            className="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col gap-5 overflow-y-auto rounded-3xl bg-surface p-6 shadow-xl"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 id="titulo-formulario-usuario" className="text-lg">
+                  {editandoId !== null ? 'Editar usuario' : 'Nuevo usuario'}
+                </h2>
+                <p className="text-sm text-muted">
+                  {editandoId !== null
+                    ? `Usuario #${editandoId}`
+                    : 'La contraseña se genera automáticamente al crearlo.'}
+                </p>
+              </div>
+              <button type="button" onClick={cerrarForm} aria-label="Cerrar"
+                className={`${claseBotonIcono} text-muted hover:bg-bg hover:text-text`}>
+                <X className="size-4" />
+              </button>
+            </div>
 
-              <div className="flex flex-col gap-1">
-                <label htmlFor="idRol" className="text-sm font-medium text-neutral-700">Rol</label>
-                <select
-                  id="idRol"
-                  name="idRol"
-                  value={form.idRol}
-                  onChange={handleChange}
-                  required
-                  className="rounded-md border border-neutral-300 px-3 py-2 text-neutral-900 outline-none focus:border-neutral-900"
-                >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Campo id="nombre" label="Nombre">
+                <input id="nombre" name="nombre" value={form.nombre} onChange={handleChange} required className={claseCampo} />
+              </Campo>
+              <Campo id="apellido" label="Apellido">
+                <input id="apellido" name="apellido" value={form.apellido} onChange={handleChange} required className={claseCampo} />
+              </Campo>
+              <Campo id="email" label="Email">
+                <input id="email" name="email" type="email" value={form.email} onChange={handleChange} required className={claseCampo} />
+              </Campo>
+              <Campo id="username" label="Username">
+                <input id="username" name="username" value={form.username} onChange={handleChange} required className={claseCampo} />
+              </Campo>
+              <Campo id="idRol" label="Rol">
+                <Selector id="idRol" name="idRol" value={form.idRol} onChange={handleChange} required>
                   <option value="" disabled hidden>Seleccionar rol</option>
                   {roles.map((r) => (
                     <option key={r.idRol} value={r.idRol}>{r.nombre}</option>
                   ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label htmlFor="idSucursal" className="text-sm font-medium text-neutral-700">Sucursal</label>
-                <select
-                  id="idSucursal"
-                  name="idSucursal"
-                  value={form.idSucursal}
-                  onChange={handleChange}
-                  required
-                  className="rounded-md border border-neutral-300 px-3 py-2 text-neutral-900 outline-none focus:border-neutral-900"
-                >
+                </Selector>
+              </Campo>
+              <Campo id="idSucursal" label="Sucursal">
+                <Selector id="idSucursal" name="idSucursal" value={form.idSucursal} onChange={handleChange} required>
                   <option value="" disabled hidden>Seleccionar sucursal</option>
                   {sucursales.map((s) => (
-                    <option key={s.idSucursal} value={s.idSucursal}>{s.nombre.replace('Prueba - ', '')}</option>
+                    <option key={s.idSucursal} value={s.idSucursal}>{nombreSucursal(s.nombre)}</option>
                   ))}
-                </select>
-              </div>
+                </Selector>
+              </Campo>
             </div>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button type="submit">{editandoId !== null ? 'Guardar cambios' : 'Crear usuario'}</Button>
+
+            {error && (
+              <p role="alert" className="rounded-2xl bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
+            )}
+
+            <div className="grid grid-cols-[auto_1fr] gap-2">
+              <button type="button" onClick={cerrarForm} className={`${claseBotonSecundario} px-5 py-3`}>
+                Cancelar
+              </button>
+              <button type="submit" className={`${claseBotonAcento} py-3`}>
+                {editandoId !== null ? 'Guardar cambios' : 'Crear usuario'}
+              </button>
+            </div>
           </form>
-        </Card>
+        </div>
       )}
-
-      {passwordGenerada && (
-        <Card className="max-w-none mb-6 bg-yellow-50 border-yellow-400">
-          <p>
-            Usuario creado. Contraseña generada: <strong>{passwordGenerada}</strong>
-          </p>
-          <Button variant="secundario" className="w-auto mt-3" onClick={() => setPasswordGenerada(null)}>
-            Cerrar
-          </Button>
-        </Card>
-      )}
-
-      {error && !mostrarForm && (
-        <p className="text-sm text-red-600 mb-4">{error}</p>
-      )}
-
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="text-left border-b">
-            <th className="p-2">Nombre</th>
-            <th className="p-2">Email</th>
-            <th className="p-2">Username</th>
-            <th className="p-2">Rol</th>
-            <th className="p-2">Sucursal</th>
-            <th className="p-2">Activo</th>
-            {esAdmin && <th className="p-2">Acciones</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {usuarios.map((u) => (
-            <tr key={u.idUsuario} className="border-b">
-              <td className="p-2">{u.nombre} {u.apellido}</td>
-              <td className="p-2">{u.email}</td>
-              <td className="p-2">{u.username}</td>
-              <td className="p-2">{u.rol.nombre}</td>
-              <td className="p-2">{u.sucursal ? u.sucursal.nombre.replace('Prueba - ', '') : '-'}</td>
-              <td className="p-2">{u.activo ? 'Sí' : 'No'}</td>
-              {esAdmin && (
-                <td className="p-2 flex gap-2">
-                  <Button variant="secundario" className="w-auto text-xs px-2 py-1" onClick={() => abrirEditar(u)}>
-                    Editar
-                  </Button>
-                  <Button variant="secundario" className="w-auto text-xs px-2 py-1" onClick={() => toggleActivo(u)}>
-                    {u.activo ? 'Desactivar' : 'Activar'}
-                  </Button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    </main>
   )
 }
+

@@ -80,8 +80,8 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
   }
 
   return {
-    // Ver el listado: admin y supervisor.
-    listar: (request: Request) => proteger(request, ['admin', 'supervisor'], false, async (idUsuarioSesion) => {
+    // Ver el listado: solo admin.
+    listar: (request: Request) => proteger(request, ['admin'], false, async (idUsuarioSesion) => {
       const sesionCompleta = await db.usuario.findUnique({
         where: { idUsuario: idUsuarioSesion },
         select: { rol: { select: { nombre: true } } },

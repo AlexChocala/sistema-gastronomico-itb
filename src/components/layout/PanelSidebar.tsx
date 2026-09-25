@@ -3,57 +3,174 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { CerrarSesionButton } from '@/components/layout/CerrarSesionButton'
+import {
+  BookOpen, ChartColumn, ChefHat, ChevronDown, ClipboardList, ExternalLink, LayoutDashboard,
+  Monitor, MonitorPlay, Package, Settings, User, Users, UtensilsCrossed, Wallet,
+  type LucideIcon,
+} from '@/components/icons'
 
-const enlaces = [
-  { href: '/dashboard', texto: 'Dashboard' },
-  { href: '/productos', texto: 'Productos', roles: ['admin', 'supervisor'] },
-  { href: '/productos/menu', texto: 'Consultar menú', roles: ['empleado'] },
-  { href: '/usuarios', texto: 'Usuarios', roles: ['admin', 'supervisor'] },
+type Enlace = { href: string; texto: string; icono: LucideIcon; roles?: string[] }
+type Pendiente = { texto: string; icono: LucideIcon }
+
+type Seccion = {
+  titulo: string
+  roles?: string[]
+  enlaces: Enlace[]
+  pendientes: Pendiente[]
+  conPantallas?: boolean
+}
+
+const secciones: Seccion[] = [
+  {
+    titulo: 'Principal',
+    enlaces: [
+      { href: '/dashboard', texto: 'Dashboard', icono: LayoutDashboard },
+      { href: '/productos/menu', texto: 'Consultar menú', icono: BookOpen, roles: ['empleado'] },
+    ],
+    pendientes: [{ texto: 'Pedidos', icono: ClipboardList }],
+    conPantallas: true,
+  },
+  {
+    titulo: 'Operaciones',
+    roles: ['admin', 'supervisor'],
+    enlaces: [{ href: '/productos', texto: 'Productos', icono: Package }],
+    pendientes: [{ texto: 'Reportes', icono: ChartColumn }],
+  },
+  {
+    titulo: 'Administración',
+    roles: ['admin'],
+    enlaces: [{ href: '/usuarios', texto: 'Usuarios', icono: Users }],
+    pendientes: [{ texto: 'Configuración', icono: Settings }],
+  },
 ]
 
-const seccionesPendientes = ['Pedidos', 'Reportes']
+// Las pantallas abren en otra pestaña y a pantalla completa, sin este sidebar.
+// TODO: ocultar Cocina y Pedidos Mostrador según config de sucursal cuando exista el campo.
+const pantallas = [
+  { href: '/pantallas/caja', texto: 'Caja', icono: Wallet },
+  { href: '/pantallas/cocina', texto: 'Cocina', icono: ChefHat },
+  { href: '/pantallas/pedidos-mostrador', texto: 'Pedidos Mostrador', icono: Monitor },
+]
+
+function esVisible(roles: string[] | undefined, rol: string) {
+  return !roles || roles.includes(rol)
+}
+
+function iniciales(nombre: string) {
+  return nombre
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((parte) => parte[0].toUpperCase())
+    .join('')
+}
+
+// Tamaños del menú: se ajustan en el bloque SIDEBAR de styles/globals.css.
+const claseItem = 'nav-item'
+// Sub-ítems de Pantallas: más compactos para que "Pedidos Mostrador" entre en una línea.
+const claseSubItem =
+  'flex items-center gap-2.5 whitespace-nowrap rounded-full px-3 py-2 text-(length:--sidebar-texto) transition-colors'
+const claseIcono = 'size-(--sidebar-icono) shrink-0'
+const trazoIcono = 1.75
 
 export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
   const rutaActual = usePathname()
 
-  const enlacesVisibles = enlaces.filter((enlace) => !enlace.roles || enlace.roles.includes(rol))
+  const seccionesVisibles = secciones.filter((seccion) => esVisible(seccion.roles, rol))
 
   return (
-    <aside className="flex flex-col gap-6 border-b p-4 md:min-h-screen md:border-r md:border-b-0">
-      <div className="rounded-lg border p-6 text-center font-semibold">
-        Logo
+    <aside className="flex flex-col gap-8 p-4 md:sticky md:top-0 md:h-screen md:overflow-y-auto scrollbar-oculta">
+      <div className="flex items-center gap-3 px-2 pt-2">
+        <span className="flex size-9 items-center justify-center rounded-full bg-accent text-on-accent">
+          <UtensilsCrossed size={18} strokeWidth={2} />
+        </span>
+        <span className="font-semibold tracking-tight">Mise</span>
       </div>
 
-      <nav aria-label="Menú principal" className="flex flex-col gap-2">
-        <p className="text-xs uppercase opacity-70">Menú</p>
-        {enlacesVisibles.map((enlace) => {
-          const activo = rutaActual === enlace.href || rutaActual.startsWith(`${enlace.href}/`)
-          return (
-            <Link
-              key={enlace.href}
-              href={enlace.href}
-              aria-current={activo ? 'page' : undefined}
-              className={`rounded-md border px-3 py-2 ${activo ? 'font-semibold underline underline-offset-4' : ''}`}
-            >
-              {enlace.texto}
-            </Link>
-          )
-        })}
-        {seccionesPendientes.map((seccion) => (
-          <span key={seccion} className="px-3 py-2 opacity-60" aria-disabled="true">
-            {seccion}
-          </span>
+      <nav aria-label="Menú principal" className="flex flex-col gap-6">
+        {seccionesVisibles.map((seccion) => (
+          <div key={seccion.titulo} className="flex flex-col gap-1">
+            <p className="section-label mb-1 px-4">{seccion.titulo}</p>
+            {seccion.enlaces
+              .filter((enlace) => esVisible(enlace.roles, rol))
+              .map((enlace) => {
+                const activo = rutaActual === enlace.href || rutaActual.startsWith(`${enlace.href}/`)
+                const Icono = enlace.icono
+                return (
+                  <Link
+                    key={enlace.href}
+                    href={enlace.href}
+                    aria-current={activo ? 'page' : undefined}
+                    className={`${claseItem} ${activo ? 'bg-surface-muted font-medium text-text' : 'text-muted hover:bg-surface-muted/60 hover:text-text'}`}
+                  >
+                    <Icono
+                      strokeWidth={trazoIcono}
+                      className={`${claseIcono} ${activo ? 'text-accent' : ''}`}
+                    />
+                    {enlace.texto}
+                  </Link>
+                )
+              })}
+            {seccion.pendientes.map(({ texto, icono: Icono }) => (
+              <span
+                key={texto}
+                className={`${claseItem} cursor-not-allowed text-muted opacity-50`}
+                aria-disabled="true"
+              >
+                <Icono strokeWidth={trazoIcono} className={claseIcono} />
+                {texto}
+              </span>
+            ))}
+            {seccion.conPantallas && (
+              <details className="group">
+                <summary
+                  className={`${claseItem} cursor-pointer list-none text-muted hover:bg-surface-muted/60 hover:text-text [&::-webkit-details-marker]:hidden`}
+                >
+                  <MonitorPlay strokeWidth={trazoIcono} className={claseIcono} />
+                  Pantallas
+                  <ChevronDown
+                    size={16}
+                    strokeWidth={trazoIcono}
+                    className="ml-auto transition-transform group-open:rotate-180"
+                  />
+                </summary>
+                <div className="mt-1 ml-5 flex flex-col gap-1 border-l border-border pl-1.5">
+                  {pantallas.map(({ href, texto, icono: Icono }) => (
+                    <a
+                      key={href}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`${claseSubItem} text-muted hover:bg-surface-muted/60 hover:text-text`}
+                    >
+                      <Icono strokeWidth={trazoIcono} className={claseIcono} />
+                      {texto}
+                      <ExternalLink size={14} strokeWidth={trazoIcono} className="ml-auto opacity-60" />
+                    </a>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
         ))}
       </nav>
 
       <div className="mt-auto flex flex-col gap-4">
-        <div className="border-t pt-4">
-          <p className="font-medium">{nombre}</p>
-          <p className="text-sm capitalize opacity-70">{rol}</p>
+        <div className="flex items-center gap-3 rounded-2xl bg-bg p-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
+            {iniciales(nombre)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{nombre}</p>
+            <p className="text-xs capitalize text-muted">{rol}</p>
+          </div>
         </div>
-        <nav aria-label="Menú de usuario" className="flex flex-col gap-2">
-          <p className="text-xs uppercase opacity-70">General</p>
-          <span className="px-3 py-2 opacity-60" aria-disabled="true">Perfil</span>
+        <nav aria-label="Menú de usuario" className="flex flex-col gap-1">
+          <p className="section-label mb-1 px-4">General</p>
+          <span className={`${claseItem} cursor-not-allowed text-muted opacity-50`} aria-disabled="true">
+            <User strokeWidth={trazoIcono} className={claseIcono} />
+            Perfil
+          </span>
           <CerrarSesionButton />
         </nav>
       </div>

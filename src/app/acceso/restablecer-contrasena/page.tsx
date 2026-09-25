@@ -10,8 +10,10 @@
 // aprieta "Guardar" (por ejemplo, si se pide otro link de recupero en el medio), así
 // que el submit vuelve a llamar a verificarTokenReset por su cuenta.
 
-import { Card } from '@/components/ui/Card'
+import Link from 'next/link'
+import { claseBotonAcento, TarjetaAcceso } from '@/components/acceso/ElementosAcceso'
 import { RestablecerContrasenaForm } from '@/components/forms/RestablecerContrasenaForm'
+import { TriangleAlert } from '@/components/icons'
 import { verificarTokenReset } from '@/app/api/auth/recuperar-contrasena/route'
 
 export default async function ResetPasswordPage({
@@ -25,9 +27,16 @@ export default async function ResetPasswordPage({
 
   if (!idUsuario) {
     return (
-      <Card>
-        <p className="text-center text-sm text-red-600">El link es inválido o expiró</p>
-      </Card>
+      <TarjetaAcceso
+        icono={TriangleAlert}
+        tono="peligro"
+        titulo="El link es inválido o expiró"
+        descripcion="Los links de recupero se pueden usar una sola vez y vencen después de un tiempo. Pedí uno nuevo."
+      >
+        <Link href="/acceso/recuperar-contrasena" className={claseBotonAcento}>
+          Pedir un nuevo link
+        </Link>
+      </TarjetaAcceso>
     )
   }
 

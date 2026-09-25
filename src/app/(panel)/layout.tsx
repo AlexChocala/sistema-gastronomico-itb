@@ -12,13 +12,14 @@ export default async function PanelLayout({ children }: { children: ReactNode })
   }
 
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[14rem_minmax(0,1fr)]">
+    <div className="min-h-screen bg-surface md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
       <PanelSidebar
         nombre={sesion.user.name ?? 'Usuario'}
-        rol={sesion.user.rol}
-      />
-      <div className="min-w-0">
-        {children}
+        rol={sesion.user.rol}      />
+      <div className="min-w-0 p-3 md:py-3 md:pr-3 md:pl-0">
+        <div className="min-h-[calc(100vh-1.5rem)] rounded-3xl bg-bg">
+          {children}
+        </div>
       </div>
     </div>
   )

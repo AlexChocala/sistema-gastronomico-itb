@@ -1,26 +1,173 @@
+/* =========================================
+   ESTILOS GLOBALES
+========================================= */
+
 @import "tailwindcss";
 
+/* =========================================
+   TEMA — base (claro)
+========================================= */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f4f4f5;            /* fondo del contenido */
+  --surface: #ffffff;       /* tarjetas, sidebar, inputs */
+  --surface-muted: #e4e4e7; /* ítem activo, botón secundario */
+  --border: #d4d4d8;
+
+  --text: #18181b;
+  --text-muted: #52525b;
+
+  --primary: #18181b;       /* botón principal */
+  --primary-hover: #3f3f46;
+  --on-primary: #ffffff;    /* texto sobre --primary */
 }
 
+/* =========================================
+   ACENTO — color de marca
+   Para cambiar el naranja, tocá solo este bloque.
+========================================= */
+
+:root {
+  --accent: #f97316;        /* logo, ícono activo, destacados */
+  --accent-hover: #ea580c;
+  --accent-soft: #ffedd5;   /* fondo del avatar y badges */
+  --on-accent: #ffffff;     /* texto sobre --accent */
+}
+
+/* =========================================
+   ESTADOS — feedback de la UI
+========================================= */
+
+:root {
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #ca8a04;
+  --warning-surface: #fefce8;
+}
+
+/* =========================================
+   ESTADO DE PEDIDOS — cocina / mostrador / pedidos
+========================================= */
+
+:root {
+  --order-preparing: #ca8a04;
+  --order-ready: #16a34a;
+  --order-delivered: #71717a;
+}
+
+/* =========================================
+   SIDEBAR — tamaños
+   Para agrandar o achicar el menú, tocá solo este bloque.
+========================================= */
+
+:root {
+  --sidebar-texto: 0.875rem;       /* 14px — texto de cada ítem */
+  --sidebar-titulo: 0.75rem;       /* 12px — "PRINCIPAL", "OPERACIONES" */
+  --sidebar-icono: 1.25rem;        /* 20px */
+  --sidebar-item-padding-y: 0.75rem;
+  --sidebar-item-padding-x: 1rem;
+  --sidebar-item-radio: 9999px;    /* 9999px = pastilla; 0.75rem = rectángulo redondeado */
+}
+
+/* =========================================
+   TOKENS DE TAILWIND
+========================================= */
+
+/* `inline` es necesario: --font-inter lo define next/font en <html>. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--on-primary);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+
+  --color-order-preparing: var(--order-preparing);
+  --color-order-ready: var(--order-ready);
+  --color-order-delivered: var(--order-delivered);
+
+  --font-sans: var(--font-inter), sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* =========================================
+   BASE
+========================================= */
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 500; /* grosor general del texto: 400 = normal, 500 = medium */
+}
+
+/* =========================================
+   TIPOGRAFÍA — panel
+========================================= */
+
+/* Título de cada página del panel. */
+@utility page-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* Títulos de grupo en mayúscula (secciones del sidebar). */
+@utility section-label {
+  font-size: var(--sidebar-titulo);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* =========================================
+   COMPONENTES — sidebar
+========================================= */
+
+/* Ítem del menú lateral (links, pendientes, cerrar sesión). */
+@utility nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: var(--sidebar-item-padding-y) var(--sidebar-item-padding-x);
+  border-radius: var(--sidebar-item-radio);
+  font-size: var(--sidebar-texto);
+  transition: background-color 150ms, color 150ms;
+}
+
+/* Scroll sin barra visible (sigue scrolleando con rueda o touch). */
+@utility scrollbar-oculta {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* =========================================
+   TIPOGRAFÍA — pantallas (cocina / mostrador, lectura a distancia)
+========================================= */
+
+@utility screen-title {
+  font-size: 2.5rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+@utility screen-item {
+  font-size: 1.75rem;
+  line-height: 1.3;
 }

@@ -8,9 +8,9 @@ import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { signIn, getSession } from 'next-auth/react'
-import { Input } from '@/components/ui/Input'
-import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
+import { CampoAcceso } from '@/components/acceso/CampoAcceso'
+import { AvisoError, claseBotonAcento, TarjetaAcceso } from '@/components/acceso/ElementosAcceso'
+import { ArrowRight, LockKeyhole, Mail, UtensilsCrossed } from '@/components/icons'
 
 export function LoginForm() {
   const router = useRouter()
@@ -56,41 +56,49 @@ export function LoginForm() {
   }
 
   return (
-    <Card>
-      <form onSubmit={manejarSubmit} className="flex flex-col gap-4">
-        <h2 className="text-xl font-semibold">Ingresar</h2>
-
-        <Input
+    <TarjetaAcceso
+      icono={UtensilsCrossed}
+      titulo="Ingresá a tu cuenta"
+      descripcion="Usá el email y la contraseña que te dio el administrador."
+    >
+      <form onSubmit={manejarSubmit} className="flex flex-col gap-5">
+        <CampoAcceso
           id="email"
           label="Email"
           type="email"
+          icono={Mail}
+          placeholder="tu@email.com"
+          autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
         />
 
-        <Input
+        <CampoAcceso
           id="password"
           label="Contraseña"
           type="password"
+          icono={LockKeyhole}
+          autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
         />
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <AvisoError>{error}</AvisoError>}
 
-        <Button type="submit" disabled={cargando}>
+        <button type="submit" disabled={cargando} className={claseBotonAcento}>
           {cargando ? 'Ingresando...' : 'Ingresar'}
-        </Button>
+          {!cargando && <ArrowRight className="size-4" />}
+        </button>
 
         <Link
           href="/acceso/recuperar-contrasena"
-          className="text-center text-sm text-neutral-600 hover:underline"
+          className="self-center text-sm text-muted transition-colors hover:text-accent"
         >
           ¿Olvidaste tu contraseña?
         </Link>
       </form>
-    </Card>
+    </TarjetaAcceso>
   )
 }

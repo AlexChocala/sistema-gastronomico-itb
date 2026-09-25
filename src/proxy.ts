@@ -25,6 +25,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
+  // La administración de usuarios es solo para admin; la API también lo valida.
+  if (request.nextUrl.pathname.startsWith('/usuarios') && token.rol !== 'admin') {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
   return NextResponse.next()
 }
 
@@ -35,7 +40,8 @@ export const config = {
     '/productos/:path*',
     '/usuarios/:path*',
     '/reportes/:path*',
-    '/caja/:path*',
-    '/cocina/:path*',
+    // Pantallas de pestaña aparte. Pedidos Mostrador queda afuera a propósito: es pública.
+    '/pantallas/caja/:path*',
+    '/pantallas/cocina/:path*',
   ],
 }

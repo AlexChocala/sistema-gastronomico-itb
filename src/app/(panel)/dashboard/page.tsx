@@ -1,8 +1,13 @@
-export default function DashboardPage() {
+import { getServerSession } from 'next-auth'
+import { ResumenDelDia } from '@/components/dashboard/ResumenDelDia'
+import { authOptions } from '@/lib/auth'
+
+export default async function DashboardPage() {
+  const sesion = await getServerSession(authOptions)
+
   return (
-    <main className="p-6">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
-      <p className="mt-2">Resumen general del sistema.</p>
+    <main className="p-6" lang="es">
+      <ResumenDelDia nombre={sesion?.user.name ?? 'Usuario'} />
     </main>
   )
 }

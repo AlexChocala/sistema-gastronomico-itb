@@ -13,8 +13,8 @@ export function Button({ variant = 'primario', className = '', ...props }: Butto
 
   const estilosPorVariante =
     variant === 'primario'
-      ? 'bg-neutral-900 text-white hover:bg-neutral-700'
-      : 'bg-neutral-200 text-neutral-900 hover:bg-neutral-300'
+      ? 'bg-primary text-on-primary hover:bg-primary-hover'
+      : 'bg-surface-muted text-text hover:bg-border'
 
   return <button className={`${estilosBase} ${estilosPorVariante} ${className}`} {...props} />
 }
