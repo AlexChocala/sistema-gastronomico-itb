@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { CerrarSesionButton } from '@/components/layout/CerrarSesionButton'
 import {
   BookOpen, ChartColumn, ChefHat, ChevronDown, ClipboardList, ExternalLink, LayoutDashboard,
-  Monitor, MonitorPlay, Package, Settings, User, Users, UtensilsCrossed, Wallet,
+  Monitor, MonitorPlay, Package, Settings, Store, User, Users, UtensilsCrossed, Wallet,
   type LucideIcon,
 } from '@/components/icons'
 
@@ -39,13 +39,14 @@ const secciones: Seccion[] = [
   {
     titulo: 'Administración',
     roles: ['admin'],
-    enlaces: [{ href: '/usuarios', texto: 'Usuarios', icono: Users }],
+    enlaces: [
+      { href: '/usuarios', texto: 'Usuarios', icono: Users },
+      { href: '/sucursales', texto: 'Sucursales', icono: Store },
+    ],
     pendientes: [{ texto: 'Configuración', icono: Settings }],
   },
 ]
 
-// Las pantallas abren en otra pestaña y a pantalla completa, sin este sidebar.
-// TODO: ocultar Cocina y Pedidos Mostrador según config de sucursal cuando exista el campo.
 const pantallas = [
   { href: '/pantallas/caja', texto: 'Caja', icono: Wallet },
   { href: '/pantallas/cocina', texto: 'Cocina', icono: ChefHat },
@@ -65,17 +66,13 @@ function iniciales(nombre: string) {
     .join('')
 }
 
-// Tamaños del menú: se ajustan en el bloque SIDEBAR de styles/globals.css.
 const claseItem = 'nav-item'
-// Sub-ítems de Pantallas: más compactos para que "Pedidos Mostrador" entre en una línea.
-const claseSubItem =
-  'flex items-center gap-2.5 whitespace-nowrap rounded-full px-3 py-2 text-(length:--sidebar-texto) transition-colors'
+const claseSubItem = 'flex items-center gap-2.5 whitespace-nowrap rounded-full px-3 py-2 text-(length:--sidebar-texto) transition-colors'
 const claseIcono = 'size-(--sidebar-icono) shrink-0'
 const trazoIcono = 1.75
 
 export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
   const rutaActual = usePathname()
-
   const seccionesVisibles = secciones.filter((seccion) => esVisible(seccion.roles, rol))
 
   return (
@@ -91,63 +88,43 @@ export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
         {seccionesVisibles.map((seccion) => (
           <div key={seccion.titulo} className="flex flex-col gap-1">
             <p className="section-label mb-1 px-4">{seccion.titulo}</p>
-            {seccion.enlaces
-              .filter((enlace) => esVisible(enlace.roles, rol))
-              .map((enlace) => {
-                const activo = rutaActual === enlace.href || rutaActual.startsWith(`${enlace.href}/`)
-                const Icono = enlace.icono
-                return (
-                  <Link
-                    key={enlace.href}
-                    href={enlace.href}
-                    aria-current={activo ? 'page' : undefined}
-                    className={`${claseItem} ${activo ? 'bg-surface-muted font-medium text-text' : 'text-muted hover:bg-surface-muted/60 hover:text-text'}`}
-                  >
-                    <Icono
-                      strokeWidth={trazoIcono}
-                      className={`${claseIcono} ${activo ? 'text-accent' : ''}`}
-                    />
-                    {enlace.texto}
-                  </Link>
-                )
-              })}
-            {seccion.pendientes.map(({ texto, icono: Icono }) => (
-              <span
-                key={texto}
-                className={`${claseItem} cursor-not-allowed text-muted opacity-50`}
-                aria-disabled="true"
-              >
-                <Icono strokeWidth={trazoIcono} className={claseIcono} />
-                {texto}
-              </span>
-            ))}
+            {seccion.enlaces.filter((enlace) => esVisible(enlace.roles, rol)).map((enlace) => {
+              const activo = rutaActual === enlace.href || rutaActual.startsWith(enlace.href + '/')
+              const Icono = enlace.icono
+              return (
+                <Link key={enlace.href} href={enlace.href} aria-current={activo ? 'page' : undefined} className={claseItem + ' ' + (activo ? 'bg-surface-muted font-medium text-text' : 'text-muted hover:bg-surface-muted/60 hover:text-text')}>
+                  <Icono strokeWidth={trazoIcono} className={claseIcono + ' ' + (activo ? 'text-accent' : '')} />
+                  {enlace.texto}
+                </Link>
+              )
+            })}
+            {seccion.pendientes.map((pendiente) => {
+              const Icono = pendiente.icono
+              return (
+                <span key={pendiente.texto} className={claseItem + ' cursor-not-allowed text-muted opacity-50'} aria-disabled="true">
+                  <Icono strokeWidth={trazoIcono} className={claseIcono} />
+                  {pendiente.texto}
+                </span>
+              )
+            })}
             {seccion.conPantallas && (
               <details className="group">
-                <summary
-                  className={`${claseItem} cursor-pointer list-none text-muted hover:bg-surface-muted/60 hover:text-text [&::-webkit-details-marker]:hidden`}
-                >
+                <summary className={claseItem + ' cursor-pointer list-none text-muted hover:bg-surface-muted/60 hover:text-text [&::-webkit-details-marker]:hidden'}>
                   <MonitorPlay strokeWidth={trazoIcono} className={claseIcono} />
                   Pantallas
-                  <ChevronDown
-                    size={16}
-                    strokeWidth={trazoIcono}
-                    className="ml-auto transition-transform group-open:rotate-180"
-                  />
+                  <ChevronDown size={16} strokeWidth={trazoIcono} className="ml-auto transition-transform group-open:rotate-180" />
                 </summary>
                 <div className="mt-1 ml-5 flex flex-col gap-1 border-l border-border pl-1.5">
-                  {pantallas.map(({ href, texto, icono: Icono }) => (
-                    <a
-                      key={href}
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`${claseSubItem} text-muted hover:bg-surface-muted/60 hover:text-text`}
-                    >
-                      <Icono strokeWidth={trazoIcono} className={claseIcono} />
-                      {texto}
-                      <ExternalLink size={14} strokeWidth={trazoIcono} className="ml-auto opacity-60" />
-                    </a>
-                  ))}
+                  {pantallas.map((pantalla) => {
+                    const Icono = pantalla.icono
+                    return (
+                      <a key={pantalla.href} href={pantalla.href} target="_blank" rel="noopener noreferrer" className={claseSubItem + ' text-muted hover:bg-surface-muted/60 hover:text-text'}>
+                        <Icono strokeWidth={trazoIcono} className={claseIcono} />
+                        {pantalla.texto}
+                        <ExternalLink size={14} strokeWidth={trazoIcono} className="ml-auto opacity-60" />
+                      </a>
+                    )
+                  })}
                 </div>
               </details>
             )}
@@ -167,7 +144,7 @@ export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
         </div>
         <nav aria-label="Menú de usuario" className="flex flex-col gap-1">
           <p className="section-label mb-1 px-4">General</p>
-          <span className={`${claseItem} cursor-not-allowed text-muted opacity-50`} aria-disabled="true">
+          <span className={claseItem + ' cursor-not-allowed text-muted opacity-50'} aria-disabled="true">
             <User strokeWidth={trazoIcono} className={claseIcono} />
             Perfil
           </span>
