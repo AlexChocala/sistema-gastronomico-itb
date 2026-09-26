@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown, Copy, KeyRound, Pencil, Plus, Power, Store, Trash2, X } from '@/components/icons'
+import { Button } from '@/components/ui/Button'
 
 interface Usuario {
   idUsuario: number
@@ -121,8 +122,29 @@ export default function UsuariosPage() {
   }
 
   useEffect(() => {
-    cargarDatos()
-  }, [])
+    let paginaActiva = true
+
+    async function cargarInicial() {
+      const res = await fetch('/api/usuarios')
+      if (res.status === 403 || res.status === 401) {
+        router.replace('/dashboard')
+        return
+      }
+      const data = await res.json()
+      if (!paginaActiva) return
+      setUsuarios(data.usuarios ?? [])
+      setRoles(data.roles ?? [])
+      setSucursales(data.sucursales ?? [])
+      setEsAdmin(data.esAdmin ?? false)
+      setIdUsuarioSesion(data.idUsuarioSesion ?? null)
+      setLoading(false)
+    }
+
+    void cargarInicial()
+    return () => {
+      paginaActiva = false
+    }
+  }, [router])
 
   // El modal del formulario se cierra con Escape.
   useEffect(() => {
@@ -211,10 +233,9 @@ export default function UsuariosPage() {
     cargarDatos()
   }
 
-  async function toggleActivo(u: Usuario) {
+  async function archivarUsuario(u: Usuario) {
     setError('')
-    const method = u.activo ? 'DELETE' : 'PATCH'
-    const res = await fetch(`/api/usuarios/${u.idUsuario}`, { method })
+    const res = await fetch(`/api/usuarios/${u.idUsuario}`, { method: 'DELETE' })
     const data = await res.json()
     if (!res.ok) {
       setError(data.error || 'No se pudo cambiar el estado del usuario')
@@ -256,10 +277,15 @@ export default function UsuariosPage() {
         <p className="mt-1 text-sm text-muted">Administrá las cuentas, roles y sucursales del personal.</p>
       </div>
       {esAdmin && (
-        <button type="button" className={claseBotonAcento} onClick={abrirNuevo}>
-          <Plus className="size-4" />
-          Nuevo usuario
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button type="button" variant="secundario" className="w-auto!" onClick={() => router.push('/usuarios/archivados')}>
+            Usuarios archivados
+          </Button>
+          <button type="button" className={claseBotonAcento} onClick={abrirNuevo}>
+            <Plus className="size-4" />
+            Nuevo usuario
+          </button>
+        </div>
       )}
     </header>
   )
@@ -394,10 +420,10 @@ export default function UsuariosPage() {
                           )}
                           <button
                             type="button"
-                            onClick={() => toggleActivo(u)}
-                            aria-label={`${u.activo ? 'Desactivar' : 'Activar'} ${u.nombre} ${u.apellido}`}
-                            title={u.activo ? 'Desactivar' : 'Activar'}
-                            className={`${claseBotonIcono} ${u.activo ? 'text-danger hover:bg-danger/10' : 'text-success hover:bg-success/10'}`}
+                            onClick={() => archivarUsuario(u)}
+                            aria-label={`Archivar ${u.nombre} ${u.apellido}`}
+                            title="Archivar"
+                            className={`${claseBotonIcono} text-danger hover:bg-danger/10`}
                           >
                             <Power className="size-4" />
                           </button>
