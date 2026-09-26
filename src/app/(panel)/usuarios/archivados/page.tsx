@@ -146,6 +146,7 @@ export default function UsuariosArchivadosPage() {
             <Input
               id="buscar-usuario-archivado"
               label="Buscar usuario"
+              className="rounded-full! px-4! py-2.5! text-sm focus:border-accent!"
               placeholder="Nombre, apellido o email"
               value={busqueda}
               onChange={(evento) => setBusqueda(evento.target.value)}

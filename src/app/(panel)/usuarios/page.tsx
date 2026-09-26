@@ -278,7 +278,12 @@ export default function UsuariosPage() {
       </div>
       {esAdmin && (
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button type="button" variant="secundario" className="w-auto!" onClick={() => router.push('/usuarios/archivados')}>
+          <Button
+            type="button"
+            variant="secundario"
+            className="w-auto! rounded-full! px-5! py-2.5! text-sm"
+            onClick={() => router.push('/usuarios/archivados')}
+          >
             Usuarios archivados
           </Button>
           <button type="button" className={claseBotonAcento} onClick={abrirNuevo}>
