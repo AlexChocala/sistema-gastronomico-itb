@@ -5,6 +5,7 @@
 import type { ReactNode } from 'react'
 import { LogoMise } from '@/components/acceso/ElementosAcceso'
 import { Bike, ChartColumn, ChefHat, Wallet } from '@/components/icons'
+import { prisma } from '@/lib/db/prisma'
 
 // Panel decorativo con la identidad del sistema.
 function PanelMarca() {
@@ -46,11 +47,15 @@ function PanelMarca() {
   )
 }
 
-export default function AccesoLayout({ children }: { children: ReactNode }) {
+export default async function AccesoLayout({ children }: { children: ReactNode }) {
+  // Nombre del restaurante si ya se configuró (es público: también aparece en el menú
+  // digital). En el primer ingreso todavía no existe y se muestra solo "Mise".
+  const negocio = await prisma.negocio.findUnique({ where: { idNegocio: 1 }, select: { nombre: true } })
+
   return (
     <div className="grid min-h-screen bg-surface md:grid-cols-2">
       <div className="flex flex-col p-6 md:p-10">
-        <LogoMise />
+        <LogoMise nombreNegocio={negocio?.nombre} />
         <main className="flex flex-1 items-center justify-center py-10">{children}</main>
         <p className="text-xs text-muted">Mise · Sistema de gestión gastronómica</p>
       </div>

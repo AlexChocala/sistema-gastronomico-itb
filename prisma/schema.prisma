@@ -32,13 +32,37 @@ model Localidad {
   @@unique([nombre, idProvincia])
 }
 
+// Datos del restaurante. El sistema es single-tenant: siempre hay UNA sola fila (id 1).
+// La migración agrega un CHECK en la base que rechaza cualquier otro id.
+model Negocio {
+  idNegocio   Int     @id @default(1)
+  nombre      String
+  descripcion String?
+  // Ruta dentro del bucket de Supabase Storage. Solo se muestra en el menú digital del cliente.
+  logoPath    String?
+  instagram   String?
+  tiktok      String?
+  facebook    String?
+  // Datos para que el cliente pague por transferencia desde el menú digital. Esa opción
+  // se ofrece solo si hay titular y al menos alias o CBU/CVU.
+  transferenciaAlias   String?
+  transferenciaCbu     String?
+  transferenciaTitular String?
+}
+
 model Sucursal {
   idSucursal Int     @id @default(autoincrement())
   nombre     String
-  telefono   String?
+  // Segmento de la URL pública (/{slug}). Se genera al crear la sucursal y no cambia al
+  // renombrarla: los QR impresos con la URL tienen que seguir funcionando.
+  slug       String  @unique
+  whatsapp   String?
   direccion  String
   horario    String?
   activa     Boolean @default(true)
+  // Formas de entrega que ofrece en el menú digital (siempre al menos una).
+  ofreceRetiro   Boolean @default(true)
+  ofreceDelivery Boolean @default(true)
 
   idLocalidad Int
   localidad   Localidad @relation(fields: [idLocalidad], references: [idLocalidad])
@@ -87,6 +111,7 @@ model Categoria {
   activa      Boolean @default(true)
 
   productos Producto[]
+  extras    Extra[]
 }
 
 model Producto {
@@ -137,6 +162,11 @@ model Extra {
   precioAdicional Float
   activo          Boolean @default(true)
 
+  // Cada extra es de una categoría (el cheddar de hamburguesas no es el de panchos) y solo
+  // se asigna a productos de esa categoría. El nombre no se repite dentro de la categoría.
+  idCategoria Int
+  categoria   Categoria @relation(fields: [idCategoria], references: [idCategoria])
+
   productos       ProductoExtra[]
   detallesElegidos DetallePedidoExtra[]
 }
@@ -155,7 +185,9 @@ model Cliente {
   idCliente Int    @id @default(autoincrement())
   nombre    String
   apellido  String?
-  telefono  String
+  // Celular (10 dígitos, formato nacional). Null solo en pedidos de Caja para retirar:
+  // ahí no se pide (ver lib/pedidos-validacion.ts).
+  telefono  String?
   email     String?
 
   pedidos Pedido[]
@@ -187,6 +219,8 @@ model Pedido {
   estadoPago   String
 
   direccion String?
+  // Indicaciones para el repartidor (solo delivery, hasta 200 caracteres).
+  referencias String?
 
   subtotal  Float
   total     Float

@@ -4,6 +4,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown, Copy, KeyRound, Pencil, Plus, Power, Store, Trash2, X } from '@/components/icons'
+import { BotonesExportar, type DatosExportables } from '@/components/ui/BotonesExportar'
+import { hoyEnArgentina } from '@/lib/reportes/fechas'
+
+const COLUMNAS_EXPORTAR = ['ID', 'Nombre', 'Apellido', 'Email', 'Rol', 'Sucursal', 'Estado']
 
 interface Usuario {
   idUsuario: number
@@ -249,6 +253,25 @@ export default function UsuariosPage() {
     cargarDatos()
   }
 
+  // Campo por campo, para que nada sensible que agregue la API llegue al archivo.
+  function datosParaExportar(): DatosExportables {
+    return {
+      filas: usuarios.map((u) => [
+        u.idUsuario, u.nombre, u.apellido, u.email, u.rol.nombre, u.sucursal ? nombreSucursal(u.sucursal.nombre) : '',
+        u.activo ? 'Activo' : 'Inactivo',
+      ]),
+      json: usuarios.map((u) => ({
+        idUsuario: u.idUsuario,
+        nombre: u.nombre,
+        apellido: u.apellido,
+        email: u.email,
+        rol: u.rol.nombre,
+        sucursal: u.sucursal ? { idSucursal: u.sucursal.idSucursal, nombre: u.sucursal.nombre } : null,
+        activo: u.activo,
+      })),
+    }
+  }
+
   const encabezado = (
     <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
@@ -256,10 +279,19 @@ export default function UsuariosPage() {
         <p className="mt-1 text-sm text-muted">Administrá las cuentas, roles y sucursales del personal.</p>
       </div>
       {esAdmin && (
-        <button type="button" className={claseBotonAcento} onClick={abrirNuevo}>
-          <Plus className="size-4" />
-          Nuevo usuario
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <BotonesExportar
+            nombreArchivo={`usuarios_${hoyEnArgentina()}`}
+            columnas={COLUMNAS_EXPORTAR}
+            obtenerDatos={datosParaExportar}
+            deshabilitado={usuarios.length === 0}
+            tamano="normal"
+          />
+          <button type="button" className={claseBotonAcento} onClick={abrirNuevo}>
+            <Plus className="size-4" />
+            Nuevo usuario
+          </button>
+        </div>
       )}
     </header>
   )

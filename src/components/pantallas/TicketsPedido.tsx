@@ -3,7 +3,8 @@
 //   2. Ticket del cliente: número de pedido grande (el que busca en el monitor) y detalle del pago.
 // En pantalla no se ve: solo aparece al imprimir (`hidden print:block`).
 
-import type { PedidoPantalla } from '@/lib/pedidos-pantallas'
+import type { PedidoPantalla } from '@/lib/pedidos/pedidos-pantallas'
+import { textoOpciones } from '@/lib/pedidos/pedidos-estados'
 
 const NOMBRE_LOCAL = 'Mise'
 
@@ -48,11 +49,16 @@ export function TicketsPedido({ pedido, pagaCon }: { pedido: PedidoPantalla; pag
         </p>
         <Separador />
         <ul>
-          {pedido.items.map((item) => (
-            <li key={item.producto} className="text-[14px]">
-              <strong>{item.cantidad}x</strong> {item.producto}
-            </li>
-          ))}
+          {/* Key por posición: el mismo producto puede venir con otras opciones. */}
+          {pedido.items.map((item, indice) => {
+            const opciones = textoOpciones(item.variacion, item.extras)
+            return (
+              <li key={indice} className="text-[14px]">
+                <strong>{item.cantidad}x</strong> {item.producto}
+                {opciones && <p className="pl-4 font-bold">{opciones}</p>}
+              </li>
+            )
+          })}
         </ul>
       </section>
 
@@ -67,13 +73,27 @@ export function TicketsPedido({ pedido, pagaCon }: { pedido: PedidoPantalla; pag
         <p className="text-center text-[36px] font-bold leading-none">#{pedido.idPedido}</p>
         <p className="mt-1 text-center text-[16px] font-bold">{pedido.cliente}</p>
         <p className="text-center">{textoEntrega[pedido.tipoEntrega]}</p>
+        {/* El ticket viaja con el pedido: el cadete necesita a dónde llevarlo. */}
+        {pedido.tipoEntrega === 'delivery' && pedido.direccion && (
+          <div className="mt-1 text-center">
+            <p className="font-bold">
+              {pedido.direccion}
+              {pedido.localidad && `, ${pedido.localidad}`}
+            </p>
+            {pedido.referencias && <p>{pedido.referencias}</p>}
+            {pedido.telefono && <p>Cel: {pedido.telefono}</p>}
+          </div>
+        )}
         <Separador />
         <table className="w-full">
           <tbody>
-            {pedido.items.map((item) => (
-              <tr key={item.producto}>
+            {pedido.items.map((item, indice) => (
+              <tr key={indice}>
                 <td className="pr-2 align-top">
                   {item.cantidad}x {item.producto}
+                  {(item.variacion || item.extras.length > 0) && (
+                    <span className="block pl-4">{textoOpciones(item.variacion, item.extras)}</span>
+                  )}
                 </td>
                 <td className="text-right align-top whitespace-nowrap">
                   {formatoPrecio.format(item.precioUnitario * item.cantidad)}

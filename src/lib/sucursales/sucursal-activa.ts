@@ -10,7 +10,7 @@
 
 import { cookies } from 'next/headers'
 import type { Session } from 'next-auth'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/db/prisma'
 
 export const COOKIE_SUCURSAL_ACTIVA = 'sucursal-activa'
 

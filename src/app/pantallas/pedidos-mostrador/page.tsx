@@ -1,11 +1,13 @@
 'use client'
 
 // Pantalla pública de Pedidos Mostrador (pestaña aparte, sin sidebar), para un monitor
-// que ven los clientes. Solo muestra número y nombre: nada de precios ni productos.
-// Lee el mismo estado que cambia la pantalla de Cocina.
+// que ven los clientes. Solo muestra número y nombre de pila: nada de precios, productos
+// ni datos de contacto (la API pública no los devuelve). Lee el mismo estado que cambia
+// la pantalla de Cocina.
 
 import { use } from 'react'
-import { usePedidosPantalla, type PedidoPantalla } from '@/lib/pedidos-pantallas'
+import { EstadoConexion } from '@/components/pedidos/EstadoConexion'
+import { usePedidosMostrador, type PedidoMostrador } from '@/lib/pedidos/pedidos-pantallas'
 
 function Columna({
   titulo,
@@ -14,7 +16,7 @@ function Columna({
   colorTitulo,
 }: {
   titulo: string
-  pedidos: PedidoPantalla[]
+  pedidos: PedidoMostrador[]
   colorPunto: string
   colorTitulo: string
 }) {
@@ -45,7 +47,7 @@ export default function PedidosMostradorPage({
 }) {
   const idSucursal = Number(use(searchParams).sucursal)
   const sucursalValida = Number.isInteger(idSucursal) && idSucursal > 0
-  const { pedidos } = usePedidosPantalla(sucursalValida ? idSucursal : null)
+  const { pedidos, error, recargar } = usePedidosMostrador(sucursalValida ? idSucursal : null)
 
   if (!sucursalValida) {
     return (
@@ -57,12 +59,16 @@ export default function PedidosMostradorPage({
     )
   }
 
-  // Los pedidos "nuevo" no se muestran: nadie confirmó todavía que se están preparando.
+  // La API ya filtra: solo pedidos para retirar en el local (de caja u online), porque los
+  // delivery no los busca nadie en el mostrador, y solo en preparación o listos (los
+  // "recibido" no: nadie confirmó todavía que se están preparando).
   const enPreparacion = pedidos.filter((pedido) => pedido.estado === 'en_preparacion')
   const paraRetirar = pedidos.filter((pedido) => pedido.estado === 'listo')
 
   return (
     <main className="grid min-h-screen gap-6 bg-bg p-6 md:grid-cols-2">
+      {/* Flotante, para no mover las columnas del monitor. */}
+      <EstadoConexion error={error} onReintentar={() => void recargar()} className="fixed inset-x-6 bottom-6 z-10" />
       <Columna
         titulo="En preparación"
         pedidos={enPreparacion}

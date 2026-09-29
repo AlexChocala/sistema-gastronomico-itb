@@ -2,7 +2,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { MapPin, Pencil, Plus, Power, Search, Store, X } from '@/components/icons'
+import { Globe, MapPin, Pencil, Plus, Power, Search, Store, X } from '@/components/icons'
+import { MAX_SUCURSALES } from '@/lib/sucursales/sucursales-validacion'
+import { CamposSucursal, localidadNuevaVacia, valoresSucursalVacios } from '@/components/sucursal/CamposSucursal'
 
 interface Localidad {
   idLocalidad: number
@@ -13,23 +15,18 @@ interface Localidad {
 interface Sucursal {
   idSucursal: number
   nombre: string
+  slug: string
   direccion: string
-  telefono: string | null
+  whatsapp: string | null
   horario: string | null
   activa: boolean
+  ofreceRetiro: boolean
+  ofreceDelivery: boolean
   idLocalidad: number
   localidad: Localidad
 }
 
-const formVacio = {
-  nombre: '',
-  direccion: '',
-  telefono: '',
-  horario: '',
-  idLocalidad: '',
-}
-
-const localidadNuevaVacia = { nombre: '', nombreProvincia: '' }
+const formVacio = valoresSucursalVacios
 
 function limpiarNombre(nombre: string) {
   return nombre.replace('Prueba - ', '')
@@ -43,6 +40,7 @@ export default function SucursalesPage() {
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [usarLocalidadNueva, setUsarLocalidadNueva] = useState(false)
   const [error, setError] = useState('')
+  const limiteAlcanzado = sucursales.length >= MAX_SUCURSALES
   const [busqueda, setBusqueda] = useState('')
 
   const [form, setForm] = useState(formVacio)
@@ -61,16 +59,6 @@ export default function SucursalesPage() {
     cargarDatos()
   }, [])
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
-    const { name, value } = e.target
-    if (name === 'idLocalidad' && value === '__nueva__') {
-      setUsarLocalidadNueva(true)
-      setForm({ ...form, idLocalidad: '' })
-      return
-    }
-    setForm({ ...form, [name]: value })
-  }
-
   function abrirNuevo() {
     setEditandoId(null)
     setForm(formVacio)
@@ -85,9 +73,11 @@ export default function SucursalesPage() {
     setForm({
       nombre: s.nombre,
       direccion: s.direccion,
-      telefono: s.telefono ?? '',
+      whatsapp: s.whatsapp ?? '',
       horario: s.horario ?? '',
       idLocalidad: String(s.idLocalidad),
+      ofreceRetiro: s.ofreceRetiro,
+      ofreceDelivery: s.ofreceDelivery,
     })
     setLocalidadNueva(localidadNuevaVacia)
     setUsarLocalidadNueva(false)
@@ -115,8 +105,10 @@ export default function SucursalesPage() {
     const body: Record<string, unknown> = {
       nombre: form.nombre,
       direccion: form.direccion,
-      telefono: form.telefono || null,
+      whatsapp: form.whatsapp || null,
       horario: form.horario || null,
+      ofreceRetiro: form.ofreceRetiro,
+      ofreceDelivery: form.ofreceDelivery,
     }
 
     if (usarLocalidadNueva) {
@@ -164,12 +156,18 @@ export default function SucursalesPage() {
         <header className="flex items-center justify-between gap-3">
           <div>
             <h1 className="page-title">Sucursales</h1>
-            <p className="mt-1 text-sm text-muted">Gestioná los locales del sistema.</p>
+            <p className="mt-1 text-sm text-muted">
+              Gestioná los locales del sistema.{' '}
+              {!loading && `${sucursales.length} de ${MAX_SUCURSALES} sucursales.`}
+            </p>
           </div>
           <button
             type="button"
             onClick={mostrarForm ? cerrarForm : abrirNuevo}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm text-on-accent transition-colors hover:bg-accent-hover"
+            // La API también lo valida; esto solo evita abrir un formulario que va a fallar.
+            disabled={!mostrarForm && limiteAlcanzado}
+            title={!mostrarForm && limiteAlcanzado ? `Llegaste al máximo de ${MAX_SUCURSALES} sucursales.` : undefined}
+            className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-accent"
           >
             {mostrarForm ? <X className="size-4" /> : <Plus className="size-4" />}
             {mostrarForm ? 'Cancelar' : 'Nueva sucursal'}
@@ -179,86 +177,15 @@ export default function SucursalesPage() {
         {mostrarForm && (
           <div className="rounded-3xl bg-surface p-6 shadow-sm">
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="nombre" className="text-sm">Nombre</label>
-                  <input
-                    id="nombre" name="nombre" value={form.nombre} onChange={handleChange} required
-                    className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="telefono" className="text-sm">Teléfono</label>
-                  <input
-                    id="telefono" name="telefono" type="tel"
-                    pattern="[\d\s\-+()]{6,30}"
-                    title="Solo números, espacios, guiones o paréntesis (6 a 30 caracteres)"
-                    value={form.telefono} onChange={handleChange}
-                    className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5 sm:col-span-2">
-                  <label htmlFor="direccion" className="text-sm">Dirección</label>
-                  <input
-                    id="direccion" name="direccion" value={form.direccion} onChange={handleChange} required
-                    className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="horario" className="text-sm">Horario</label>
-                  <input
-                    id="horario" name="horario" value={form.horario} onChange={handleChange} placeholder="Ej: 9 a 22hs"
-                    className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
-                  />
-                </div>
-
-                {!usarLocalidadNueva ? (
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="idLocalidad" className="text-sm">Localidad</label>
-                    <select
-                      id="idLocalidad" name="idLocalidad" value={form.idLocalidad} onChange={handleChange} required
-                      className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
-                    >
-                      <option value="" disabled hidden>Seleccionar localidad</option>
-                      {localidades.map((l) => (
-                        <option key={l.idLocalidad} value={l.idLocalidad}>
-                          {l.nombre}, {l.provincia.nombre}
-                        </option>
-                      ))}
-                      <option value="__nueva__">+ Agregar localidad nueva</option>
-                    </select>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2 rounded-2xl bg-bg p-4 sm:col-span-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm">Nueva localidad</p>
-                      <button
-                        type="button"
-                        onClick={() => setUsarLocalidadNueva(false)}
-                        className="cursor-pointer text-xs text-muted hover:text-text"
-                      >
-                        Elegir de la lista
-                      </button>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <input
-                        placeholder="Localidad (ej: Lanús)"
-                        value={localidadNueva.nombre}
-                        onChange={(e) => setLocalidadNueva({ ...localidadNueva, nombre: e.target.value })}
-                        required
-                        className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
-                      />
-                      <input
-                        placeholder="Provincia (ej: Buenos Aires)"
-                        value={localidadNueva.nombreProvincia}
-                        onChange={(e) => setLocalidadNueva({ ...localidadNueva, nombreProvincia: e.target.value })}
-                        required
-                        className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
+              <CamposSucursal
+                valores={form}
+                localidadNueva={localidadNueva}
+                usarLocalidadNueva={usarLocalidadNueva}
+                localidades={localidades}
+                onCambiar={(campo, valor) => setForm({ ...form, [campo]: valor })}
+                onCambiarLocalidadNueva={(campo, valor) => setLocalidadNueva({ ...localidadNueva, [campo]: valor })}
+                onUsarLocalidadNueva={setUsarLocalidadNueva}
+              />
 
               {error && <p className="text-sm text-danger">{error}</p>}
 
@@ -314,8 +241,17 @@ export default function SucursalesPage() {
                     <MapPin className="mt-0.5 size-3.5 shrink-0" />
                     {s.direccion} — {s.localidad.nombre}, {s.localidad.provincia.nombre}
                   </p>
-                  {s.telefono && <p>{s.telefono}</p>}
+                  {s.whatsapp && <p>{s.whatsapp}</p>}
                   {s.horario && <p>{s.horario}</p>}
+                  <p>{[s.ofreceRetiro && 'Retiro en el local', s.ofreceDelivery && 'Delivery'].filter(Boolean).join(' · ')}</p>
+                  {/* URL pública del menú: no cambia si se renombra la sucursal (ver slugLibre). */}
+                  <a
+                    href={`/${s.slug}`} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 break-all text-accent hover:underline"
+                  >
+                    <Globe className="size-3.5 shrink-0" />
+                    /{s.slug}
+                  </a>
                 </div>
 
                 <div className="mt-auto flex gap-2 border-t border-border pt-3">

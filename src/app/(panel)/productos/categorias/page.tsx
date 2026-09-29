@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { GestionCategoriasForm } from '@/components/forms/GestionCategoriasForm'
-import { authOptions } from '@/lib/auth'
+import { authOptions } from '@/lib/auth/auth'
 
 export default async function CategoriasPage() {
   const sesion = await getServerSession(authOptions)
@@ -16,7 +16,7 @@ export default async function CategoriasPage() {
 
   return (
     <main className="p-6" lang="es">
-      <GestionCategoriasForm />
+      <GestionCategoriasForm rol={sesion.user.rol} />
     </main>
   )
 }

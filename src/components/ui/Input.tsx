@@ -10,6 +10,8 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export function Input({ label, error, id, className = '', ...props }: InputProps) {
+  // Con id, el error queda asociado al campo para los lectores de pantalla.
+  const idError = error && id ? `${id}-error` : undefined
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-sm font-medium text-text">
@@ -17,10 +19,12 @@ export function Input({ label, error, id, className = '', ...props }: InputProps
       </label>
       <input
         id={id}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={idError}
         className={`rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-primary ${className}`}
         {...props}
       />
-      {error && <span className="text-sm text-danger">{error}</span>}
+      {error && <span id={idError} className="text-sm text-danger">{error}</span>}
     </div>
   )
 }

@@ -1,118 +1,132 @@
-import { Bike, ChevronRight, MapPin, ShoppingBag } from "@/components/icons";
+// Home pública (a donde llega el QR): identidad del negocio y selector de sucursal.
+//   Sin negocio configurado → aviso neutro.
+//   Sin sucursales activas  → aviso amable.
+//   Una sola sucursal       → directo a su menú (/{slug}).
+//   Varias                  → tarjetas para elegir.
+// No requiere sesión: "/" no está en el matcher de src/proxy.ts.
 
-const restaurante = {
-  nombre: "Sabor Porteño",
-  tagline: "Parrilla y algo más 🔥",
-  redes: [
-    {
-      nombre: "Instagram",
-      href: "https://instagram.com",
-      icono: (
-        <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
-          <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.5" />
-          <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.5" />
-          <circle cx="17.2" cy="6.8" r="1" fill="currentColor" />
-        </svg>
-      ),
-    },
-    {
-      nombre: "TikTok",
-      href: "https://tiktok.com",
-      icono: (
-        <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
-          <path
-            d="M16 3v10.5a3.5 3.5 0 1 1-3-3.46V7a6.5 6.5 0 1 0 6.5 6.5V9.8a6.3 6.3 0 0 0 3.5 1.06V7.9A4.3 4.3 0 0 1 19 7.5c-1.3-.7-2-1.9-2-3.5h-1Z"
-            stroke="currentColor"
-            strokeWidth="1.3"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ),
-    },
-  ],
-};
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { connection } from 'next/server'
+import { ChevronRight, Clock, IconoWhatsapp, MapPin, UtensilsCrossed } from '@/components/icons'
+import { Card } from '@/components/ui/Card'
+import { AvatarNegocio, ChipsEntrega, RedesNegocio } from '@/components/carta/compartidos/IdentidadNegocio'
+import { obtenerNegocioPublico } from '@/lib/negocio/negocio'
+import { listarSucursalesPublicas, type SucursalPublica } from '@/lib/sucursales/sucursales-publicas'
+import { linkWhatsapp } from '@/lib/sucursales/sucursales-validacion'
 
-const sucursales = [
-  { nombre: "Las Tunas (Pacheco)", slug: "las-tunas", modalidad: "Delivery" },
-  { nombre: "Virreyes", slug: "virreyes", modalidad: "Delivery y retiro" },
-  { nombre: "Puerto de Frutos, Tigre", slug: "puerto-de-frutos", modalidad: "Delivery y retiro" },
-  { nombre: "San Fernando y alrededores", slug: "san-fernando", modalidad: "Delivery y retiro" },
-];
-
-function iniciales(nombre: string) {
-  return nombre
-    .split(" ")
-    .map((palabra) => palabra[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+export async function generateMetadata(): Promise<Metadata> {
+  await connection()
+  const negocio = await obtenerNegocioPublico()
+  return {
+    title: negocio ? `${negocio.nombre} · Pedí online` : 'Menú online',
+    description: negocio?.descripcion ?? undefined,
+  }
 }
 
-export default function Home() {
+export default async function Home() {
+  // Los datos cambian desde el panel: la página se arma en cada visita, no en el build.
+  await connection()
+  const negocio = await obtenerNegocioPublico()
+
+  if (!negocio) {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-bg px-4 py-12 text-text">
+        <Card className="flex flex-col items-center gap-3 text-center">
+          <span className="flex size-14 items-center justify-center rounded-full bg-surface-muted text-muted">
+            <UtensilsCrossed className="size-6" aria-hidden="true" />
+          </span>
+          <h1 className="text-lg font-semibold">Estamos preparando nuestro menú</h1>
+          <p className="text-sm text-muted">Volvé a pasar en un ratito.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  const sucursales = await listarSucursalesPublicas()
+  // Con una sola sucursal no hay nada que elegir.
+  if (sucursales.length === 1) redirect(`/${sucursales[0].slug}`)
+
   return (
-    <div className="flex flex-1 justify-center bg-bg px-4 py-12 text-text" lang="es">
+    <div className="flex flex-1 justify-center bg-bg px-4 py-12 text-text">
       <main className="flex w-full max-w-md flex-col items-center gap-6">
-        <div className="flex size-24 items-center justify-center rounded-full bg-accent text-3xl font-bold text-on-accent shadow-sm ring-8 ring-accent-soft">
-          {iniciales(restaurante.nombre)}
-        </div>
+        <AvatarNegocio nombre={negocio.nombre} logoUrl={negocio.logoUrl} />
 
         <div className="flex flex-col items-center gap-1 text-center">
-          <h1 className="page-title">{restaurante.nombre}</h1>
-          <p className="text-sm text-muted">{restaurante.tagline}</p>
+          <h1 className="page-title">{negocio.nombre}</h1>
+          {negocio.descripcion && <p className="text-sm text-muted">{negocio.descripcion}</p>}
         </div>
 
-        <div className="flex items-center gap-3">
-          {restaurante.redes.map((red) => (
-            <a
-              key={red.nombre}
-              href={red.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={red.nombre}
-              className="flex size-11 items-center justify-center rounded-full bg-surface text-text shadow-sm transition-colors hover:bg-accent hover:text-on-accent"
-            >
-              {red.icono}
-            </a>
-          ))}
-        </div>
+        <RedesNegocio negocio={negocio} />
 
         <section aria-labelledby="titulo-sucursales" className="mt-4 flex w-full flex-col gap-3">
-          <h2 id="titulo-sucursales" className="section-label text-center">
-            Elegí tu local más cercano
-          </h2>
-
-          {sucursales.map((sucursal) => (
-            <a
-              key={sucursal.slug}
-              href={`/${sucursal.slug}`}
-              className="group flex w-full items-center gap-4 rounded-3xl bg-surface p-4 shadow-sm transition-shadow hover:shadow-md"
-            >
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
-                <MapPin className="size-5" />
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-                <span className="leading-tight">{sucursal.nombre}</span>
-                <span className="flex flex-wrap gap-1.5">
-                  {sucursal.modalidad.includes("Delivery") && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-bg px-2.5 py-0.5 text-xs text-muted">
-                      <Bike className="size-3.5" />
-                      Delivery
-                    </span>
-                  )}
-                  {sucursal.modalidad.includes("retiro") && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-bg px-2.5 py-0.5 text-xs text-muted">
-                      <ShoppingBag className="size-3.5" />
-                      Retiro
-                    </span>
-                  )}
-                </span>
-              </span>
-              <ChevronRight className="size-5 shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />
-            </a>
-          ))}
+          {sucursales.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 rounded-3xl bg-surface p-6 text-center shadow-sm">
+              <h2 id="titulo-sucursales" className="font-semibold">Por ahora no estamos tomando pedidos online</h2>
+              <p className="text-sm text-muted">Seguinos en nuestras redes para enterarte cuándo volvemos.</p>
+            </div>
+          ) : (
+            <>
+              <h2 id="titulo-sucursales" className="section-label text-center">
+                Elegí tu local más cercano
+              </h2>
+              <ul className="flex flex-col gap-3">
+                {sucursales.map((sucursal) => (
+                  <li key={sucursal.idSucursal}>
+                    <TarjetaSucursal sucursal={sucursal} />
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </section>
       </main>
     </div>
-  );
+  )
 }
 
+// El link a la sucursal y el botón de WhatsApp son hermanos (no uno dentro del otro): un
+// elemento interactivo no puede ir dentro de otro.
+function TarjetaSucursal({ sucursal }: { sucursal: SucursalPublica }) {
+  return (
+    <div className="flex items-stretch gap-2 rounded-3xl bg-surface p-2 shadow-sm transition-shadow hover:shadow-md">
+      <Link
+        href={`/${sucursal.slug}`}
+        className="group flex min-w-0 flex-1 items-center gap-4 rounded-2xl p-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+          <MapPin className="size-5" aria-hidden="true" />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <span className="leading-tight font-semibold">{sucursal.nombre}</span>
+          <span className="flex flex-col gap-0.5 text-xs text-muted">
+            <span className="truncate">{sucursal.direccion}</span>
+            {sucursal.horario && (
+              <span className="inline-flex items-center gap-1">
+                <Clock className="size-3.5 shrink-0" aria-hidden="true" />
+                {sucursal.horario}
+              </span>
+            )}
+          </span>
+          <ChipsEntrega ofreceRetiro={sucursal.ofreceRetiro} ofreceDelivery={sucursal.ofreceDelivery} />
+        </span>
+        <ChevronRight
+          className="size-5 shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent motion-reduce:transition-none"
+          aria-hidden="true"
+        />
+      </Link>
+      {sucursal.whatsapp && (
+        <a
+          href={linkWhatsapp(sucursal.whatsapp)}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Escribirle por WhatsApp a ${sucursal.nombre}`}
+          className="flex w-12 shrink-0 items-center justify-center self-center rounded-2xl bg-bg py-3 text-success transition-colors hover:bg-success hover:text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success"
+        >
+          <IconoWhatsapp className="size-6" />
+        </a>
+      )}
+    </div>
+  )
+}

@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth'
 import { ResumenDelDia } from '@/components/dashboard/ResumenDelDia'
-import { authOptions } from '@/lib/auth'
+import { authOptions } from '@/lib/auth/auth'
 
 export default async function DashboardPage() {
   const sesion = await getServerSession(authOptions)

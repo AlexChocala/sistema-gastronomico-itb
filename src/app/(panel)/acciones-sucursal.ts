@@ -5,9 +5,9 @@
 
 import { cookies } from 'next/headers'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { COOKIE_SUCURSAL_ACTIVA } from '@/lib/sucursal-activa'
+import { authOptions } from '@/lib/auth/auth'
+import { prisma } from '@/lib/db/prisma'
+import { COOKIE_SUCURSAL_ACTIVA } from '@/lib/sucursales/sucursal-activa'
 
 export async function elegirSucursal(idSucursal: number) {
   const sesion = await getServerSession(authOptions)

@@ -1,23 +1,31 @@
 'use client'
 
 // Pantalla de Caja (pestaña aparte, sin sidebar). Flujo de mostrador:
-//   1. Armar el pedido (productos, cliente, tipo de entrega) → "Cobrar".
+//   1. Armar el pedido (productos, cliente, tipo de entrega; en delivery también celular,
+//      dirección, localidad si la sucursal tiene zonas e indicaciones opcionales) → "Cobrar".
 //   2. Elegir método de pago (efectivo calcula el vuelto) → "Confirmar pago".
-//   3. El pedido entra PAGADO a Cocina como "recibido" y se imprimen comanda + ticket.
+//   3. POST /api/pedidos/caja: el pedido entra PAGADO a Cocina como "recibido", con el
+//      número que le da la base, y se imprimen comanda + ticket.
 
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft, Banknote, Bike, CircleCheck, Landmark, Minus, Plus, Printer, Search, ShoppingBag, Trash2,
 } from '@/components/icons'
 import { IconoCategoria } from '@/components/icons/IconoCategoria'
+import { Campanita } from '@/components/notificaciones/Campanita'
 import { TicketsPedido } from '@/components/pantallas/TicketsPedido'
-import { PastillaSucursal, useSucursalActiva } from '@/components/sucursal/SucursalActiva'
+import { CamposDelivery, VALORES_DELIVERY_VACIOS, type ValoresDelivery } from '@/components/pedidos/CamposDelivery'
+import { DatosEntrega } from '@/components/pedidos/DatosEntrega'
+import { PastillaSucursal } from '@/components/sucursal/SucursalActiva'
 import {
-  usePedidosPantalla,
+  crearPedidoMostrador,
+  cuerpoPedidoCaja,
   type MetodoPagoPantalla,
   type PedidoPantalla,
   type TipoEntregaPantalla,
-} from '@/lib/pedidos-pantallas'
+  type ZonaDelivery,
+} from '@/lib/pedidos/pedidos-pantallas'
+import { ErrorPedido, MAX_NOMBRE_CLIENTE, erroresDatosDelivery, validarPedidoCaja } from '@/lib/pedidos/pedidos-validacion'
 
 const TODAS = 'Todos'
 
@@ -37,6 +45,7 @@ type ProductoCaja = {
 
 type RespuestaProductosCaja = {
   productos?: ProductoCaja[]
+  localidadesDelivery?: ZonaDelivery[]
   error?: string
 }
 
@@ -173,6 +182,8 @@ function PanelCobro({
   total,
   metodoPago,
   pagaCon,
+  enviando,
+  error,
   onCambiarMetodo,
   onCambiarPagaCon,
   onVolver,
@@ -181,6 +192,8 @@ function PanelCobro({
   total: number
   metodoPago: MetodoPagoPantalla
   pagaCon: string
+  enviando: boolean
+  error: string | null
   onCambiarMetodo: (metodo: MetodoPagoPantalla) => void
   onCambiarPagaCon: (valor: string) => void
   onVolver: () => void
@@ -243,11 +256,18 @@ function PanelCobro({
         </p>
       )}
 
-      <div className="mt-auto grid grid-cols-[auto_1fr] gap-2">
+      {error && (
+        <p role="alert" className="mt-auto rounded-2xl bg-danger/10 p-4 text-sm text-danger">
+          {error}
+        </p>
+      )}
+
+      <div className={`${error ? '' : 'mt-auto '}grid grid-cols-[auto_1fr] gap-2`}>
         <button
           type="button"
           onClick={onVolver}
-          className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border px-5 py-3.5 hover:bg-bg"
+          disabled={enviando}
+          className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border px-5 py-3.5 hover:bg-bg disabled:cursor-not-allowed disabled:opacity-60"
         >
           <ArrowLeft className="size-4" />
           Volver
@@ -255,11 +275,11 @@ function PanelCobro({
         <button
           type="button"
           onClick={onConfirmar}
-          disabled={!pagoValido}
+          disabled={!pagoValido || enviando}
           className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-accent py-3.5 text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
         >
           <CircleCheck className="size-5" />
-          Confirmar pago
+          {enviando ? 'Registrando…' : 'Confirmar pago'}
         </button>
       </div>
       <p className="-mt-3 text-center text-xs text-muted">Se envía a cocina y se imprimen los tickets.</p>
@@ -269,11 +289,13 @@ function PanelCobro({
 
 type Cobrado = { pedido: PedidoPantalla; pagaCon: number | null }
 
-export default function CajaPage() {
-  const { sucursal } = useSucursalActiva()
-  const { proximoIdPedido, crearPedidoMostrador } = usePedidosPantalla(sucursal?.idSucursal ?? null)
+const MENSAJE_PRODUCTOS_NO_DISPONIBLES =
+  'Algunos productos ya no están disponibles y los sacamos del pedido. Revisá el carrito antes de cobrar.'
 
+export default function CajaPage() {
   const [productos, setProductos] = useState<ProductoCaja[]>([])
+  // Zonas de delivery de la sucursal: si hay, en un delivery hay que elegir una.
+  const [zonas, setZonas] = useState<ZonaDelivery[]>([])
   const [cargandoProductos, setCargandoProductos] = useState(true)
   const [errorProductos, setErrorProductos] = useState('')
 
@@ -282,12 +304,18 @@ export default function CajaPage() {
   const [carrito, setCarrito] = useState<LineaCarrito[]>([])
   const [cliente, setCliente] = useState('')
   const [tipoEntrega, setTipoEntrega] = useState<TipoEntregaPantalla>('retiro')
+  // Solo se mandan en delivery; se conservan si se vuelve a retiro por error.
+  const [entrega, setEntrega] = useState<ValoresDelivery>(VALORES_DELIVERY_VACIOS)
   // Producto que espera confirmación antes de salir del carrito.
   const [confirmandoQuitar, setConfirmandoQuitar] = useState<number | null>(null)
 
   const [cobrando, setCobrando] = useState(false)
   const [metodoPago, setMetodoPago] = useState<MetodoPagoPantalla>('efectivo')
   const [pagaCon, setPagaCon] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [errorCobro, setErrorCobro] = useState<string | null>(null)
+  // Aviso sobre el carrito (por ejemplo, productos que se quedaron sin stock al cobrar).
+  const [avisoCarrito, setAvisoCarrito] = useState<string | null>(null)
   // Último pedido cobrado: sus tickets quedan listos para reimprimir.
   const [ultimoCobrado, setUltimoCobrado] = useState<Cobrado | null>(null)
   // Cada incremento dispara una impresión (después de que los tickets se renderizan).
@@ -304,7 +332,10 @@ export default function CajaPage() {
         }
         const datos = await respuesta.json() as RespuestaProductosCaja
         if (!respuesta.ok) throw new Error(datos.error || 'No se pudieron cargar los productos.')
-        if (paginaActiva) setProductos(datos.productos ?? [])
+        if (paginaActiva) {
+          setProductos(datos.productos ?? [])
+          setZonas(datos.localidadesDelivery ?? [])
+        }
       } catch (errorDesconocido) {
         if (paginaActiva) {
           setErrorProductos(
@@ -339,15 +370,25 @@ export default function CajaPage() {
       producto.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()),
   )
 
-  // Número estimado del próximo pedido (con backend lo asigna la base).
-  const proximoNumero = proximoIdPedido
   const cantidadItems = carrito.reduce((suma, linea) => suma + linea.cantidad, 0)
+  // Estimado con los precios en pantalla: el total real lo calcula el servidor al crear el pedido.
   const total = carrito.reduce((suma, linea) => suma + linea.producto.precio * linea.cantidad, 0)
   const faltaCliente = cliente.trim() === ''
-  const puedeCobrar = carrito.length > 0 && !faltaCliente
+  const erroresEntrega = tipoEntrega === 'delivery' ? erroresDatosDelivery(entrega, zonas.length > 0) : {}
+  const entregaValida = Object.keys(erroresEntrega).length === 0
+  const puedeCobrar = carrito.length > 0 && !faltaCliente && entregaValida
+  // Por qué no se puede cobrar todavía (se muestra debajo del botón).
+  const pistaCobro = carrito.length === 0
+    ? ''
+    : faltaCliente
+      ? 'Cargá el nombre del cliente para cobrar.'
+      : !entregaValida
+        ? 'Completá los datos del delivery para cobrar.'
+        : ''
 
   function agregar(producto: ProductoCaja) {
     setUltimoCobrado(null)
+    setAvisoCarrito(null)
     setCarrito((actual) =>
       actual.some((linea) => linea.producto.idProducto === producto.idProducto)
         ? actual.map((linea) =>
@@ -384,37 +425,74 @@ export default function CajaPage() {
     setConfirmandoQuitar(null)
     setMetodoPago('efectivo')
     setPagaCon('')
+    setErrorCobro(null)
     setCobrando(true)
   }
 
-  function confirmarPago() {
-    const pedido = crearPedidoMostrador({
-      cliente: cliente.trim(),
+  async function confirmarPago() {
+    if (enviando) return
+    const datos = {
+      cliente,
       tipoEntrega,
       metodoPago,
-      items: carrito.map((linea) => ({
-        cantidad: linea.cantidad,
-        producto: linea.producto.nombre,
-        precioUnitario: linea.producto.precio,
-      })),
-    })
-    setUltimoCobrado({ pedido, pagaCon: metodoPago === 'efectivo' ? Number(pagaCon) : null })
+      items: carrito.map((linea) => ({ idProducto: linea.producto.idProducto, cantidad: linea.cantidad })),
+      ...(tipoEntrega === 'delivery'
+        ? {
+            telefono: entrega.telefono,
+            direccion: entrega.direccion,
+            idLocalidad: entrega.idLocalidad ? Number(entrega.idLocalidad) : null,
+            referencias: entrega.referencias,
+          }
+        : {}),
+    }
+    // Última revisión con el mismo validador que la API (topes de ítems, etc.).
+    try {
+      validarPedidoCaja(cuerpoPedidoCaja(datos))
+    } catch (error) {
+      setErrorCobro(error instanceof ErrorPedido ? error.message : 'Revisá los datos del pedido.')
+      return
+    }
+
+    setEnviando(true)
+    setErrorCobro(null)
+    const resultado = await crearPedidoMostrador(datos)
+    setEnviando(false)
+
+    if (!resultado.ok) {
+      const noDisponibles = resultado.datos.productosNoDisponibles
+      if (resultado.estado === 409 && Array.isArray(noDisponibles)) {
+        // Se sacan del carrito y se vuelve a armar el pedido: el total cambió.
+        setCarrito((actual) => actual.filter((linea) => !noDisponibles.includes(linea.producto.idProducto)))
+        setProductos((actuales) => actuales.map((producto) => (
+          noDisponibles.includes(producto.idProducto) ? { ...producto, disponible: false } : producto
+        )))
+        setCobrando(false)
+        setAvisoCarrito(MENSAJE_PRODUCTOS_NO_DISPONIBLES)
+        return
+      }
+      setErrorCobro(resultado.error)
+      return
+    }
+
+    setUltimoCobrado({ pedido: resultado.pedido, pagaCon: metodoPago === 'efectivo' ? Number(pagaCon) : null })
     setOrdenImpresion((n) => n + 1)
     setCobrando(false)
     setCarrito([])
     setCliente('')
     setTipoEntrega('retiro')
+    setEntrega(VALORES_DELIVERY_VACIOS)
   }
 
   return (
     <>
       <main className="grid min-h-screen gap-6 bg-bg p-6 print:hidden lg:grid-cols-[minmax(0,1fr)_24rem]">
         <section className="flex flex-col gap-5">
-          <header>
+          <header className="flex items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="page-title">Caja</h1>
               <PastillaSucursal />
             </div>
+            <Campanita />
           </header>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -466,8 +544,9 @@ export default function CajaPage() {
         </section>
 
         <aside className="flex flex-col gap-5 rounded-3xl bg-surface p-5 lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)]">
+          {/* El número lo asigna la base al registrar el pedido: se ve en la confirmación. */}
           <h2 className="text-lg">
-            Pedido <strong className="font-bold">#{proximoNumero}</strong>
+            <strong className="font-bold">Nuevo pedido</strong>
             {cobrando && <span className="text-muted"> · {cliente.trim()}</span>}
           </h2>
 
@@ -476,19 +555,22 @@ export default function CajaPage() {
               total={total}
               metodoPago={metodoPago}
               pagaCon={pagaCon}
+              enviando={enviando}
+              error={errorCobro}
               onCambiarMetodo={setMetodoPago}
               onCambiarPagaCon={setPagaCon}
               onVolver={() => setCobrando(false)}
-              onConfirmar={confirmarPago}
+              onConfirmar={() => void confirmarPago()}
             />
           ) : (
             <>
-              <div className="flex flex-col gap-3">
+              <div className="-mx-1 flex max-h-[45vh] shrink-0 flex-col gap-3 overflow-y-auto px-1 pb-1">
                 <input
                   value={cliente}
                   onChange={(e) => setCliente(e.target.value)}
                   placeholder="Nombre del cliente"
                   aria-label="Nombre del cliente"
+                  maxLength={MAX_NOMBRE_CLIENTE}
                   className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
                 />
                 <div className="grid grid-cols-2 gap-1 rounded-full bg-bg p-1 text-sm">
@@ -507,7 +589,20 @@ export default function CajaPage() {
                     </button>
                   ))}
                 </div>
+                {tipoEntrega === 'delivery' && (
+                  <CamposDelivery
+                    id="caja-delivery"
+                    valores={entrega}
+                    errores={erroresEntrega}
+                    zonas={zonas}
+                    onCambiar={(campo, valor) => setEntrega((previos) => ({ ...previos, [campo]: valor }))}
+                  />
+                )}
               </div>
+
+              {avisoCarrito && (
+                <p role="alert" className="rounded-2xl bg-warning-surface p-3 text-sm">{avisoCarrito}</p>
+              )}
 
               <ul className="-mx-1 flex flex-1 flex-col gap-3 overflow-y-auto px-1">
                 {carrito.length === 0 &&
@@ -517,6 +612,9 @@ export default function CajaPage() {
                       <p>
                         Pedido <strong>#{ultimoCobrado.pedido.idPedido}</strong> cobrado y enviado a cocina.
                       </p>
+                      {ultimoCobrado.pedido.tipoEntrega === 'delivery' && (
+                        <DatosEntrega pedido={ultimoCobrado.pedido} />
+                      )}
                       <button
                         type="button"
                         onClick={() => setOrdenImpresion((n) => n + 1)}
@@ -564,9 +662,7 @@ export default function CajaPage() {
                   <Banknote className="size-5" />
                   Cobrar
                 </button>
-                {carrito.length > 0 && faltaCliente && (
-                  <p className="-mt-2 text-center text-xs text-muted">Cargá el nombre del cliente para cobrar.</p>
-                )}
+                {pistaCobro && <p className="-mt-2 text-center text-xs text-muted">{pistaCobro}</p>}
               </div>
             </>
           )}

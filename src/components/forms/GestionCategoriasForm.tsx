@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Package, Pencil, Plus, Power, RotateCcw, X } from '@/components/icons'
 import { IconoCategoria } from '@/components/icons/IconoCategoria'
+import type { RolNombre } from '@/types'
 
 const claseCampo =
   'w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent disabled:opacity-60'
@@ -20,7 +21,14 @@ type Categoria = {
   descripcion: string | null
   orden: number
   activa: boolean
-  _count: { productos: number }
+  // `extras` es opcional hasta que la API lo devuelva (ver lib/productos/extras-tipos.ts).
+  _count: { productos: number; extras?: number }
+}
+
+function textoExtras(cantidad: number | undefined) {
+  if (cantidad === undefined) return 'Extras'
+  if (cantidad === 0) return 'Agregar extras'
+  return `${cantidad} ${cantidad === 1 ? 'extra' : 'extras'}`
 }
 
 type RespuestaCategorias = { categorias: Categoria[] }
@@ -35,7 +43,7 @@ async function leerRespuesta<T>(respuesta: Response): Promise<T> {
   return respuesta.json() as Promise<T>
 }
 
-export function GestionCategoriasForm() {
+export function GestionCategoriasForm({ rol }: { rol: RolNombre }) {
   const router = useRouter()
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [formulario, setFormulario] = useState(formularioVacio)
@@ -243,6 +251,17 @@ export function GestionCategoriasForm() {
                   </p>
                 </div>
               </div>
+
+              {rol === 'admin' && categoria.activa && (
+                <button
+                  type="button"
+                  onClick={() => router.push(`/productos/extras?categoria=${categoria.idCategoria}`)}
+                  className="inline-flex w-fit cursor-pointer items-center gap-1.5 text-sm text-accent hover:underline"
+                >
+                  <Plus className="size-4" />
+                  {textoExtras(categoria._count.extras)}
+                </button>
+              )}
 
               <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-4">
                 <p className="inline-flex items-center gap-2 text-sm text-muted">

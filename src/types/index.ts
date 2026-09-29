@@ -29,7 +29,7 @@ export interface Usuario {
 export interface Sucursal {
   idSucursal: number
   nombre: string
-  telefono: string | null
+  whatsapp: string | null
   direccion: string
   horario: string | null
   activa: boolean

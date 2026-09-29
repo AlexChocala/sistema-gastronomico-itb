@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/db/prisma'
 import { PruebaProductosForm } from '@/components/forms/PruebaProductosForm'
 
 // Pantalla temporal disponible solo durante el desarrollo.

@@ -3,8 +3,8 @@
 
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { prisma } from '@/lib/prisma'
-import { enviarEmailRecupero } from '@/lib/email'
+import { prisma } from '@/lib/db/prisma'
+import { enviarEmailRecupero } from '@/lib/auth/email'
 
 const DURACION_TOKEN_MS = 30 * 60 * 1000 // 30 minutos
 

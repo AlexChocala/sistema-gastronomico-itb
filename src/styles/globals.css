@@ -43,6 +43,14 @@
   --danger: #dc2626;
   --warning: #ca8a04;
   --warning-surface: #fefce8;
+
+  /* Paleta de Aviso y AvisoFlotante (components/ui): color del ícono + fondo del aviso. */
+  --success-surface: #f0fdf4;
+  --danger-surface: #fef2f2;
+  --info: #2563eb;
+  --info-surface: #eff6ff;
+  --toast: #18181b;         /* fondo del aviso flotante */
+  --on-toast: #fafafa;      /* texto sobre --toast */
 }
 
 /* =========================================
@@ -96,6 +104,12 @@
   --color-danger: var(--danger);
   --color-warning: var(--warning);
   --color-warning-surface: var(--warning-surface);
+  --color-success-surface: var(--success-surface);
+  --color-danger-surface: var(--danger-surface);
+  --color-info: var(--info);
+  --color-info-surface: var(--info-surface);
+  --color-toast: var(--toast);
+  --color-on-toast: var(--on-toast);
 
   --color-order-preparing: var(--order-preparing);
   --color-order-ready: var(--order-ready);

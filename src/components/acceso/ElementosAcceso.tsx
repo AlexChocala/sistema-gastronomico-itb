@@ -10,13 +10,26 @@ export const claseBotonAcento =
 export const claseEnlaceSecundario =
   'inline-flex items-center justify-center gap-2 text-sm text-muted transition-colors hover:text-text'
 
-export function LogoMise() {
+// Marca de la cabecera (acceso y sidebar del panel). Con el nombre del negocio muestra
+// "Kiddo / con Mise": el restaurante en texto y Mise como marca del software. Sin nombre
+// (sistema todavía sin configurar) muestra solo "Mise". Nunca muestra el logo del negocio:
+// el panel interno mantiene los colores de Mise.
+export function LogoMise({ nombreNegocio }: { nombreNegocio?: string | null }) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="flex size-9 items-center justify-center rounded-full bg-accent text-on-accent">
+    <div className="flex min-w-0 items-center gap-3">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent">
         <UtensilsCrossed size={18} strokeWidth={2} />
       </span>
-      <span className="font-semibold tracking-tight">Mise</span>
+      {nombreNegocio ? (
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate leading-tight font-semibold tracking-tight" title={nombreNegocio}>
+            {nombreNegocio}
+          </span>
+          <span className="text-xs text-muted">con Mise</span>
+        </span>
+      ) : (
+        <span className="font-semibold tracking-tight">Mise</span>
+      )}
     </div>
   )
 }
@@ -43,11 +56,11 @@ export function TarjetaAcceso({
 }) {
   return (
     <div className="w-full max-w-sm">
-      <span className={`flex size-12 items-center justify-center rounded-full ${tonos[tono]}`}>
+      <span className={`mx-auto flex size-12 items-center justify-center rounded-full ${tonos[tono]}`}>
         <Icono className="size-6" strokeWidth={1.75} />
       </span>
-      <h1 className="page-title mt-5">{titulo}</h1>
-      {descripcion && <p className="mt-2 text-sm text-muted">{descripcion}</p>}
+      <h1 className="page-title mt-5 text-center">{titulo}</h1>
+      {descripcion && <p className="mt-2 text-center text-sm text-muted">{descripcion}</p>}
       {children && <div className="mt-8">{children}</div>}
     </div>
   )

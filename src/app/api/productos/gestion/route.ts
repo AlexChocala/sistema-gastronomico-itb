@@ -1,4 +1,4 @@
-import { productosAdmin } from '@/lib/productos-admin-api'
+import { productosAdmin } from '@/lib/productos/productos-admin-api'
 
 // Administración privada; la carta pública sigue en /api/productos?idSucursal=...
 export async function GET(request: Request) {

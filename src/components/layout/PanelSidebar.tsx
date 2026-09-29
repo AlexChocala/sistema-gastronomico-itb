@@ -2,11 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CerrarSesionButton } from '@/components/layout/CerrarSesionButton'
-import { SelectorSucursal, useSucursalActiva } from '@/components/sucursal/SucursalActiva'
+import { LogoMise } from '@/components/acceso/ElementosAcceso'
+import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import {
   ChartColumn, ChefHat, ChevronDown, ClipboardList, ExternalLink, LayoutDashboard,
-  Monitor, MonitorPlay, Package, Settings, Store, User, Users, UtensilsCrossed, Wallet,
+  Monitor, MonitorPlay, Package, Settings, Store, Users, Wallet,
   type LucideIcon,
 } from '@/components/icons'
 
@@ -34,8 +34,11 @@ const secciones: Seccion[] = [
   {
     titulo: 'Operaciones',
     roles: ['admin', 'supervisor'],
-    enlaces: [{ href: '/productos', texto: 'Productos', icono: Package }],
-    pendientes: [{ texto: 'Reportes', icono: ChartColumn }],
+    enlaces: [
+      { href: '/productos', texto: 'Productos', icono: Package },
+      { href: '/reportes', texto: 'Reportes', icono: ChartColumn },
+    ],
+    pendientes: [],
   },
   {
     titulo: 'Administración',
@@ -43,8 +46,9 @@ const secciones: Seccion[] = [
     enlaces: [
       { href: '/usuarios', texto: 'Usuarios', icono: Users },
       { href: '/sucursales', texto: 'Sucursales', icono: Store },
+      { href: '/configuracion', texto: 'Configuración', icono: Settings },
     ],
-    pendientes: [{ texto: 'Configuración', icono: Settings }],
+    pendientes: [],
   },
 ]
 
@@ -58,21 +62,12 @@ function esVisible(roles: string[] | undefined, rol: string) {
   return !roles || roles.includes(rol)
 }
 
-function iniciales(nombre: string) {
-  return nombre
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((parte) => parte[0].toUpperCase())
-    .join('')
-}
-
 const claseItem = 'nav-item'
 const claseSubItem = 'flex items-center gap-2.5 whitespace-nowrap rounded-full px-3 py-2 text-(length:--sidebar-texto) transition-colors'
 const claseIcono = 'size-(--sidebar-icono) shrink-0'
 const trazoIcono = 1.75
 
-export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
+export function PanelSidebar({ rol, nombreNegocio }: { rol: string; nombreNegocio: string }) {
   const rutaActual = usePathname()
   const { sucursal } = useSucursalActiva()
   const seccionesVisibles = secciones.filter((seccion) => esVisible(seccion.roles, rol))
@@ -86,14 +81,9 @@ export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
 
   return (
     <aside className="flex flex-col gap-8 p-4 md:sticky md:top-0 md:h-screen md:overflow-y-auto scrollbar-oculta">
-      <div className="flex items-center gap-3 px-2 pt-2">
-        <span className="flex size-9 items-center justify-center rounded-full bg-accent text-on-accent">
-          <UtensilsCrossed size={18} strokeWidth={2} />
-        </span>
-        <span className="font-semibold tracking-tight">Mise</span>
+      <div className="px-2 pt-2">
+        <LogoMise nombreNegocio={nombreNegocio} />
       </div>
-
-      <SelectorSucursal />
 
       <nav aria-label="Menú principal" className="flex flex-col gap-6">
         {seccionesVisibles.map((seccion) => (
@@ -142,26 +132,6 @@ export function PanelSidebar({ nombre, rol }: { nombre: string; rol: string }) {
           </div>
         ))}
       </nav>
-
-      <div className="mt-auto flex flex-col gap-4">
-        <div className="flex items-center gap-3 rounded-2xl bg-bg p-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
-            {iniciales(nombre)}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{nombre}</p>
-            <p className="text-xs capitalize text-muted">{rol}</p>
-          </div>
-        </div>
-        <nav aria-label="Menú de usuario" className="flex flex-col gap-1">
-          <p className="section-label mb-1 px-4">General</p>
-          <Link href="/perfil" aria-current={rutaActual === '/perfil' ? 'page' : undefined} className={claseItem + ' ' + (rutaActual === '/perfil' ? 'bg-surface-muted font-medium text-text' : 'text-muted hover:bg-surface-muted/60 hover:text-text')}>
-            <User strokeWidth={trazoIcono} className={claseIcono + ' ' + (rutaActual === '/perfil' ? 'text-accent' : '')} />
-            Perfil
-          </Link>
-          <CerrarSesionButton />
-        </nav>
-      </div>
     </aside>
   )
 }

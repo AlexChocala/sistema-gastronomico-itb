@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/db/prisma'
 
 // Consulta pública de productos disponibles. Ejemplo: /api/productos?idSucursal=1
 export async function GET(request: Request) {

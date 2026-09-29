@@ -28,11 +28,25 @@ export { Receipt, Flame, Globe, CalendarDays, Clock, CheckCheck } from 'lucide-r
 // Acceso (login y contraseñas)
 export { Mail, MailCheck, LockKeyhole, Eye, EyeOff, ArrowRight, ShieldCheck, TriangleAlert } from 'lucide-react'
 
-// Landing pública
-export { MapPin } from 'lucide-react'
+// Landing pública y menú digital
+export { MapPin, ShoppingCart, Info } from 'lucide-react'
+
+// Pedidos — datos de entrega del delivery
+export { Phone } from 'lucide-react'
+// Logos de redes (lucide no trae marcas): dibujados en ./Redes.tsx
+export { IconoInstagram, IconoTikTok, IconoFacebook, IconoWhatsapp } from './Redes'
 
 // Usuarios — gestión
 export { KeyRound, Copy } from 'lucide-react'
 
+// Configuración — logo del negocio
+export { ImagePlus } from 'lucide-react'
+
 // UI
 export { ChevronDown, ExternalLink, RotateCcw } from 'lucide-react'
+
+// Avisos (Aviso / AvisoFlotante)
+export { CircleX } from 'lucide-react'
+
+// Barra superior — notificaciones
+export { Bell } from 'lucide-react'

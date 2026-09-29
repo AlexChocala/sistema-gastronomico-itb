@@ -1,4 +1,4 @@
-import { ErrorProducto, idValido } from '@/lib/productos-validacion'
+import { ErrorProducto, idValido } from '@/lib/productos/productos-validacion'
 
 export type DatosCategoria = {
   nombre?: string

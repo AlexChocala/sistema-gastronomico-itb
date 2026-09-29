@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { GestionProductosForm } from '@/components/forms/GestionProductosForm'
-import { authOptions } from '@/lib/auth'
+import { authOptions } from '@/lib/auth/auth'
 
 export default async function ProductosPage() {
   const sesion = await getServerSession(authOptions)
@@ -17,7 +17,7 @@ export default async function ProductosPage() {
 
   return (
     <main className="p-6" lang="es">
-      <GestionProductosForm />
+      <GestionProductosForm rol={sesion.user.rol} />
     </main>
   )
 }

@@ -1,4 +1,4 @@
-import { productosAdmin } from '@/lib/productos-admin-api'
+import { productosAdmin } from '@/lib/productos/productos-admin-api'
 
 export async function GET(request: Request) {
   return productosAdmin.listarCategorias(request)

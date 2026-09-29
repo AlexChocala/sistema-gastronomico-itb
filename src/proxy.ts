@@ -25,8 +25,12 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // La administración de usuarios es solo para admin; la API también lo valida.
-  if (request.nextUrl.pathname.startsWith('/usuarios') && token.rol !== 'admin') {
+  // Usuarios y Configuración son solo para admin; las APIs también lo validan. Se compara
+  // por segmento completo: un startsWith('/configuracion') también atraparía
+  // '/configuracion-inicial', que tiene su propia lógica para no-admin.
+  const pathname = request.nextUrl.pathname
+  const soloAdmin = ['/usuarios', '/configuracion'].some((ruta) => pathname === ruta || pathname.startsWith(ruta + '/'))
+  if (soloAdmin && token.rol !== 'admin') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
@@ -39,10 +43,14 @@ export const config = {
     '/pedidos/:path*',
     '/productos/:path*',
     '/usuarios/:path*',
+    '/sucursales/:path*',
     '/reportes/:path*',
     '/perfil/:path*',
+    '/configuracion/:path*',
     // Pantallas de pestaña aparte. Pedidos Mostrador queda afuera a propósito: es pública.
     '/pantallas/caja/:path*',
     '/pantallas/cocina/:path*',
+    // Asistente de primera configuración (fuera de (panel), pero también requiere sesión).
+    '/configuracion-inicial/:path*',
   ],
 }

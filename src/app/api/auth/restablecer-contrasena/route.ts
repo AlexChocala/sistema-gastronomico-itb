@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcrypt'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/db/prisma'
 import { verificarTokenReset } from '@/app/api/auth/recuperar-contrasena/route'
 
 export async function POST(request: Request) {

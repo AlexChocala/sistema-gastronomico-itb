@@ -1,20 +1,22 @@
 'use client'
 
 // Resumen del día para el Dashboard: números grandes, sin gráficos (los gráficos
-// detallados van en Reportes). Los datos salen de usePedidosPantalla(), así que cuando
-// exista la API de pedidos este componente no cambia.
+// detallados van en Reportes). Los datos salen de usePedidosPantalla() (la lista de la
+// sucursal activa, que se actualiza sola). Esa lista trae los entregados de las últimas
+// 24 horas, así que alcanza para los números de hoy.
 
 import { useSyncExternalStore, type ReactNode } from 'react'
 import {
   Banknote, Bike, CalendarDays, CheckCheck, ChefHat, CircleCheck, Clock, ClipboardList, ExternalLink, Flame,
   Globe, Landmark, Receipt, ShoppingBag, Store, Wallet, type LucideIcon,
 } from '@/components/icons'
+import { EstadoConexion } from '@/components/pedidos/EstadoConexion'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import {
   usePedidosPantalla,
   type EstadoPedidoPantalla,
   type PedidoPantalla,
-} from '@/lib/pedidos-pantallas'
+} from '@/lib/pedidos/pedidos-pantallas'
 
 const formatoPrecio = new Intl.NumberFormat('es-AR', {
   style: 'currency',
@@ -32,6 +34,7 @@ const formatoFecha = new Intl.DateTimeFormat('es-AR', {
 const formatoHora = new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit' })
 
 const estados: Record<EstadoPedidoPantalla, { texto: string; color: string; punto: string }> = {
+  pendiente_pago: { texto: 'Esperando pago', color: 'text-warning', punto: 'bg-warning' },
   recibido: { texto: 'Recibido', color: 'text-accent', punto: 'bg-accent' },
   en_preparacion: { texto: 'En preparación', color: 'text-order-preparing', punto: 'bg-order-preparing' },
   listo: { texto: 'Listo', color: 'text-order-ready', punto: 'bg-order-ready' },
@@ -96,12 +99,12 @@ const sinSuscripcion = () => () => {}
 
 export function ResumenDelDia({ nombre }: { nombre: string }) {
   const { sucursal } = useSucursalActiva()
-  const { pedidos } = usePedidosPantalla(sucursal?.idSucursal ?? null)
+  const { pedidos, cargando, error, recargar } = usePedidosPantalla(sucursal?.idSucursal ?? null)
   // "Hoy" y las horas dependen de la zona horaria del navegador: se calculan solo en el
   // cliente para no generar diferencias de hidratación con el render del servidor.
   const enCliente = useSyncExternalStore(sinSuscripcion, () => true, () => false)
 
-  if (!enCliente) {
+  if (!enCliente || (cargando && !error)) {
     return <p className="rounded-3xl bg-surface p-10 text-center text-muted">Cargando resumen...</p>
   }
 
@@ -110,8 +113,9 @@ export function ResumenDelDia({ nombre }: { nombre: string }) {
 
   const cobrados = deHoy.filter((pedido) => pedido.estadoPago === 'pagado')
   const ventas = cobrados.reduce((suma, pedido) => suma + pedido.total, 0)
+  // Efectivo a cobrar al entregar y transferencias todavía sin confirmar.
   const porCobrar = deHoy
-    .filter((pedido) => pedido.estadoPago === 'pendiente')
+    .filter((pedido) => pedido.estadoPago !== 'pagado')
     .reduce((suma, pedido) => suma + pedido.total, 0)
   const ticketPromedio = cobrados.length > 0 ? ventas / cobrados.length : 0
   const online = deHoy.filter((pedido) => pedido.origen === 'online').length
@@ -160,6 +164,8 @@ export function ResumenDelDia({ nombre }: { nombre: string }) {
           <ExternalLink className="size-3.5" />
         </a>
       </header>
+
+      <EstadoConexion error={error} onReintentar={() => void recargar()} />
 
       <section aria-label="Indicadores del día" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Indicador
@@ -299,7 +305,7 @@ export function ResumenDelDia({ nombre }: { nombre: string }) {
                         {formatoHora.format(new Date(pedido.fecha))} ·{' '}
                         {pedido.tipoEntrega === 'delivery' ? 'Delivery' : 'Retiro'}
                         {pedido.origen === 'online' && ' · Online'}
-                        {pedido.estadoPago === 'pendiente' && <span className="text-warning"> · Pago pendiente</span>}
+                        {pedido.estadoPago !== 'pagado' && <span className="text-warning"> · Pago pendiente</span>}
                       </p>
                     </div>
                     <span className={`hidden items-center gap-1.5 text-xs sm:inline-flex ${estados[pedido.estado].color}`}>

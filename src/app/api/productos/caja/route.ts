@@ -1,8 +1,8 @@
 import { getServerSession } from 'next-auth'
 import { NextResponse } from 'next/server'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { obtenerSucursalActiva } from '@/lib/sucursal-activa'
+import { authOptions } from '@/lib/auth/auth'
+import { prisma } from '@/lib/db/prisma'
+import { obtenerSucursalActiva } from '@/lib/sucursales/sucursal-activa'
 
 export async function GET() {
   const sesion = await getServerSession(authOptions)
@@ -33,6 +33,11 @@ export async function GET() {
       select: {
         idSucursal: true,
         nombre: true,
+        // Zonas de delivery: si hay, Caja pide elegir una de ellas en un delivery.
+        localidadesDelivery: {
+          select: { localidad: { select: { idLocalidad: true, nombre: true } } },
+          orderBy: { localidad: { nombre: 'asc' } },
+        },
         productos: {
           where: { producto: { activo: true, categoria: { activa: true } } },
           orderBy: [
@@ -67,6 +72,7 @@ export async function GET() {
         precio: producto.precio,
         disponible,
       })),
+      localidadesDelivery: sucursal.localidadesDelivery.map((zona) => zona.localidad),
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch {
     return NextResponse.json(

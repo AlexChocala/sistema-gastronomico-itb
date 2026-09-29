@@ -2,10 +2,13 @@
 
 // Pantalla de Cocina (pestaña aparte, sin sidebar). Muestra los pedidos a preparar y
 // cambia su estado; ese mismo estado es el que lee la pantalla de Pedidos Mostrador.
+// "Listo" también vale para un pedido que nadie marcó como "Pendiente" (recibido → listo).
 
 import { Bike, Check, CircleUserRound, ShoppingBag } from '@/components/icons'
+import { EstadoConexion } from '@/components/pedidos/EstadoConexion'
 import { PastillaSucursal, useSucursalActiva } from '@/components/sucursal/SucursalActiva'
-import { puedeIrACocina, usePedidosPantalla, type PedidoPantalla } from '@/lib/pedidos-pantallas'
+import { puedeIrACocina, usePedidosPantalla, type PedidoPantalla } from '@/lib/pedidos/pedidos-pantallas'
+import { textoOpciones } from '@/lib/pedidos/pedidos-estados'
 
 const etiquetaEntrega = {
   retiro: { texto: 'Para retirar', icono: ShoppingBag, clase: 'bg-accent-soft text-accent' },
@@ -51,12 +54,19 @@ function TarjetaPedido({
       </div>
 
       <ul className="mt-4 flex flex-1 flex-col gap-2 text-base">
-        {pedido.items.map((item) => (
-          <li key={item.producto} className="flex gap-2">
-            <span className="w-7 shrink-0 text-muted">{item.cantidad}x</span>
-            <span>{item.producto}</span>
-          </li>
-        ))}
+        {/* Key por posición: el mismo producto puede venir con otras opciones. */}
+        {pedido.items.map((item, indice) => {
+          const opciones = textoOpciones(item.variacion, item.extras)
+          return (
+            <li key={indice} className="flex gap-2">
+              <span className="w-7 shrink-0 text-muted">{item.cantidad}x</span>
+              <span className="min-w-0">
+                {item.producto}
+                {opciones && <span className="block text-sm font-semibold break-words text-muted">{opciones}</span>}
+              </span>
+            </li>
+          )
+        })}
       </ul>
 
       <div className="mt-5 grid grid-cols-2 gap-3 border-t border-border pt-4">
@@ -83,13 +93,13 @@ function TarjetaPedido({
 
 export default function CocinaPage() {
   const { sucursal } = useSucursalActiva()
-  const { pedidos, marcarEnPreparacion, marcarListo } = usePedidosPantalla(sucursal?.idSucursal ?? null)
+  const {
+    pedidos, cargando, error, recargar, errorAccion, limpiarErrorAccion, marcarEnPreparacion, marcarListo,
+  } = usePedidosPantalla(sucursal?.idSucursal ?? null)
 
-  // Cocina solo llega hasta "listo": enviado y entregado ya son de Caja.
-  const pedidosActivos = pedidos.filter(
-    (pedido) =>
-      puedeIrACocina(pedido) && (pedido.estado === 'recibido' || pedido.estado === 'en_preparacion'),
-  )
+  // Cocina solo ve lo que tiene que preparar (recibido / en preparación): las
+  // transferencias sin confirmar no llegan, y enviado y entregado ya son de Pedidos.
+  const pedidosActivos = pedidos.filter(puedeIrACocina)
   const pedidosListos = pedidos.filter((pedido) => pedido.estado === 'listo')
 
   return (
@@ -107,7 +117,16 @@ export default function CocinaPage() {
           </div>
         </header>
 
-        {pedidosActivos.length === 0 ? (
+        <EstadoConexion
+          error={error}
+          errorAccion={errorAccion}
+          onReintentar={() => void recargar()}
+          onCerrarAviso={limpiarErrorAccion}
+        />
+
+        {cargando ? (
+          <p className="rounded-3xl bg-surface p-10 text-center text-muted">Cargando pedidos...</p>
+        ) : pedidosActivos.length === 0 ? (
           <p className="rounded-3xl bg-surface p-10 text-center text-muted">No hay pedidos pendientes.</p>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] gap-5">
@@ -115,8 +134,8 @@ export default function CocinaPage() {
               <TarjetaPedido
                 key={pedido.idPedido}
                 pedido={pedido}
-                onPendiente={() => marcarEnPreparacion(pedido.idPedido)}
-                onListo={() => marcarListo(pedido.idPedido)}
+                onPendiente={() => void marcarEnPreparacion(pedido.idPedido)}
+                onListo={() => void marcarListo(pedido.idPedido)}
               />
             ))}
           </div>

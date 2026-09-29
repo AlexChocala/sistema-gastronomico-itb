@@ -2,8 +2,8 @@ import type { ReactNode } from 'react'
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { Mail, ShieldCheck, Store, User, type LucideIcon } from '@/components/icons'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { authOptions } from '@/lib/auth/auth'
+import { prisma } from '@/lib/db/prisma'
 
 function iniciales(nombre: string, apellido: string) {
   return `${nombre[0] ?? ''}${apellido[0] ?? ''}`.toUpperCase()

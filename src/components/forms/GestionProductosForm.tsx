@@ -7,6 +7,12 @@ import {
 } from '@/components/icons'
 import { IconoCategoria } from '@/components/icons/IconoCategoria'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
+import { Aviso } from '@/components/ui/Aviso'
+import { BotonesExportar, type DatosExportables } from '@/components/ui/BotonesExportar'
+import { extrasDisponiblesDeEjemplo } from '@/lib/productos/extras-api'
+import type { ExtraAsignado, ExtraDisponible } from '@/lib/productos/extras-tipos'
+import { hoyEnArgentina } from '@/lib/reportes/fechas'
+import type { RolNombre } from '@/types'
 
 type Producto = {
   idProducto: number
@@ -21,6 +27,8 @@ type Producto = {
     disponible: boolean
     sucursal: { nombre: string }
   }[]
+  // Opcional hasta que la API de productos devuelva los extras (ver extras-tipos.ts).
+  extras?: ExtraAsignado[]
 }
 
 type Categoria = { idCategoria: number; nombre: string }
@@ -29,6 +37,7 @@ type RespuestaListado = {
   productos: Producto[]
   categorias: Categoria[]
   sucursales: Sucursal[]
+  extras?: ExtraDisponible[]
   total: number
   pagina: number
   limite: number
@@ -54,19 +63,39 @@ function claseChip(activo: boolean) {
   return `cursor-pointer rounded-full px-4 py-2 text-sm transition-colors ${activo ? 'bg-surface text-text shadow-sm' : 'text-muted hover:text-text'}`
 }
 
+type FiltrosListado = { estado: FiltroEstado; busqueda: string; idCategoria: number | null; idSucursal: number | null }
+
+function parametrosDelListado(pagina: number, limite: number, filtros: FiltrosListado) {
+  const parametros = new URLSearchParams({ pagina: String(pagina), limite: String(limite), estado: filtros.estado })
+  if (filtros.busqueda) parametros.set('busqueda', filtros.busqueda)
+  if (filtros.idCategoria !== null) parametros.set('idCategoria', String(filtros.idCategoria))
+  if (filtros.idSucursal !== null) parametros.set('idSucursal', String(filtros.idSucursal))
+  return parametros
+}
+
+// La API devuelve hasta 100 productos por página.
+const LIMITE_EXPORTAR = 100
+
+const COLUMNAS_EXPORTAR = ['ID', 'Nombre', 'Descripción', 'Categoría', 'Precio', 'Estado', 'Sucursales']
+
 const formularioVacio = {
   nombre: '',
   descripcion: '',
   precio: '',
   idCategoria: '',
   idSucursales: [] as string[],
+  idExtras: [] as string[],
 }
 
-export function GestionProductosForm() {
+export function GestionProductosForm({ rol }: { rol: RolNombre }) {
   const router = useRouter()
   const [productos, setProductos] = useState<Producto[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
+  const [extras, setExtras] = useState<ExtraDisponible[]>([])
+  // Mientras la API no devuelva `extras`, se muestran los de ejemplo y no se envían:
+  // hoy la validación de productos rechaza campos desconocidos.
+  const [extrasDeEjemplo, setExtrasDeEjemplo] = useState(false)
   const [formulario, setFormulario] = useState(formularioVacio)
   const [idEdicion, setIdEdicion] = useState<number | null>(null)
   const [mensaje, setMensaje] = useState('')
@@ -88,6 +117,7 @@ export function GestionProductosForm() {
   const idSucursalFiltro = puedeElegir && verTodasLasSucursales ? null : (sucursal?.idSucursal ?? null)
 
   const totalPaginas = Math.max(1, Math.ceil(total / limite))
+  const extrasDeCategoria = extras.filter((extra) => String(extra.idCategoria) === formulario.idCategoria)
 
   useEffect(() => {
     let paginaActiva = true
@@ -96,14 +126,9 @@ export function GestionProductosForm() {
       setCargando(true)
       setError('')
       try {
-        const parametros = new URLSearchParams({
-          pagina: String(pagina),
-          limite: String(limite),
-          estado: filtroEstado,
+        const parametros = parametrosDelListado(pagina, limite, {
+          estado: filtroEstado, busqueda: busquedaAplicada, idCategoria: filtroCategoria, idSucursal: idSucursalFiltro,
         })
-        if (busquedaAplicada) parametros.set('busqueda', busquedaAplicada)
-        if (filtroCategoria !== null) parametros.set('idCategoria', String(filtroCategoria))
-        if (idSucursalFiltro !== null) parametros.set('idSucursal', String(idSucursalFiltro))
 
         const respuesta = await fetch(`/api/productos/gestion?${parametros}`, { cache: 'no-store' })
         const datos = await respuesta.json() as RespuestaListado & RespuestaError
@@ -112,6 +137,8 @@ export function GestionProductosForm() {
           setProductos(datos.productos)
           setCategorias(datos.categorias)
           setSucursales(datos.sucursales)
+          setExtras(datos.extras ?? extrasDisponiblesDeEjemplo())
+          setExtrasDeEjemplo(datos.extras === undefined)
           setTotal(datos.total)
           setLimite(datos.limite)
           const ultimaPagina = Math.max(1, Math.ceil(datos.total / datos.limite))
@@ -169,16 +196,24 @@ export function GestionProductosForm() {
     setFiltroCategoria(idCategoria)
   }
 
-  function cambiarCampo(campo: 'nombre' | 'descripcion' | 'precio' | 'idCategoria', valor: string) {
+  function cambiarCampo(campo: 'nombre' | 'descripcion' | 'precio', valor: string) {
     setFormulario((actual) => ({ ...actual, [campo]: valor }))
   }
 
-  function cambiarSucursal(idSucursal: string, seleccionada: boolean) {
+  // Cada categoría tiene sus extras: al cambiarla se habilitan todos los de la nueva
+  // (lo más común) y se desmarcan las excepciones.
+  function cambiarCategoria(idCategoria: string) {
     setFormulario((actual) => ({
       ...actual,
-      idSucursales: seleccionada
-        ? [...actual.idSucursales, idSucursal]
-        : actual.idSucursales.filter((id) => id !== idSucursal),
+      idCategoria,
+      idExtras: extras.filter((extra) => String(extra.idCategoria) === idCategoria).map((extra) => String(extra.idExtra)),
+    }))
+  }
+
+  function cambiarSeleccion(campo: 'idSucursales' | 'idExtras', id: string, seleccionado: boolean) {
+    setFormulario((actual) => ({
+      ...actual,
+      [campo]: seleccionado ? [...actual[campo], id] : actual[campo].filter((otro) => otro !== id),
     }))
   }
 
@@ -204,6 +239,7 @@ export function GestionProductosForm() {
       precio: String(producto.precio),
       idCategoria: String(producto.idCategoria),
       idSucursales: producto.sucursales.map((sucursal) => String(sucursal.idSucursal)),
+      idExtras: (producto.extras ?? []).map((extra) => String(extra.idExtra)),
     })
     setMensaje('')
     setError('')
@@ -232,6 +268,7 @@ export function GestionProductosForm() {
             precio: Number(formulario.precio),
             idCategoria: Number(formulario.idCategoria),
             idSucursales: formulario.idSucursales.map(Number),
+            ...(extrasDeEjemplo ? {} : { idExtras: formulario.idExtras.map(Number) }),
           }),
         },
       )
@@ -244,6 +281,35 @@ export function GestionProductosForm() {
       setError(errorDesconocido instanceof Error ? errorDesconocido.message : 'No se pudo guardar el producto.')
     } finally {
       setCargando(false)
+    }
+  }
+
+  // Todas las páginas con los filtros que están elegidos, no solo la que se ve.
+  async function obtenerProductosParaExportar(): Promise<DatosExportables> {
+    const filtros = { estado: filtroEstado, busqueda: busquedaAplicada, idCategoria: filtroCategoria, idSucursal: idSucursalFiltro }
+    const todos: Producto[] = []
+    for (let paginaPedida = 1; ; paginaPedida++) {
+      const respuesta = await fetch(`/api/productos/gestion?${parametrosDelListado(paginaPedida, LIMITE_EXPORTAR, filtros)}`, { cache: 'no-store' })
+      const datos = await respuesta.json() as RespuestaListado & RespuestaError
+      if (!respuesta.ok) throw new Error(datos.error || 'No se pudieron cargar los productos.')
+      todos.push(...datos.productos)
+      if (todos.length >= datos.total || datos.productos.length === 0) break
+    }
+
+    return {
+      filas: todos.map((p) => [
+        p.idProducto, p.nombre, p.descripcion ?? '', p.categoria.nombre, p.precio, p.activo ? 'Activo' : 'Inactivo',
+        p.sucursales.map((s) => s.sucursal.nombre).join(', '),
+      ]),
+      json: todos.map((p) => ({
+        idProducto: p.idProducto,
+        nombre: p.nombre,
+        descripcion: p.descripcion,
+        precio: p.precio,
+        activo: p.activo,
+        categoria: p.categoria.nombre,
+        sucursales: p.sucursales.map((s) => ({ idSucursal: s.idSucursal, nombre: s.sucursal.nombre, disponible: s.disponible })),
+      })),
     }
   }
 
@@ -280,11 +346,25 @@ export function GestionProductosForm() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <BotonesExportar
+            nombreArchivo={`productos_${hoyEnArgentina()}`}
+            columnas={COLUMNAS_EXPORTAR}
+            obtenerDatos={obtenerProductosParaExportar}
+            deshabilitado={cargando || total === 0}
+            tamano="normal"
+          />
           <button type="button" className={claseBotonSecundario}
             onClick={() => router.push('/productos/categorias')} disabled={cargando}>
             <Tags className="size-4" />
             Categorías
           </button>
+          {rol === 'admin' && (
+            <button type="button" className={claseBotonSecundario}
+              onClick={() => router.push('/productos/extras')} disabled={cargando}>
+              <Plus className="size-4" />
+              Extras
+            </button>
+          )}
           <button type="button" className={claseBotonAcento} onClick={abrirNuevoProducto} disabled={cargando}>
             <Plus className="size-4" />
             Nuevo producto
@@ -524,7 +604,7 @@ export function GestionProductosForm() {
                   <select
                     id="categoria"
                     value={formulario.idCategoria}
-                    onChange={(evento) => cambiarCampo('idCategoria', evento.target.value)}
+                    onChange={(evento) => cambiarCategoria(evento.target.value)}
                     disabled={cargando || categorias.length === 0}
                     required
                     className={`${claseCampo} cursor-pointer appearance-none pr-10`}
@@ -557,7 +637,7 @@ export function GestionProductosForm() {
                           type="checkbox"
                           className="sr-only"
                           checked={formulario.idSucursales.includes(idSucursal)}
-                          onChange={(evento) => cambiarSucursal(idSucursal, evento.target.checked)}
+                          onChange={(evento) => cambiarSeleccion('idSucursales', idSucursal, evento.target.checked)}
                           disabled={cargando}
                         />
                         <Store className="size-4" />
@@ -570,6 +650,47 @@ export function GestionProductosForm() {
                   <p className="text-xs text-danger">No hay sucursales activas disponibles.</p>
                 )}
               </fieldset>
+
+              {formulario.idCategoria && (
+                <fieldset className="flex flex-col gap-2 sm:col-span-2">
+                  <legend className="mb-2 text-sm">
+                    Extras que admite <span className="text-muted">(opcional)</span>
+                  </legend>
+                  {extrasDeEjemplo && extrasDeCategoria.length > 0 && (
+                    <Aviso tipo="info" titulo="Datos de ejemplo" className="mb-2">
+                      Los extras todavía no están conectados con la base: lo que elijas acá no se guarda.
+                    </Aviso>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {extrasDeCategoria.map((extra) => {
+                      const idExtra = String(extra.idExtra)
+                      return (
+                        <label
+                          key={extra.idExtra}
+                          className="inline-flex cursor-pointer items-center gap-2 rounded-full border-2 border-border px-4 py-2 text-sm text-muted transition-colors hover:text-text has-checked:border-accent has-checked:bg-accent-soft has-checked:text-text"
+                        >
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={formulario.idExtras.includes(idExtra)}
+                            onChange={(evento) => cambiarSeleccion('idExtras', idExtra, evento.target.checked)}
+                            disabled={cargando}
+                          />
+                          {extra.nombre}
+                          <span className="tabular-nums">
+                            {extra.precioAdicional > 0 ? `+${formatoPrecio.format(extra.precioAdicional)}` : 'Sin cargo'}
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  {extrasDeCategoria.length === 0 && (
+                    <p className="text-xs text-muted">
+                      Esta categoría no tiene extras.{rol === 'admin' && ' Si los necesita, cargalos en Productos → Extras.'}
+                    </p>
+                  )}
+                </fieldset>
+              )}
             </div>
 
             {error && (

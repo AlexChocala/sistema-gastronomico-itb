@@ -1,4 +1,4 @@
-import { productosAdmin } from '@/lib/productos-admin-api'
+import { productosAdmin } from '@/lib/productos/productos-admin-api'
 
 type Contexto = { params: Promise<{ id: string }> }
 
