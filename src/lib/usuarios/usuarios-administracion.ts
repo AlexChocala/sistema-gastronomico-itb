@@ -82,12 +82,24 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
   return {
     // Ver el listado: solo admin.
     listar: (request: Request) => proteger(request, ['admin'], false, async (idUsuarioSesion) => {
+      const parametros = new URL(request.url).searchParams
+      if ([...parametros.keys()].some((clave) => clave !== 'estado' || parametros.getAll(clave).length > 1)) {
+        throw new ErrorUsuario(400, 'Los parámetros del listado no son válidos.')
+      }
+      const estado = parametros.get('estado') ?? 'activos'
+      if (!['activos', 'archivados'].includes(estado)) {
+        throw new ErrorUsuario(400, 'El estado debe ser activos o archivados.')
+      }
       const sesionCompleta = await db.usuario.findUnique({
         where: { idUsuario: idUsuarioSesion },
         select: { rol: { select: { nombre: true } } },
       })
       const [usuarios, roles, sucursales] = await db.$transaction([
-        db.usuario.findMany({ select: camposUsuario, orderBy: [{ nombre: 'asc' }, { idUsuario: 'asc' }] }),
+        db.usuario.findMany({
+          where: { activo: estado === 'activos' },
+          select: camposUsuario,
+          orderBy: [{ nombre: 'asc' }, { idUsuario: 'asc' }],
+        }),
         db.rol.findMany({ select: { idRol: true, nombre: true }, orderBy: { idRol: 'asc' } }),
         db.sucursal.findMany({
           where: { activa: true },
