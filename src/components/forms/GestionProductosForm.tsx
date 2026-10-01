@@ -358,7 +358,7 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
             <Tags className="size-4" />
             Categorías
           </button>
-          {rol === 'admin' && (
+     {(rol === 'admin' || rol === 'supervisor') && (
             <button type="button" className={claseBotonSecundario}
               onClick={() => router.push('/productos/extras')} disabled={cargando}>
               <Plus className="size-4" />

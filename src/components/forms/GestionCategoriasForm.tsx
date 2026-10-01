@@ -252,7 +252,7 @@ export function GestionCategoriasForm({ rol }: { rol: RolNombre }) {
                 </div>
               </div>
 
-              {rol === 'admin' && categoria.activa && (
+        {(rol === 'admin' || rol === 'supervisor') && categoria.activa && (
                 <button
                   type="button"
                   onClick={() => router.push(`/productos/extras?categoria=${categoria.idCategoria}`)}
