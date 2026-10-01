@@ -12,8 +12,8 @@ export default async function ExtrasPage({ searchParams }: Props) {
     redirect('/acceso/login')
   }
 
-  // Crear y editar extras es solo del admin; el supervisor los asigna desde el producto.
-  if (sesion.user.rol !== 'admin') {
+  // Crear y editar extras: admin y supervisor.
+  if (!['admin', 'supervisor'].includes(sesion.user.rol)) {
     redirect('/productos')
   }
 
