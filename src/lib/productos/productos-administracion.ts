@@ -1,6 +1,7 @@
 import type { PrismaClient, Prisma } from '@prisma/client'
 import { ErrorProducto, idValido, leerId, leerCuerpo, validarProducto } from './productos-validacion'
 import { validarCategoria } from './categorias-validacion'
+import { validarExtra } from './extras-validacion'
 
 type Sesion = { user: { idUsuario: number } } | null
 const camposProducto = {
@@ -11,12 +12,30 @@ const camposProducto = {
     select: { idSucursal: true, disponible: true, sucursal: { select: { nombre: true } } },
     orderBy: { idSucursal: 'asc' },
   },
+  // Solo los extras activos asignados al producto.
+  extras: {
+    where: { extra: { activo: true } },
+    select: { idExtra: true },
+    orderBy: { idExtra: 'asc' },
+  },
 } satisfies Prisma.ProductoSelect
 
 const camposCategoria = {
   idCategoria: true, nombre: true, descripcion: true, orden: true, activa: true,
-  _count: { select: { productos: true } },
+  _count: { select: { productos: true, extras: true } },
 } satisfies Prisma.CategoriaSelect
+
+const camposExtra = {
+  idExtra: true, idCategoria: true, nombre: true, precioAdicional: true, activo: true,
+  // Solo los productos activos que lo tienen habilitado.
+  productos: {
+    where: { producto: { activo: true } },
+    select: { idProducto: true },
+    orderBy: { idProducto: 'asc' },
+  },
+} satisfies Prisma.ExtraSelect
+
+const soloAdmin = ['admin', 'supervisor']
 
 function responder(datos: unknown, estado = 200) {
   return Response.json(datos, { status: estado, headers: { 'Cache-Control': 'no-store' } })
@@ -67,8 +86,51 @@ async function nombreDisponible(
   }
 }
 
+async function extrasDeCategoria(tx: Prisma.TransactionClient, idExtras: number[], idCategoria: number) {
+  if (idExtras.length === 0) return
+  const cantidad = await tx.extra.count({
+    where: { idExtra: { in: idExtras }, idCategoria, activo: true },
+  })
+  if (cantidad !== idExtras.length) {
+    throw new ErrorProducto(400, 'Los extras elegidos deben estar activos y ser de la categoría del producto.')
+  }
+}
+
+async function productosDeCategoria(tx: Prisma.TransactionClient, idProductos: number[], idCategoria: number) {
+  if (idProductos.length === 0) return
+  const cantidad = await tx.producto.count({
+    where: { idProducto: { in: idProductos }, idCategoria, activo: true },
+  })
+  if (cantidad !== idProductos.length) {
+    throw new ErrorProducto(400, 'Los productos elegidos deben estar activos y ser de la categoría del extra.')
+  }
+}
+
+async function nombreExtraDisponible(
+  tx: Prisma.TransactionClient,
+  nombre: string,
+  idCategoria: number,
+  idExtraActual?: number,
+) {
+  // En la base el nombre no es único, así que se valida acá (sin distinguir mayúsculas).
+  const existente = await tx.extra.findFirst({
+    where: {
+      nombre: { equals: nombre, mode: 'insensitive' },
+      idCategoria,
+      ...(idExtraActual === undefined ? {} : { idExtra: { not: idExtraActual } }),
+    },
+    select: { idExtra: true },
+  })
+  if (existente) throw new ErrorProducto(409, 'Ya existe un extra con ese nombre en esta categoría.')
+}
+
 export function crearControladorProductos(db: PrismaClient, leerSesion: () => Promise<Sesion>) {
-  async function proteger(request: Request, escritura: boolean, accion: () => Promise<Response>) {
+  async function proteger(
+    request: Request,
+    escritura: boolean,
+    accion: () => Promise<Response>,
+    roles: string[] = ['admin', 'supervisor'],
+  ) {
     try {
       // La sesión identifica al usuario; los permisos se vuelven a leer de la base.
       const sesion = await leerSesion()
@@ -79,8 +141,8 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
         where: { idUsuario: sesion.user.idUsuario },
         select: { activo: true, debeCambiarContrasena: true, rol: { select: { nombre: true } } },
       })
-      if (!usuario?.activo || !['admin', 'supervisor'].includes(usuario.rol.nombre)) {
-        throw new ErrorProducto(403, 'No tenés permiso para administrar productos.')
+      if (!usuario?.activo || !roles.includes(usuario.rol.nombre)) {
+        throw new ErrorProducto(403, 'No tenés permiso para realizar esta acción.')
       }
       if (usuario.debeCambiarContrasena) {
         throw new ErrorProducto(403, 'Primero tenés que cambiar tu contraseña.')
@@ -147,6 +209,12 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
           select: { idSucursal: true, nombre: true },
           orderBy: [{ nombre: 'asc' }, { idSucursal: 'asc' }],
         }),
+        // El formulario muestra los extras de la categoría elegida.
+        extras: await tx.extra.findMany({
+          where: { activo: true },
+          select: { idExtra: true, idCategoria: true, nombre: true, precioAdicional: true },
+          orderBy: [{ nombre: 'asc' }, { idExtra: 'asc' }],
+        }),
         total: await tx.producto.count({ where }),
       }), { isolationLevel: 'RepeatableRead' })
       return responder({ ...resultado, pagina, limite })
@@ -163,6 +231,7 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
       const producto = await db.$transaction(async (tx) => {
         await categoriaActiva(tx, datos.idCategoria!)
         await sucursalesActivas(tx, datos.idSucursales!)
+        await extrasDeCategoria(tx, datos.idExtras!, datos.idCategoria!)
         await nombreDisponible(tx, datos.nombre!, datos.idCategoria!)
         return tx.producto.create({
           data: {
@@ -171,6 +240,9 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
             historialPrecios: { create: { precioAnterior: null, precioNuevo: datos.precio! } },
             sucursales: {
               create: datos.idSucursales!.map((idSucursal) => ({ idSucursal, disponible: true })),
+            },
+            extras: {
+              create: datos.idExtras!.map((idExtra) => ({ idExtra })),
             },
           },
           select: camposProducto,
@@ -185,19 +257,18 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
       const producto = await db.$transaction(async (tx) => {
         const actual = await tx.producto.findUnique({ where: { idProducto } })
         if (!actual) throw new ErrorProducto(404, 'Producto no encontrado.')
+        const idCategoriaFinal = datos.idCategoria ?? actual.idCategoria
         if (datos.idCategoria !== undefined || datos.activo === true) {
-          await categoriaActiva(tx, datos.idCategoria ?? actual.idCategoria)
+          await categoriaActiva(tx, idCategoriaFinal)
         }
         if (datos.idSucursales !== undefined) {
           await sucursalesActivas(tx, datos.idSucursales)
         }
-        await nombreDisponible(
-          tx,
-          datos.nombre ?? actual.nombre,
-          datos.idCategoria ?? actual.idCategoria,
-          idProducto,
-        )
-        const { idSucursales, ...cambiosProducto } = datos
+        if (datos.idExtras !== undefined) {
+          await extrasDeCategoria(tx, datos.idExtras, idCategoriaFinal)
+        }
+        await nombreDisponible(tx, datos.nombre ?? actual.nombre, idCategoriaFinal, idProducto)
+        const { idSucursales, idExtras, ...cambiosProducto } = datos
         // El nuevo precio y su historial se guardan juntos; los pedidos previos conservan sus importes.
         await tx.producto.update({
           where: { idProducto },
@@ -219,6 +290,19 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
             update: { disponible: true },
             create: { idSucursal, idProducto, disponible: true },
           })))
+        }
+        // Si cambió de categoría, se le quitan los extras de la categoría anterior.
+        if (idCategoriaFinal !== actual.idCategoria) {
+          await tx.productoExtra.deleteMany({
+            where: { idProducto, extra: { idCategoria: { not: idCategoriaFinal } } },
+          })
+        }
+        if (idExtras !== undefined) {
+          // Reemplaza solo los extras activos; los inactivos no se tocan.
+          await tx.productoExtra.deleteMany({ where: { idProducto, extra: { activo: true } } })
+          if (idExtras.length > 0) {
+            await tx.productoExtra.createMany({ data: idExtras.map((idExtra) => ({ idProducto, idExtra })) })
+          }
         }
         return tx.producto.findUniqueOrThrow({ where: { idProducto }, select: camposProducto })
       }, { isolationLevel: 'Serializable' })
@@ -292,5 +376,82 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
       }, { isolationLevel: 'Serializable' })
       return responder({ mensaje: 'Categoría desactivada.', categoria })
     }),
+
+    // ----- Extras (solo admin) -----
+
+    listarExtras: (request: Request) => proteger(request, false, async () => {
+      const resultado = await db.$transaction(async (tx) => ({
+        categorias: await tx.categoria.findMany({
+          where: { activa: true },
+          select: { idCategoria: true, nombre: true },
+          orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+        }),
+        productos: await tx.producto.findMany({
+          where: { activo: true, categoria: { activa: true } },
+          select: { idProducto: true, idCategoria: true, nombre: true },
+          orderBy: [{ nombre: 'asc' }, { idProducto: 'asc' }],
+        }),
+        extras: await tx.extra.findMany({
+          where: { categoria: { activa: true } },
+          select: camposExtra,
+          orderBy: [{ nombre: 'asc' }, { idExtra: 'asc' }],
+        }),
+      }), { isolationLevel: 'RepeatableRead' })
+      return responder(resultado)
+    }, soloAdmin),
+
+    crearExtra: (request: Request) => proteger(request, true, async () => {
+      const datos = validarExtra(await leerCuerpo(request), false)
+      const extra = await db.$transaction(async (tx) => {
+        await categoriaActiva(tx, datos.idCategoria!)
+        await nombreExtraDisponible(tx, datos.nombre!, datos.idCategoria!)
+        await productosDeCategoria(tx, datos.idProductos!, datos.idCategoria!)
+        return tx.extra.create({
+          data: {
+            idCategoria: datos.idCategoria!,
+            nombre: datos.nombre!,
+            precioAdicional: datos.precioAdicional!,
+            productos: { create: datos.idProductos!.map((idProducto) => ({ idProducto })) },
+          },
+          select: camposExtra,
+        })
+      }, { isolationLevel: 'Serializable' })
+      return responder({ extra }, 201)
+    }, soloAdmin),
+
+    editarExtra: (request: Request, id: string) => proteger(request, true, async () => {
+      const idExtra = leerId(id)
+      const datos = validarExtra(await leerCuerpo(request), true)
+      const extra = await db.$transaction(async (tx) => {
+        const actual = await tx.extra.findUnique({ where: { idExtra } })
+        if (!actual) throw new ErrorProducto(404, 'Extra no encontrado.')
+        if (datos.activo === true) await categoriaActiva(tx, actual.idCategoria)
+        if (datos.nombre !== undefined) {
+          await nombreExtraDisponible(tx, datos.nombre, actual.idCategoria, idExtra)
+        }
+        const { idProductos, idCategoria: _ignorada, ...cambiosExtra } = datos
+        if (idProductos !== undefined) {
+          await productosDeCategoria(tx, idProductos, actual.idCategoria)
+          // Reemplaza solo las asignaciones a productos activos.
+          await tx.productoExtra.deleteMany({ where: { idExtra, producto: { activo: true } } })
+          if (idProductos.length > 0) {
+            await tx.productoExtra.createMany({ data: idProductos.map((idProducto) => ({ idProducto, idExtra })) })
+          }
+        }
+        if (Object.keys(cambiosExtra).length > 0) {
+          await tx.extra.update({ where: { idExtra }, data: cambiosExtra })
+        }
+        return tx.extra.findUniqueOrThrow({ where: { idExtra }, select: camposExtra })
+      }, { isolationLevel: 'Serializable' })
+      return responder({ extra })
+    }, soloAdmin),
+
+    desactivarExtra: (request: Request, id: string) => proteger(request, true, async () => {
+      // No se borra: puede estar en pedidos anteriores.
+      const extra = await db.extra.update({
+        where: { idExtra: leerId(id) }, data: { activo: false }, select: camposExtra,
+      })
+      return responder({ mensaje: 'Extra desactivado.', extra })
+    }, soloAdmin),
   }
 }
