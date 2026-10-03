@@ -59,7 +59,7 @@ export function LoginForm() {
     <TarjetaAcceso
       icono={UtensilsCrossed}
       titulo="Ingresá a tu cuenta"
-      descripcion="Usá el email y la contraseña que te dio el administrador."
+      descripcion="Usá tu email y tu contraseña."
     >
       <form onSubmit={manejarSubmit} className="flex flex-col gap-5">
         <CampoAcceso

@@ -1,10 +1,10 @@
-// Genera un enlace de recuperación y lo muestra en la terminal.
+// Genera un enlace de recuperación y lo envía por email al usuario.
 // Vence a los 30 minutos y deja de ser válido cuando cambia la contraseña.
 
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import crypto from 'crypto'
 import { prisma } from '@/lib/db/prisma'
-import { enviarEmailRecupero } from '@/lib/auth/email'
+import { sendPasswordResetEmail } from '@/lib/email/mailer'
 
 const DURACION_TOKEN_MS = 30 * 60 * 1000 // 30 minutos
 
@@ -62,7 +62,7 @@ export async function verificarTokenReset(token: string): Promise<number | null>
 export async function POST(request: Request) {
   const { email } = await request.json()
 
-  if (!email) {
+  if (!email || typeof email !== 'string') {
     return NextResponse.json({ error: 'El email es obligatorio' }, { status: 400 })
   }
 
@@ -74,13 +74,33 @@ export async function POST(request: Request) {
     select: { idUsuario: true, email: true, passwordHash: true },
   })
 
-  // Si el usuario no existe, respondemos igual que si existiera. Así evitamos que
-  // alguien use este endpoint para averiguar qué emails están registrados
-  // (enumeración de usuarios).
+  // Si el usuario no existe, no se genera token ni se envía nada, pero respondemos
+  // igual que si existiera. Así evitamos que alguien use este endpoint para averiguar
+  // qué emails están registrados (enumeración de usuarios).
   if (usuario) {
-    const token = generarTokenReset(usuario.idUsuario, usuario.passwordHash)
-    const link = `${process.env.NEXTAUTH_URL ?? 'http://localhost:3000'}/acceso/restablecer-contrasena?token=${token}`
-    enviarEmailRecupero(usuario.email, link)
+    const urlBase = process.env.APP_URL?.replace(/\/+$/, '')
+
+    if (!urlBase) {
+      console.error('Falta APP_URL en las variables de entorno: no se envió el email de recupero.')
+    } else {
+      const token = generarTokenReset(usuario.idUsuario, usuario.passwordHash)
+      const link = `${urlBase}/acceso/restablecer-contrasena?token=${token}`
+      const destinatario = usuario.email
+
+      // after() envía el mail después de responder. Con await, la respuesta tardaría
+      // más solo cuando el email existe, y midiendo ese tiempo se podría saber qué
+      // emails están registrados.
+      after(async () => {
+        try {
+          await sendPasswordResetEmail(destinatario, link)
+        } catch (error) {
+          // Solo el código del error (ej. EAUTH). Nunca el email, el link ni el token.
+          const codigo =
+            typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : 'DESCONOCIDO'
+          console.error('No se pudo enviar el email de recupero. Código:', codigo)
+        }
+      })
+    }
   }
 
   return NextResponse.json({
