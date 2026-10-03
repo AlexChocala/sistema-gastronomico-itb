@@ -7,27 +7,32 @@ import { useEffect, useRef, useState } from 'react'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import { Aviso } from '@/components/ui/Aviso'
 import { fechasDelAtajo } from '@/lib/reportes/fechas'
+import type { NegocioReporte } from '@/lib/reportes/exportar-pdf'
 import { PESTANAS, formatear, type IdPestana } from '@/lib/reportes/pestanas'
 import { obtenerReportes, type ResultadoReportes } from '@/lib/reportes/reportes-api'
 import type { Agrupacion, DatosReportes } from '@/lib/reportes/tipos'
 import type { OpcionSucursal } from '@/lib/sucursales/sucursal-activa'
 import { MENSAJES } from '@/lib/utils/mensajes'
 import { BotonesDescarga, type ContextoDescarga } from './BotonesDescarga'
-import { FiltrosReportes, SelectorSegmentado, type Filtros } from './FiltrosReportes'
+import { FiltrosReportes, type Filtros } from './FiltrosReportes'
 import { GraficoReporte } from './GraficoReporte'
 import { MapaDemanda } from './MapaDemanda'
 import { TablaReporte } from './TablaReporte'
 
-const AGRUPACIONES: { valor: Agrupacion; texto: string }[] = [
-  { valor: 'dia', texto: 'Día' },
-  { valor: 'semana', texto: 'Semana' },
-  { valor: 'mes', texto: 'Mes' },
-]
+const DIA_MS = 24 * 60 * 60 * 1000
+
+// El gráfico de período se agrupa solo según el largo del rango, para que no queden
+// cientos de barras: hasta 31 días, por día; hasta ~6 meses, por semana; más, por mes.
+function agrupacionDelRango(desde: string, hasta: string): Agrupacion {
+  const dias = (new Date(hasta + 'T00:00:00Z').getTime() - new Date(desde + 'T00:00:00Z').getTime()) / DIA_MS + 1
+  if (dias <= 31) return 'dia'
+  return dias <= 183 ? 'semana' : 'mes'
+}
 
 // `clave` identifica la consulta: si no coincide con la actual, se está cargando otra.
 type Estado = { clave: string; resultado: ResultadoReportes | null; error: string | null }
 
-export function PantallaReportes() {
+export function PantallaReportes({ negocio }: { negocio: NegocioReporte }) {
   const { sucursal, puedeElegir, opciones } = useSucursalActiva()
 
   if (!sucursal && !puedeElegir) {
@@ -41,6 +46,7 @@ export function PantallaReportes() {
   return (
     <ContenidoReportes
       key={sucursal?.idSucursal ?? 'todas'}
+      negocio={negocio}
       sucursalInicial={sucursal?.idSucursal ?? 'todas'}
       sucursalFija={puedeElegir ? null : (sucursal?.nombre ?? '')}
       opciones={opciones}
@@ -49,19 +55,20 @@ export function PantallaReportes() {
 }
 
 interface ContenidoReportesProps {
+  negocio: NegocioReporte
   sucursalInicial: number | 'todas'
   sucursalFija: string | null
   opciones: OpcionSucursal[]
 }
 
-function ContenidoReportes({ sucursalInicial, sucursalFija, opciones }: ContenidoReportesProps) {
+function ContenidoReportes({ negocio, sucursalInicial, sucursalFija, opciones }: ContenidoReportesProps) {
   const [filtros, setFiltros] = useState<Filtros>(() => ({ rango: 'hoy', ...fechasDelAtajo('hoy'), sucursal: sucursalInicial }))
-  const [agrupacion, setAgrupacion] = useState<Agrupacion>('dia')
   const [intento, setIntento] = useState(0)
   const [estado, setEstado] = useState<Estado>({ clave: '', resultado: null, error: null })
 
   const { desde, hasta, sucursal } = filtros
   const rangoValido = desde <= hasta
+  const agrupacion = agrupacionDelRango(desde, hasta)
   const clave = `${desde}|${hasta}|${sucursal}|${agrupacion}|${intento}`
   const cargando = rangoValido && estado.clave !== clave
 
@@ -81,6 +88,7 @@ function ContenidoReportes({ sucursalInicial, sucursalFija, opciones }: Contenid
   const datos = estado.resultado?.datos
   const aFechaLegible = (fecha: string) => fecha.split('-').reverse().join('/')
   const contexto: ContextoDescarga = {
+    negocio,
     periodo: desde === hasta ? aFechaLegible(desde) : `Del ${aFechaLegible(desde)} al ${aFechaLegible(hasta)}`,
     sucursal:
       sucursal === 'todas'
@@ -116,7 +124,6 @@ function ContenidoReportes({ sucursalInicial, sucursalFija, opciones }: Contenid
           <Pestanas
             datos={datos}
             agrupacion={agrupacion}
-            onCambiarAgrupacion={setAgrupacion}
             contexto={contexto}
             descargasHabilitadas={!cargando}
           />
@@ -151,13 +158,12 @@ function Resumen({ datos }: { datos: DatosReportes }) {
 interface PestanasProps {
   datos: DatosReportes
   agrupacion: Agrupacion
-  onCambiarAgrupacion: (agrupacion: Agrupacion) => void
   contexto: ContextoDescarga
   // Falso mientras se cargan otros filtros: lo que se ve todavía es lo anterior.
   descargasHabilitadas: boolean
 }
 
-function Pestanas({ datos, agrupacion, onCambiarAgrupacion, contexto, descargasHabilitadas }: PestanasProps) {
+function Pestanas({ datos, agrupacion, contexto, descargasHabilitadas }: PestanasProps) {
   const [elegida, setElegida] = useState<IdPestana>('periodo')
   const panel = useRef<HTMLDivElement>(null)
   const visibles = PESTANAS.filter((pestana) => !pestana.disponible || pestana.disponible(datos))
@@ -198,10 +204,6 @@ function Pestanas({ datos, agrupacion, onCambiarAgrupacion, contexto, descargasH
       </div>
 
       <div ref={panel} role="tabpanel" id="panel-reporte" aria-labelledby={`pestana-${actual.id}`} className="flex flex-col gap-5">
-        {actual.id === 'periodo' && (
-          <SelectorSegmentado etiqueta="Agrupar por" opciones={AGRUPACIONES} valor={agrupacion} onCambiar={onCambiarAgrupacion} />
-        )}
-
         {datos.resumen.cantidadPedidos === 0 ? (
           <p className="text-sm text-muted">No hay pedidos entregados en este período.</p>
         ) : (

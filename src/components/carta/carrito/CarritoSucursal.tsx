@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ArrowRight, ShoppingCart, Trash2 } from '@/components/icons'
 import { estilosBoton } from '@/components/ui/Button'
 import { detalleLinea, nombreLinea, useCarrito, useHidratado, type ItemCarrito, type ProductoCarrito } from '@/lib/pedidos/carrito'
+import { MAX_ACLARACION } from '@/lib/pedidos/pedidos-validacion'
 import { formatearPrecio } from '@/lib/utils/precio'
 import { AvisoDeshacer } from '@/components/carta/compartidos/AvisoDeshacer'
 import { AvisoQuitados } from '@/components/carta/compartidos/AvisoQuitados'
@@ -129,6 +130,26 @@ export function CarritoSucursal({ slug, productos }: { slug: string; productos: 
           )
         })}
       </ul>
+
+      {/* Una sola aclaración para todo el pedido: se escribe viendo todo lo que se pidió. */}
+      <div className="flex flex-col gap-2 rounded-3xl bg-surface p-4 shadow-sm">
+        <label htmlFor="aclaracion-pedido" className="font-semibold">
+          ¿Alguna aclaración para la cocina? <span className="text-sm font-normal text-muted">(opcional)</span>
+        </label>
+        <textarea
+          id="aclaracion-pedido"
+          rows={2}
+          maxLength={MAX_ACLARACION}
+          value={carrito.aclaracion}
+          onChange={(evento) => carrito.cambiarAclaracion(evento.target.value)}
+          placeholder="Ej: una sin cebolla, la pizza bien cocida"
+          aria-describedby="aclaracion-pedido-largo"
+          className="w-full resize-none rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-normal outline-none transition-colors placeholder:text-muted focus:border-accent"
+        />
+        <p id="aclaracion-pedido-largo" className="self-end text-xs font-normal text-muted tabular-nums">
+          {carrito.aclaracion.length}/{MAX_ACLARACION}
+        </p>
+      </div>
 
       <Link
         href={`/${slug}`}

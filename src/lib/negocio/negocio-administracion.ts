@@ -7,7 +7,7 @@ type Sesion = { user: { idUsuario: number } } | null
 
 const camposNegocio = {
   nombre: true, descripcion: true, logoPath: true, instagram: true, tiktok: true, facebook: true,
-  transferenciaAlias: true, transferenciaCbu: true, transferenciaTitular: true,
+  transferenciaAlias: true, transferenciaCuit: true, transferenciaTitular: true,
 } satisfies Prisma.NegocioSelect
 
 type FilaNegocio = Prisma.NegocioGetPayload<{ select: typeof camposNegocio }>

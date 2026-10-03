@@ -23,7 +23,8 @@ type DatosUsuario = {
   apellido?: string
   email?: string
   idRol?: number
-  idSucursal?: number
+  // null: sin sucursal (solo vale para el admin; lo verifica usuarios-administracion).
+  idSucursal?: number | null
   activo?: boolean
 }
 
@@ -60,8 +61,8 @@ export function validarUsuario(cuerpo: unknown, parcial: boolean): DatosUsuario 
     if (!idValido(datos.idRol)) throw new ErrorUsuario(400, 'Indicá un rol válido.')
     salida.idRol = datos.idRol
   }
-  if (!parcial || 'idSucursal' in datos) {
-    if (!idValido(datos.idSucursal)) throw new ErrorUsuario(400, 'Indicá una sucursal válida.')
+  if ('idSucursal' in datos) {
+    if (datos.idSucursal !== null && !idValido(datos.idSucursal)) throw new ErrorUsuario(400, 'Indicá una sucursal válida.')
     salida.idSucursal = datos.idSucursal
   }
   if ('activo' in datos) {

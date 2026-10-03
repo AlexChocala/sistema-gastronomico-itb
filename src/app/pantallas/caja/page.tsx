@@ -7,10 +7,11 @@
 //   3. POST /api/pedidos/caja: el pedido entra PAGADO a Cocina como "recibido", con el
 //      número que le da la base, y se imprimen comanda + ticket.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, Banknote, Bike, CircleCheck, Landmark, Minus, Plus, Printer, Search, ShoppingBag, Trash2,
+  ArrowLeft, Banknote, Bike, CircleCheck, Landmark, Minus, Plus, Printer, Search, ShoppingBag, Trash2, X,
 } from '@/components/icons'
+import { SelectorCantidad } from '@/components/carta/compartidos/SelectorCantidad'
 import { IconoCategoria } from '@/components/icons/IconoCategoria'
 import { Campanita } from '@/components/notificaciones/Campanita'
 import { TicketsPedido } from '@/components/pantallas/TicketsPedido'
@@ -25,7 +26,11 @@ import {
   type TipoEntregaPantalla,
   type ZonaDelivery,
 } from '@/lib/pedidos/pedidos-pantallas'
-import { ErrorPedido, MAX_NOMBRE_CLIENTE, erroresDatosDelivery, validarPedidoCaja } from '@/lib/pedidos/pedidos-validacion'
+import {
+  ErrorPedido, MAX_ACLARACION, MAX_CANTIDAD_ITEM, MAX_EXTRAS_ITEM, MAX_NOMBRE_CLIENTE,
+  claveCombinacion, erroresDatosDelivery, validarPedidoCaja,
+} from '@/lib/pedidos/pedidos-validacion'
+import { textoOpciones } from '@/lib/pedidos/pedidos-estados'
 
 const TODAS = 'Todos'
 
@@ -35,11 +40,20 @@ const formatoPrecio = new Intl.NumberFormat('es-AR', {
   maximumFractionDigits: 0,
 })
 
+type OpcionCaja = { nombre: string; precioAdicional: number }
+type VariacionCaja = OpcionCaja & { idVariacion: number }
+type ExtraCaja = OpcionCaja & { idExtra: number }
+
 type ProductoCaja = {
   idProducto: number
   nombre: string
   categoria: string
+  // Precio de la variación más barata (o el único, si no tiene variaciones).
   precio: number
+  // En el orden de su categoría: la primera es la principal.
+  variaciones: VariacionCaja[]
+  // Los extras activos que admite, por nombre.
+  extras: ExtraCaja[]
   disponible: boolean
 }
 
@@ -49,27 +63,53 @@ type RespuestaProductosCaja = {
   error?: string
 }
 
-type LineaCarrito = { producto: ProductoCaja; cantidad: number }
+// Una línea por combinación (producto + variación + extras): "Pizza Entera" y
+// "Pizza Media + Cheddar" son líneas distintas, igual que en la carta.
+type LineaCarrito = {
+  clave: string
+  producto: ProductoCaja
+  variacion: VariacionCaja | null
+  extras: ExtraCaja[]
+  cantidad: number
+}
 
+type Combinacion = Pick<LineaCarrito, 'producto' | 'variacion' | 'extras'>
+
+function claveDe({ producto, variacion, extras }: Combinacion) {
+  return claveCombinacion(producto.idProducto, variacion?.idVariacion ?? null, extras.map((extra) => extra.idExtra))
+}
+
+function precioUnitario({ producto, variacion, extras }: Combinacion) {
+  return producto.precio + (variacion?.precioAdicional ?? 0) + extras.reduce((suma, extra) => suma + extra.precioAdicional, 0)
+}
+
+// Con variaciones o extras hay algo para elegir: se abre la ventana.
+function abreVentana(producto: ProductoCaja) {
+  return producto.variaciones.length > 0 || producto.extras.length > 0
+}
+
+// Sin nada para elegir, tocarla suma uno. Si no, abre la ventana; la tarjeta muestra el
+// precio de la principal y qué se puede elegir.
 function TarjetaProducto({
   producto,
   bloqueado,
-  onAgregar,
+  onElegir,
 }: {
   producto: ProductoCaja
   bloqueado: boolean
-  onAgregar: () => void
+  onElegir: () => void
 }) {
+  const principal = producto.variaciones[0] ?? null
+  const pista = principal ? `${producto.variaciones.length} opciones` : producto.extras.length > 0 ? 'Con extras' : null
   return (
     <button
       type="button"
-      onClick={onAgregar}
+      onClick={onElegir}
       disabled={!producto.disponible || bloqueado}
+      aria-haspopup={abreVentana(producto) ? 'dialog' : undefined}
       className="flex cursor-pointer flex-col items-center gap-3 rounded-3xl bg-surface p-4 text-center shadow-sm transition-shadow hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:shadow-sm"
     >
-      <span
-        className={`inline-flex items-center gap-1.5 text-xs ${producto.disponible ? 'text-success' : 'text-danger'}`}
-      >
+      <span className={`inline-flex items-center gap-1.5 text-xs ${producto.disponible ? 'text-success' : 'text-danger'}`}>
         <span className={`size-1.5 rounded-full ${producto.disponible ? 'bg-success' : 'bg-danger'}`} />
         {producto.disponible ? 'Disponible' : 'Sin stock'}
       </span>
@@ -80,8 +120,175 @@ function TarjetaProducto({
         <span className="leading-tight">{producto.nombre}</span>
         <span className="text-xs text-muted">{producto.categoria}</span>
       </span>
-      <span className="mt-auto text-lg font-bold">{formatoPrecio.format(producto.precio)}</span>
+      <span className="mt-auto flex flex-col items-center">
+        <span className="text-lg font-bold">{formatoPrecio.format(precioUnitario({ producto, variacion: principal, extras: [] }))}</span>
+        {pista && <span className="text-xs text-muted">{pista}</span>}
+      </span>
     </button>
+  )
+}
+
+// Ventana para elegir en Caja (como el modal de la carta): un contador por variación (la
+// principal arranca en 1) o uno solo si no tiene, y los extras, que se suman a cada
+// opción elegida. <dialog> nativo: Esc, la X o tocar el fondo cierran sin agregar.
+function ModalProductoCaja({
+  producto,
+  onAgregar,
+  onCerrar,
+}: {
+  producto: ProductoCaja
+  onAgregar: (combinaciones: (Combinacion & { cantidad: number })[]) => void
+  onCerrar: () => void
+}) {
+  const dialogo = useRef<HTMLDialogElement>(null)
+  const { variaciones } = producto
+  const [cantidades, setCantidades] = useState<Record<number, number>>(() =>
+    variaciones.length > 0 ? { [variaciones[0].idVariacion]: 1 } : {},
+  )
+  const [cantidadUnica, setCantidadUnica] = useState(1)
+  const [idExtras, setIdExtras] = useState<number[]>([])
+
+  useEffect(() => {
+    const elemento = dialogo.current
+    if (elemento && !elemento.open) elemento.showModal()
+  }, [])
+
+  const extras = producto.extras.filter((extra) => idExtras.includes(extra.idExtra))
+  const combinaciones = variaciones.length > 0
+    ? variaciones
+      .filter((variacion) => (cantidades[variacion.idVariacion] ?? 0) > 0)
+      .map((variacion) => ({ producto, variacion, extras, cantidad: cantidades[variacion.idVariacion] }))
+    : [{ producto, variacion: null, extras, cantidad: cantidadUnica }]
+  const total = combinaciones.reduce((suma, combinacion) => suma + precioUnitario(combinacion) * combinacion.cantidad, 0)
+  const topeExtras = idExtras.length >= MAX_EXTRAS_ITEM
+
+  function cambiar(idVariacion: number, cambio: number) {
+    setCantidades((actuales) => ({
+      ...actuales,
+      [idVariacion]: Math.min(MAX_CANTIDAD_ITEM, Math.max(0, (actuales[idVariacion] ?? 0) + cambio)),
+    }))
+  }
+
+  function alternarExtra(idExtra: number) {
+    setIdExtras((actuales) => (actuales.includes(idExtra) ? actuales.filter((id) => id !== idExtra) : [...actuales, idExtra]))
+  }
+
+  return (
+    <dialog
+      ref={dialogo}
+      aria-labelledby="titulo-producto-caja"
+      onClose={onCerrar}
+      onClick={(evento) => {
+        if (evento.target === evento.currentTarget) dialogo.current?.close()
+      }}
+      className="m-auto w-full max-w-md rounded-3xl bg-surface p-0 text-text shadow-xl backdrop:bg-text/50"
+    >
+      <div className="flex max-h-[85dvh] flex-col">
+        <div className="flex items-start justify-between gap-3 p-5 pb-3">
+          <div className="flex items-center gap-3">
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+              <IconoCategoria categoria={producto.categoria} className="size-6" strokeWidth={1.5} />
+            </span>
+            <div>
+              <h2 id="titulo-producto-caja" className="text-lg leading-tight font-semibold">{producto.nombre}</h2>
+              <p className="text-sm text-muted">
+                {variaciones.length > 0 ? 'Elegí al menos 1 opción' : formatoPrecio.format(producto.precio)}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => dialogo.current?.close()}
+            aria-label="Cerrar"
+            className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted hover:bg-bg hover:text-text"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto px-5 pb-2">
+          {variaciones.length > 0 && (
+            <ul className="divide-y divide-border/60 border-y border-border/60">
+              {variaciones.map((variacion) => (
+                <li key={variacion.idVariacion} className="flex items-center gap-3 py-3">
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate">{variacion.nombre}</span>
+                    <span className="text-sm text-muted tabular-nums">
+                      {formatoPrecio.format(precioUnitario({ producto, variacion, extras: [] }))}
+                    </span>
+                  </div>
+                  <SelectorCantidad
+                    nombre={`${producto.nombre} ${variacion.nombre}`}
+                    cantidad={cantidades[variacion.idVariacion] ?? 0}
+                    minimo={0}
+                    onSumar={() => cambiar(variacion.idVariacion, 1)}
+                    onRestar={() => cambiar(variacion.idVariacion, -1)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {producto.extras.length > 0 && (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-2 text-sm text-muted">Extras (opcional)</legend>
+              {producto.extras.map((extra) => {
+                const elegido = idExtras.includes(extra.idExtra)
+                const bloqueado = !elegido && topeExtras
+                return (
+                  <label
+                    key={extra.idExtra}
+                    className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-2xl border-2 px-4 py-2 transition-colors ${elegido ? 'border-accent bg-accent-soft/50' : 'border-border hover:border-accent/50'} ${bloqueado ? 'cursor-not-allowed opacity-50' : ''}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={elegido}
+                      disabled={bloqueado}
+                      onChange={() => alternarExtra(extra.idExtra)}
+                      className="size-5 shrink-0 accent-accent"
+                    />
+                    <span className="flex-1">{extra.nombre}</span>
+                    <span className="text-sm text-muted tabular-nums">+{formatoPrecio.format(extra.precioAdicional)}</span>
+                  </label>
+                )
+              })}
+              {idExtras.length > 0 && combinaciones.length > 1 && (
+                <p className="text-xs text-muted">Los extras se suman a cada opción elegida.</p>
+              )}
+            </fieldset>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-border/60 p-5 pt-3">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold">Total</span>
+            <span className="text-lg font-bold tabular-nums">{formatoPrecio.format(total)}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            {variaciones.length === 0 && (
+              <SelectorCantidad
+                nombre={producto.nombre}
+                cantidad={cantidadUnica}
+                onSumar={() => setCantidadUnica((actual) => Math.min(MAX_CANTIDAD_ITEM, actual + 1))}
+                onRestar={() => setCantidadUnica((actual) => Math.max(1, actual - 1))}
+              />
+            )}
+            <button
+              type="button"
+              disabled={combinaciones.length === 0}
+              onClick={() => {
+                onAgregar(combinaciones)
+                dialogo.current?.close()
+              }}
+              className="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-full bg-accent py-3.5 text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
+            >
+              <Plus className="size-5" />
+              Agregar al pedido
+            </button>
+          </div>
+        </div>
+      </div>
+    </dialog>
   )
 }
 
@@ -104,13 +311,17 @@ function LineaCarritoItem({
   onCancelarQuitar: () => void
   onConfirmarQuitar: () => void
 }) {
-  const { producto, cantidad } = linea
+  const { producto, variacion, extras, cantidad } = linea
+  const opciones = textoOpciones(variacion?.nombre ?? null, extras.map((extra) => extra.nombre))
 
   return (
     <li className="flex flex-col gap-3 rounded-2xl bg-bg p-4">
       <div className="flex items-start justify-between gap-3">
-        <span className="leading-tight">{producto.nombre}</span>
-        <span className="shrink-0 font-semibold">{formatoPrecio.format(producto.precio * cantidad)}</span>
+        <span className="leading-tight">
+          {producto.nombre}
+          {opciones && <span className="block text-xs break-words text-muted">{opciones}</span>}
+        </span>
+        <span className="shrink-0 font-semibold">{formatoPrecio.format(precioUnitario(linea) * cantidad)}</span>
       </div>
 
       {confirmando ? (
@@ -306,8 +517,12 @@ export default function CajaPage() {
   const [tipoEntrega, setTipoEntrega] = useState<TipoEntregaPantalla>('retiro')
   // Solo se mandan en delivery; se conservan si se vuelve a retiro por error.
   const [entrega, setEntrega] = useState<ValoresDelivery>(VALORES_DELIVERY_VACIOS)
-  // Producto que espera confirmación antes de salir del carrito.
-  const [confirmandoQuitar, setConfirmandoQuitar] = useState<number | null>(null)
+  // Línea (clave) que espera confirmación antes de salir del carrito.
+  const [confirmandoQuitar, setConfirmandoQuitar] = useState<string | null>(null)
+  // Aclaración para la cocina, de todo el pedido.
+  const [aclaracion, setAclaracion] = useState('')
+  // Producto con variaciones cuya ventana está abierta (null = cerrada).
+  const [eligiendo, setEligiendo] = useState<ProductoCaja | null>(null)
 
   const [cobrando, setCobrando] = useState(false)
   const [metodoPago, setMetodoPago] = useState<MetodoPagoPantalla>('efectivo')
@@ -372,7 +587,7 @@ export default function CajaPage() {
 
   const cantidadItems = carrito.reduce((suma, linea) => suma + linea.cantidad, 0)
   // Estimado con los precios en pantalla: el total real lo calcula el servidor al crear el pedido.
-  const total = carrito.reduce((suma, linea) => suma + linea.producto.precio * linea.cantidad, 0)
+  const total = carrito.reduce((suma, linea) => suma + precioUnitario(linea) * linea.cantidad, 0)
   const faltaCliente = cliente.trim() === ''
   const erroresEntrega = tipoEntrega === 'delivery' ? erroresDatosDelivery(entrega, zonas.length > 0) : {}
   const entregaValida = Object.keys(erroresEntrega).length === 0
@@ -386,37 +601,40 @@ export default function CajaPage() {
         ? 'Completá los datos del delivery para cobrar.'
         : ''
 
-  function agregar(producto: ProductoCaja) {
+  function agregar(combinacion: Combinacion, cantidad = 1) {
+    const clave = claveDe(combinacion)
     setUltimoCobrado(null)
     setAvisoCarrito(null)
     setCarrito((actual) =>
-      actual.some((linea) => linea.producto.idProducto === producto.idProducto)
+      actual.some((linea) => linea.clave === clave)
         ? actual.map((linea) =>
-            linea.producto.idProducto === producto.idProducto
-              ? { ...linea, cantidad: linea.cantidad + 1 }
+            linea.clave === clave
+              ? { ...linea, cantidad: Math.min(MAX_CANTIDAD_ITEM, linea.cantidad + cantidad) }
               : linea,
           )
-        : [...actual, { producto, cantidad: 1 }],
+        : [...actual, { ...combinacion, clave, cantidad }],
     )
+  }
+
+  // Sin nada para elegir se suma directo; con variaciones o extras se abre la ventana.
+  function elegir(producto: ProductoCaja) {
+    if (abreVentana(producto)) setEligiendo(producto)
+    else agregar({ producto, variacion: null, extras: [] })
   }
 
   // Si queda en 0 no se borra directo: se pide confirmación.
-  function restar({ producto, cantidad }: LineaCarrito) {
+  function restar({ clave, cantidad }: LineaCarrito) {
     if (cantidad <= 1) {
-      setConfirmandoQuitar(producto.idProducto)
+      setConfirmandoQuitar(clave)
       return
     }
     setCarrito((actual) =>
-      actual.map((linea) =>
-        linea.producto.idProducto === producto.idProducto
-          ? { ...linea, cantidad: linea.cantidad - 1 }
-          : linea,
-      ),
+      actual.map((linea) => (linea.clave === clave ? { ...linea, cantidad: linea.cantidad - 1 } : linea)),
     )
   }
 
-  function confirmarQuitar(idProducto: number) {
-    setCarrito((actual) => actual.filter((linea) => linea.producto.idProducto !== idProducto))
+  function confirmarQuitar(clave: string) {
+    setCarrito((actual) => actual.filter((linea) => linea.clave !== clave))
     setConfirmandoQuitar(null)
   }
 
@@ -435,7 +653,13 @@ export default function CajaPage() {
       cliente,
       tipoEntrega,
       metodoPago,
-      items: carrito.map((linea) => ({ idProducto: linea.producto.idProducto, cantidad: linea.cantidad })),
+      aclaracion,
+      items: carrito.map((linea) => ({
+        idProducto: linea.producto.idProducto,
+        cantidad: linea.cantidad,
+        ...(linea.variacion ? { idVariacion: linea.variacion.idVariacion } : {}),
+        ...(linea.extras.length > 0 ? { extras: linea.extras.map((extra) => extra.idExtra) } : {}),
+      })),
       ...(tipoEntrega === 'delivery'
         ? {
             telefono: entrega.telefono,
@@ -479,6 +703,7 @@ export default function CajaPage() {
     setCobrando(false)
     setCarrito([])
     setCliente('')
+    setAclaracion('')
     setTipoEntrega('retiro')
     setEntrega(VALORES_DELIVERY_VACIOS)
   }
@@ -536,7 +761,7 @@ export default function CajaPage() {
                   key={producto.idProducto}
                   producto={producto}
                   bloqueado={cobrando}
-                  onAgregar={() => agregar(producto)}
+                  onElegir={() => elegir(producto)}
                 />
               ))}
             </div>
@@ -631,17 +856,29 @@ export default function CajaPage() {
                   ))}
                 {carrito.map((linea) => (
                   <LineaCarritoItem
-                    key={linea.producto.idProducto}
+                    key={linea.clave}
                     linea={linea}
-                    confirmando={confirmandoQuitar === linea.producto.idProducto}
-                    onSumar={() => agregar(linea.producto)}
+                    confirmando={confirmandoQuitar === linea.clave}
+                    onSumar={() => agregar(linea)}
                     onRestar={() => restar(linea)}
-                    onPedirQuitar={() => setConfirmandoQuitar(linea.producto.idProducto)}
+                    onPedirQuitar={() => setConfirmandoQuitar(linea.clave)}
                     onCancelarQuitar={() => setConfirmandoQuitar(null)}
-                    onConfirmarQuitar={() => confirmarQuitar(linea.producto.idProducto)}
+                    onConfirmarQuitar={() => confirmarQuitar(linea.clave)}
                   />
                 ))}
               </ul>
+
+              {carrito.length > 0 && (
+                <textarea
+                  value={aclaracion}
+                  onChange={(e) => setAclaracion(e.target.value)}
+                  maxLength={MAX_ACLARACION}
+                  rows={2}
+                  placeholder="Aclaración para la cocina (opcional). Ej: una sin cebolla"
+                  aria-label="Aclaración para la cocina"
+                  className="shrink-0 resize-none rounded-2xl border border-border bg-surface px-4 py-2.5 text-sm outline-none placeholder:text-muted focus:border-accent"
+                />
+              )}
 
               <div className="flex flex-col gap-4 border-t border-border pt-4">
                 <div className="flex items-end justify-between">
@@ -668,6 +905,15 @@ export default function CajaPage() {
           )}
         </aside>
       </main>
+
+      {eligiendo && (
+        <ModalProductoCaja
+          key={eligiendo.idProducto}
+          producto={eligiendo}
+          onAgregar={(combinaciones) => combinaciones.forEach(({ cantidad, ...combinacion }) => agregar(combinacion, cantidad))}
+          onCerrar={() => setEligiendo(null)}
+        />
+      )}
 
       {ultimoCobrado && <TicketsPedido pedido={ultimoCobrado.pedido} pagaCon={ultimoCobrado.pagaCon} />}
     </>

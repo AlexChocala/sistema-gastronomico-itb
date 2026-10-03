@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { PantallaReportes } from '@/components/reportes/PantallaReportes'
 import { authOptions } from '@/lib/auth/auth'
+import { obtenerNegocioPublico } from '@/lib/negocio/negocio'
 
 export default async function ReportesPage() {
   const sesion = await getServerSession(authOptions)
@@ -15,9 +16,12 @@ export default async function ReportesPage() {
     redirect('/dashboard')
   }
 
+  // Nombre y descripción del negocio para el encabezado de las descargas.
+  const negocio = await obtenerNegocioPublico()
+
   return (
     <main className="p-6" lang="es">
-      <PantallaReportes />
+      <PantallaReportes negocio={{ nombre: negocio?.nombre ?? 'Mise', descripcion: negocio?.descripcion ?? null }} />
     </main>
   )
 }

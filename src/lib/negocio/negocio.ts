@@ -2,6 +2,7 @@
 // corre en el servidor: usa Prisma.
 
 import { prisma } from '@/lib/db/prisma'
+import { formatearCuit } from '@/lib/negocio/negocio-validacion'
 
 // URL mostrable del logo a partir de su ruta en el bucket. Igual que con la foto de
 // perfil, Supabase Storage todavía no está conectado: hasta entonces siempre es null y
@@ -11,19 +12,19 @@ export function urlLogoNegocio(logoPath: string | null): string | null {
   return null
 }
 
-export type DatosTransferencia = { alias: string | null; cbu: string | null; titular: string }
+// `cuit` ya viene con guiones (20-12345678-9), listo para mostrar.
+export type DatosTransferencia = { alias: string; cuit: string; titular: string }
 
-// Datos para pagar por transferencia, o null si no alcanzan: hace falta el titular y al
-// menos alias o CBU/CVU. Con null el menú no ofrece esa forma de pago y la API de
-// pedidos la rechaza.
+// Datos para pagar por transferencia, o null si no alcanzan: hacen falta titular, alias y
+// CUIT/CUIL. Con null el menú no ofrece esa forma de pago y la API de pedidos la rechaza.
 export function datosTransferencia(negocio: {
   transferenciaAlias: string | null
-  transferenciaCbu: string | null
+  transferenciaCuit: string | null
   transferenciaTitular: string | null
 }): DatosTransferencia | null {
-  const { transferenciaAlias: alias, transferenciaCbu: cbu, transferenciaTitular: titular } = negocio
-  if (!titular || (!alias && !cbu)) return null
-  return { alias, cbu, titular }
+  const { transferenciaAlias: alias, transferenciaCuit: cuit, transferenciaTitular: titular } = negocio
+  if (!titular || !alias || !cuit) return null
+  return { alias, cuit: formatearCuit(cuit), titular }
 }
 
 export type NegocioPublico = {
@@ -42,14 +43,14 @@ export async function obtenerNegocioPublico(): Promise<NegocioPublico | null> {
     where: { idNegocio: 1 },
     select: {
       nombre: true, descripcion: true, logoPath: true, instagram: true, tiktok: true, facebook: true,
-      transferenciaAlias: true, transferenciaCbu: true, transferenciaTitular: true,
+      transferenciaAlias: true, transferenciaCuit: true, transferenciaTitular: true,
     },
   })
   if (!negocio) return null
-  const { logoPath, transferenciaAlias, transferenciaCbu, transferenciaTitular, ...resto } = negocio
+  const { logoPath, transferenciaAlias, transferenciaCuit, transferenciaTitular, ...resto } = negocio
   return {
     ...resto,
     logoUrl: urlLogoNegocio(logoPath),
-    transferencia: datosTransferencia({ transferenciaAlias, transferenciaCbu, transferenciaTitular }),
+    transferencia: datosTransferencia({ transferenciaAlias, transferenciaCuit, transferenciaTitular }),
   }
 }

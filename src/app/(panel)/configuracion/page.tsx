@@ -23,7 +23,7 @@ export default async function ConfiguracionPage() {
     where: { idNegocio: 1 },
     select: {
       nombre: true, descripcion: true, logoPath: true, instagram: true, tiktok: true, facebook: true,
-      transferenciaAlias: true, transferenciaCbu: true, transferenciaTitular: true,
+      transferenciaAlias: true, transferenciaCuit: true, transferenciaTitular: true,
     },
   })
   // El layout del panel ya exige el sistema configurado; esto cubre una carrera improbable.
@@ -44,7 +44,7 @@ export default async function ConfiguracionPage() {
           tiktok: negocio.tiktok ?? '',
           facebook: negocio.facebook ?? '',
           transferenciaAlias: negocio.transferenciaAlias ?? '',
-          transferenciaCbu: negocio.transferenciaCbu ?? '',
+          transferenciaCuit: negocio.transferenciaCuit ?? '',
           transferenciaTitular: negocio.transferenciaTitular ?? '',
         }}
         logoUrl={urlLogoNegocio(negocio.logoPath)}

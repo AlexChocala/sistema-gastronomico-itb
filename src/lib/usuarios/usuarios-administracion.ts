@@ -1,6 +1,7 @@
 import type { PrismaClient, Prisma } from '@prisma/client'
 import bcrypt from 'bcrypt'
 import { ErrorUsuario, idValido, leerId, leerCuerpo, validarUsuario } from './usuarios-validacion'
+import { rolSinSucursal } from './roles'
 
 type Sesion = { user: { idUsuario: number } } | null
 
@@ -34,14 +35,32 @@ function responderError(error: unknown) {
   return responder({ error: 'No se pudo completar la operación. Intentá nuevamente más tarde.' }, 500)
 }
 
+// Devuelve el nombre del rol (para saber si lleva sucursal).
 async function rolActivo(tx: Prisma.TransactionClient, idRol: number) {
-  const rol = await tx.rol.findUnique({ where: { idRol } })
+  const rol = await tx.rol.findUnique({ where: { idRol }, select: { nombre: true } })
   if (!rol) throw new ErrorUsuario(400, 'El rol indicado no existe.')
+  return rol.nombre
 }
 
 async function sucursalActiva(tx: Prisma.TransactionClient, idSucursal: number) {
   const sucursal = await tx.sucursal.findUnique({ where: { idSucursal }, select: { activa: true } })
   if (!sucursal?.activa) throw new ErrorUsuario(400, 'La sucursal debe existir y estar activa.')
+}
+
+// Sucursal que queda guardada según el rol final. El admin trabaja con todas (la elige
+// en la barra superior), así que no guarda ninguna. Supervisor y empleado necesitan una:
+// la que llega o, al editar sin mandarla, la que ya tenían.
+async function sucursalSegunRol(
+  tx: Prisma.TransactionClient,
+  nombreRol: string,
+  enviada: number | null | undefined,
+  actual: number | null,
+) {
+  if (rolSinSucursal(nombreRol)) return null
+  const idSucursal = enviada === undefined ? actual : enviada
+  if (idSucursal === null) throw new ErrorUsuario(400, 'Elegí la sucursal donde trabaja.')
+  if (enviada !== undefined) await sucursalActiva(tx, idSucursal)
+  return idSucursal
 }
 
 export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Promise<Sesion>) {
@@ -121,8 +140,8 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
       const passwordHash = await bcrypt.hash(passwordGenerada, 10)
 
       const usuario = await db.$transaction(async (tx) => {
-        await rolActivo(tx, datos.idRol!)
-        await sucursalActiva(tx, datos.idSucursal!)
+        const nombreRol = await rolActivo(tx, datos.idRol!)
+        const idSucursal = await sucursalSegunRol(tx, nombreRol, datos.idSucursal ?? null, null)
         return tx.usuario.create({
           data: {
             nombre: datos.nombre!,
@@ -130,7 +149,7 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
             email: datos.email!,
             passwordHash,
             idRol: datos.idRol!,
-            idSucursal: datos.idSucursal!,
+            idSucursal,
             debeCambiarContrasena: true,
           },
           select: camposUsuario,
@@ -145,11 +164,14 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
       const datos = validarUsuario(await leerCuerpo(request), true)
 
       const usuario = await db.$transaction(async (tx) => {
-        const actual = await tx.usuario.findUnique({ where: { idUsuario } })
+        const actual = await tx.usuario.findUnique({
+          where: { idUsuario },
+          select: { idSucursal: true, rol: { select: { nombre: true } } },
+        })
         if (!actual) throw new ErrorUsuario(404, 'Usuario no encontrado.')
-        if (datos.idRol !== undefined) await rolActivo(tx, datos.idRol)
-        if (datos.idSucursal !== undefined) await sucursalActiva(tx, datos.idSucursal)
-        return tx.usuario.update({ where: { idUsuario }, data: datos, select: camposUsuario })
+        const nombreRol = datos.idRol !== undefined ? await rolActivo(tx, datos.idRol) : actual.rol.nombre
+        const idSucursal = await sucursalSegunRol(tx, nombreRol, datos.idSucursal, actual.idSucursal)
+        return tx.usuario.update({ where: { idUsuario }, data: { ...datos, idSucursal }, select: camposUsuario })
       }, { isolationLevel: 'Serializable' })
 
       return responder({ usuario })

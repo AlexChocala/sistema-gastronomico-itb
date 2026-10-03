@@ -43,6 +43,7 @@ export { KeyRound, Copy } from 'lucide-react'
 export { ImagePlus } from 'lucide-react'
 
 // UI
+export { GripVertical } from 'lucide-react'
 export { ChevronDown, ExternalLink, RotateCcw } from 'lucide-react'
 
 // Avisos (Aviso / AvisoFlotante)

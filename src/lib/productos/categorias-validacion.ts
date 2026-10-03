@@ -1,10 +1,12 @@
-import { ErrorProducto, idValido } from '@/lib/productos/productos-validacion'
+import { ErrorProducto, idValido, validarNombresVariaciones } from '@/lib/productos/productos-validacion'
 
 export type DatosCategoria = {
   nombre?: string
   descripcion?: string | null
   orden?: number
   activa?: boolean
+  // Nombres sugeridos para las variaciones de sus productos (ej: Chica, Mediana, Grande).
+  nombresVariaciones?: string[]
 }
 
 export function validarCategoria(cuerpo: unknown, parcial: boolean): DatosCategoria {
@@ -13,7 +15,7 @@ export function validarCategoria(cuerpo: unknown, parcial: boolean): DatosCatego
   }
 
   const datos = cuerpo as Record<string, unknown>
-  const permitidos = ['nombre', 'descripcion', 'orden', ...(parcial ? ['activa'] : [])]
+  const permitidos = ['nombre', 'descripcion', 'orden', 'nombresVariaciones', ...(parcial ? ['activa'] : [])]
   if (Object.keys(datos).length === 0 || Object.keys(datos).some((campo) => !permitidos.includes(campo))) {
     throw new ErrorProducto(400, 'Enviá al menos un campo válido de la categoría.')
   }
@@ -46,6 +48,10 @@ export function validarCategoria(cuerpo: unknown, parcial: boolean): DatosCatego
       throw new ErrorProducto(400, 'Activa debe ser true o false.')
     }
     salida.activa = datos.activa
+  }
+
+  if ('nombresVariaciones' in datos) {
+    salida.nombresVariaciones = validarNombresVariaciones(datos.nombresVariaciones)
   }
 
   return salida

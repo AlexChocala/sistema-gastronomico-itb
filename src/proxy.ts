@@ -34,6 +34,14 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
+  // Caja y Cocina son para quien opera la sucursal: el admin solo ve los pedidos, para
+  // que no cargue ni mueva uno por error (por ejemplo, con otra sucursal activa). La API
+  // de pedidos también lo valida.
+  const esPantallaOperativa = ['/pantallas/caja', '/pantallas/cocina'].some((ruta) => pathname === ruta || pathname.startsWith(ruta + '/'))
+  if (esPantallaOperativa && token.rol === 'admin') {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
   return NextResponse.next()
 }
 

@@ -15,7 +15,7 @@
 // funciones puras exportadas aparte del hook, para poder probarlas sin navegador.
 
 import { useCallback, useMemo, useSyncExternalStore } from 'react'
-import { MAX_CANTIDAD_ITEM, MAX_EXTRAS_ITEM, MAX_ITEMS_PEDIDO, claveCombinacion } from './pedidos-validacion'
+import { MAX_ACLARACION, MAX_CANTIDAD_ITEM, MAX_EXTRAS_ITEM, MAX_ITEMS_PEDIDO, claveCombinacion } from './pedidos-validacion'
 import { textoOpciones } from './pedidos-estados'
 
 export type ExtraCarrito = { idExtra: number; nombre: string }
@@ -327,6 +327,31 @@ function guardar(slug: string, items: ItemCarrito[]) {
   avisar()
 }
 
+// Aclaración para la cocina de todo el pedido ("2 sin cebolla, la otra completa"). Se
+// guarda aparte del carrito, por sucursal, para que no se pierda al volver a la carta.
+// Es texto (no un objeto), así que useSyncExternalStore la compara sin cache.
+function claveAclaracion(slug: string) {
+  return `carrito-aclaracion-v1:${slug}`
+}
+
+function leerAclaracion(slug: string): string {
+  try {
+    return localStorage.getItem(claveAclaracion(slug)) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function guardarAclaracion(slug: string, texto: string) {
+  try {
+    if (texto) localStorage.setItem(claveAclaracion(slug), texto)
+    else localStorage.removeItem(claveAclaracion(slug))
+  } catch {
+    // Sin storage disponible: la aclaración no persiste.
+  }
+  avisar()
+}
+
 // Nombres de los productos que se sacaron solos (ya no están en el menú) para avisarle al
 // cliente. Vive en memoria: es un aviso de esta visita, no hace falta guardarlo.
 const quitadosPorSucursal = new Map<string, string[]>()
@@ -362,6 +387,12 @@ export function useCarrito(slug: string) {
     suscribir,
     useCallback(() => quitadosPorSucursal.get(slug) ?? SIN_NOMBRES, [slug]),
     () => SIN_NOMBRES,
+  )
+
+  const aclaracion = useSyncExternalStore(
+    suscribir,
+    useCallback(() => leerAclaracion(slug), [slug]),
+    () => '',
   )
 
   const { cantidadTotal, total } = useMemo(() => calcularTotales(items), [items])
@@ -418,7 +449,15 @@ export function useCarrito(slug: string) {
     },
     [aplicar, slug],
   )
-  const vaciar = useCallback(() => guardar(slug, []), [slug])
+  // Después de confirmar el pedido: se vacía el carrito y se borra su aclaración.
+  const vaciar = useCallback(() => {
+    guardarAclaracion(slug, '')
+    guardar(slug, [])
+  }, [slug])
+  const cambiarAclaracion = useCallback(
+    (texto: string) => guardarAclaracion(slug, texto.slice(0, MAX_ACLARACION)),
+    [slug],
+  )
 
   // Se llama al cargar una página que trae el menú vigente (no en cada lectura).
   const reconciliar = useCallback(
@@ -437,8 +476,8 @@ export function useCarrito(slug: string) {
   }, [slug])
 
   return {
-    items, cantidadTotal, total, productosQuitados,
-    agregar, cambiarCantidad, quitar, restaurar, vaciar, quitarProductos, reconciliar, descartarAviso,
+    items, cantidadTotal, total, productosQuitados, aclaracion,
+    agregar, cambiarCantidad, quitar, restaurar, vaciar, quitarProductos, reconciliar, descartarAviso, cambiarAclaracion,
   }
 }
 

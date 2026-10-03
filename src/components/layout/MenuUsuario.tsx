@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRef, useState } from 'react'
 import { CerrarSesionButton } from '@/components/layout/CerrarSesionButton'
 import { User } from '@/components/icons'
+import { etiquetaRol } from '@/lib/usuarios/roles'
 import { useCerrarAlSalir } from '@/lib/utils/useCerrarAlSalir'
 
 function iniciales(nombre: string) {
@@ -41,7 +42,7 @@ export function MenuUsuario({ nombre, rol }: { nombre: string; rol: string }) {
         <div className="absolute top-full right-0 z-40 mt-2 flex w-56 flex-col gap-1 rounded-2xl bg-surface p-2 shadow-xl">
           <div className="border-b border-border px-3 pt-1 pb-3">
             <p className="truncate text-sm font-medium">{nombre}</p>
-            <p className="text-xs capitalize text-muted">{rol}</p>
+            <p className="text-xs text-muted">{etiquetaRol(rol)}</p>
           </div>
           <Link href="/perfil" onClick={() => setAbierto(false)} className={claseOpcion + ' hover:text-text'}>
             <User strokeWidth={1.75} className="size-(--sidebar-icono) shrink-0" />

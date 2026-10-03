@@ -45,7 +45,7 @@ type DatosNegocio = {
   nombre?: string
   descripcion?: string | null
   transferenciaAlias?: string | null
-  transferenciaCbu?: string | null
+  transferenciaCuit?: string | null
   transferenciaTitular?: string | null
 } & Partial<Record<RedSocial, string | null>>
 
@@ -67,31 +67,33 @@ export function validarAlias(valor: unknown): string | null {
   return texto
 }
 
-// Dígito verificador del BCRA: suma ponderada de los dígitos y (10 - suma % 10) % 10.
-function digitoVerificador(digitos: string, pesos: number[]) {
+// CUIT o CUIL (AFIP): 11 dígitos. Los 2 primeros son el tipo (20/23/24/27 personas,
+// 30/33/34 empresas) y el último es el verificador: pesos 5,4,3,2,7,6,5,4,3,2 sobre los
+// 10 primeros, y 11 - (suma % 11). Si da 11 es 0; si da 10, el número no existe.
+const TIPOS_CUIT = ['20', '23', '24', '27', '30', '33', '34']
+
+export function cuitValido(digitos: string) {
+  if (!/^\d{11}$/.test(digitos) || !TIPOS_CUIT.includes(digitos.slice(0, 2))) return false
+  const pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
   const suma = pesos.reduce((total, peso, indice) => total + peso * Number(digitos[indice]), 0)
-  return (10 - (suma % 10)) % 10
+  const verificador = 11 - (suma % 11)
+  if (verificador === 10) return false
+  return (verificador === 11 ? 0 : verificador) === Number(digitos[10])
 }
 
-// CBU o CVU: 22 dígitos en dos bloques, cada uno con su dígito verificador.
-//   Bloque 1 (8 dígitos: banco + sucursal): pesos 7,1,3,9,7,1,3 sobre los 7 primeros → 8.º.
-//   Bloque 2 (14 dígitos: cuenta): pesos 3,9,7,1,3,9,7,1,3,9,7,1,3 sobre los 13 primeros → 14.º.
-export function cbuValido(digitos: string) {
-  if (!/^\d{22}$/.test(digitos)) return false
-  const bloque1 = digitos.slice(0, 8)
-  const bloque2 = digitos.slice(8)
-  return (
-    digitoVerificador(bloque1, [7, 1, 3, 9, 7, 1, 3]) === Number(bloque1[7]) &&
-    digitoVerificador(bloque2, [3, 9, 7, 1, 3, 9, 7, 1, 3, 9, 7, 1, 3]) === Number(bloque2[13])
-  )
+// '20123456789' → '20-12345678-9' (como lo muestran los bancos).
+export function formatearCuit(digitos: string) {
+  return `${digitos.slice(0, 2)}-${digitos.slice(2, 10)}-${digitos.slice(10)}`
 }
 
-export function validarCbu(valor: unknown): string | null {
-  // Se aceptan espacios al pegarlo (algunos homebanking lo muestran agrupado).
-  const digitos = textoOpcional(valor, 'El CBU/CVU debe ser texto o null.').replace(/\s/g, '')
+// Se carga y se guarda solo con dígitos; los guiones se agregan al mostrárselo al cliente.
+export function validarCuit(valor: unknown): string | null {
+  const digitos = textoOpcional(valor, 'El CUIT/CUIL debe ser texto o null.')
   if (!digitos) return null
-  if (!/^\d{22}$/.test(digitos)) throw new ErrorConfiguracion(400, 'El CBU/CVU tiene que tener 22 números.')
-  if (!cbuValido(digitos)) throw new ErrorConfiguracion(400, 'El CBU/CVU no es válido. Revisá que esté bien copiado.')
+  if (!/^\d{11}$/.test(digitos)) {
+    throw new ErrorConfiguracion(400, 'El CUIT/CUIL tiene que tener 11 números, sin guiones ni espacios.')
+  }
+  if (!cuitValido(digitos)) throw new ErrorConfiguracion(400, 'El CUIT/CUIL no es válido. Revisá que esté bien escrito.')
   return digitos
 }
 
@@ -185,7 +187,7 @@ export function validarNegocioInicial(cuerpo: unknown): DatosNegocioInicial {
 export function validarNegocio(cuerpo: unknown, parcial: boolean): DatosNegocio {
   const datos = objetoNegocio(cuerpo)
   const redes = Object.keys(REDES_SOCIALES) as RedSocial[]
-  const transferencia = ['transferenciaAlias', 'transferenciaCbu', 'transferenciaTitular']
+  const transferencia = ['transferenciaAlias', 'transferenciaCuit', 'transferenciaTitular']
   const permitidos = ['nombre', 'descripcion', ...redes, ...transferencia]
   if (Object.keys(datos).length === 0 || Object.keys(datos).some((c) => !permitidos.includes(c))) {
     throw new ErrorConfiguracion(400, 'Enviá al menos un campo válido del negocio.')
@@ -196,10 +198,10 @@ export function validarNegocio(cuerpo: unknown, parcial: boolean): DatosNegocio 
   for (const red of redes) {
     if (red in datos) salida[red] = normalizarRedSocial(red, datos[red])
   }
-  // Datos para transferencias: todos opcionales. Si quedan incompletos (sin titular, o
-  // sin alias ni CBU), el menú simplemente no ofrece pagar por transferencia.
+  // Datos para transferencias: todos opcionales. Si queda alguno sin cargar (titular,
+  // alias o CUIT/CUIL), el menú simplemente no ofrece pagar por transferencia.
   if ('transferenciaAlias' in datos) salida.transferenciaAlias = validarAlias(datos.transferenciaAlias)
-  if ('transferenciaCbu' in datos) salida.transferenciaCbu = validarCbu(datos.transferenciaCbu)
+  if ('transferenciaCuit' in datos) salida.transferenciaCuit = validarCuit(datos.transferenciaCuit)
   if ('transferenciaTitular' in datos) salida.transferenciaTitular = validarTitular(datos.transferenciaTitular)
   return salida
 }

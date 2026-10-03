@@ -1,7 +1,8 @@
 'use client'
 
-// Alias / CBU / titular para pagar por transferencia, con botones para copiar. Se usa en
-// el checkout (al elegir transferencia) y en la confirmación del pedido.
+// Alias / titular / CUIT para pagar por transferencia. El alias se copia; titular y CUIT
+// sirven para comprobar que el banco muestra a quien corresponde. Se usa en el checkout
+// (al elegir transferencia) y en la confirmación del pedido.
 
 import { useEffect, useRef, useState } from 'react'
 import { Check, Copy } from '@/components/icons'
@@ -65,9 +66,9 @@ function Fila({ etiqueta, valor, copiable }: { etiqueta: string; valor: string; 
 export function DatosTransferencia({ datos }: { datos: Datos }) {
   return (
     <dl className="flex flex-col divide-y divide-border/60 rounded-2xl bg-accent-soft/60 px-4 py-1">
-      {datos.alias && <Fila etiqueta="Alias" valor={datos.alias} copiable />}
-      {datos.cbu && <Fila etiqueta="CBU / CVU" valor={datos.cbu} copiable />}
+      <Fila etiqueta="Alias" valor={datos.alias} copiable />
       <Fila etiqueta="Titular" valor={datos.titular} copiable={false} />
+      <Fila etiqueta="CUIT / CUIL" valor={datos.cuit} copiable={false} />
     </dl>
   )
 }

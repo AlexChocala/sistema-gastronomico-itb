@@ -160,7 +160,9 @@ export type NuevoPedidoMostrador = {
   cliente: string
   tipoEntrega: TipoEntrega
   metodoPago: MetodoPago
-  items: { idProducto: number; cantidad: number }[]
+  items: { idProducto: number; cantidad: number; idVariacion?: number; extras?: number[] }[]
+  // Para la cocina, de todo el pedido (vacía no se manda).
+  aclaracion?: string
   // Solo delivery (en retiro no se mandan).
   telefono?: string
   direccion?: string
@@ -190,6 +192,7 @@ export function cuerpoPedidoCaja(datos: NuevoPedidoMostrador) {
     },
     tipoEntrega: datos.tipoEntrega,
     metodoPago: datos.metodoPago,
+    ...(datos.aclaracion?.trim() ? { aclaracion: datos.aclaracion.trim() } : {}),
     items: datos.items,
     ...(datos.tipoEntrega === 'delivery'
       ? {

@@ -25,7 +25,9 @@ export type Pestana = {
 }
 
 export const NOMBRES_METODO_PAGO: Record<MetodoPago, string> = { efectivo: 'Efectivo', transferencia: 'Transferencia' }
-export const NOMBRES_ORIGEN: Record<OrigenPedido, string> = { mostrador: 'Mostrador', online: 'Online' }
+// "Canal": por dónde entró el pedido (en el local o por el menú online). Se evita
+// "Mostrador" porque se confunde con la entrega (retirar en el mostrador).
+export const NOMBRES_ORIGEN: Record<OrigenPedido, string> = { mostrador: 'Presencial', online: 'Online' }
 const NOMBRES_ENTREGA: Record<TipoEntrega, string> = { retiro: 'Retiro', delivery: 'Delivery' }
 export const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
@@ -97,8 +99,8 @@ export const PESTANAS: Pestana[] = [
   },
   {
     id: 'origen',
-    titulo: 'Origen',
-    columnas: [{ titulo: 'Origen', formato: 'texto' }, PEDIDOS, TOTAL],
+    titulo: 'Canales de venta',
+    columnas: [{ titulo: 'Canal', formato: 'texto' }, PEDIDOS, TOTAL],
     filas: (datos) => datos.ventasPorOrigen.map((f) => [NOMBRES_ORIGEN[f.origen], f.cantidadPedidos, f.totalVendido]),
     grafico: { tipo: 'torta', etiqueta: 0, valor: 1 },
   },
@@ -117,7 +119,7 @@ export const PESTANAS: Pestana[] = [
       { titulo: 'Fecha', formato: 'texto' },
       { titulo: 'Sucursal', formato: 'texto' },
       { titulo: 'Cliente', formato: 'texto' },
-      { titulo: 'Origen', formato: 'texto' },
+      { titulo: 'Canal', formato: 'texto' },
       { titulo: 'Entrega', formato: 'texto' },
       { titulo: 'Pago', formato: 'texto' },
       { titulo: 'Productos', formato: 'numero' },

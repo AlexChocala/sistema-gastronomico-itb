@@ -240,7 +240,7 @@ async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineVali
 
     const negocio = await tx.negocio.findUnique({
       where: { idNegocio: 1 },
-      select: { transferenciaAlias: true, transferenciaCbu: true, transferenciaTitular: true },
+      select: { transferenciaAlias: true, transferenciaCuit: true, transferenciaTitular: true },
     })
     const transferencia = negocio ? datosTransferencia(negocio) : null
     if (pedido.metodoPago === 'transferencia' && !transferencia) {
@@ -264,6 +264,7 @@ async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineVali
         // En retiro el validador ya los dejó en null.
         direccion: pedido.direccion,
         referencias: pedido.referencias,
+        aclaracion: pedido.aclaracion,
         subtotal: total,
         total,
         idCliente: cliente.idCliente,
@@ -282,6 +283,7 @@ async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineVali
       // Lo que el cliente cargó para el delivery, para el resumen de la confirmación.
       direccion: pedido.direccion,
       referencias: pedido.referencias,
+      aclaracion: pedido.aclaracion,
       metodoPago: creado.metodoPago,
       estadoPedido: creado.estadoPedido,
       estadoPago: creado.estadoPago,

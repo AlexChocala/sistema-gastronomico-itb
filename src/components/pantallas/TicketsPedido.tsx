@@ -60,6 +60,13 @@ export function TicketsPedido({ pedido, pagaCon }: { pedido: PedidoPantalla; pag
             )
           })}
         </ul>
+        {/* La comanda es para cocinar: la aclaración va al final, bien visible. */}
+        {pedido.aclaracion && (
+          <>
+            <Separador />
+            <p className="text-[14px] font-bold break-words">ACLARACIÓN: {pedido.aclaracion}</p>
+          </>
+        )}
       </section>
 
       {/* 2. Ticket del cliente */}

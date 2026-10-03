@@ -29,6 +29,7 @@ export const MAX_CANTIDAD_ITEM = 20
 export const MAX_ITEMS_PEDIDO = 50
 export const MAX_EXTRAS_ITEM = 10
 export const MAX_REFERENCIAS = 200
+export const MAX_ACLARACION = 200
 
 export const MENSAJE_SUCURSAL_NO_DISPONIBLE = 'Esta sucursal no existe o no está disponible.'
 export const MENSAJE_TELEFONO = 'Ingresá tu celular con código de área, sin 0 ni 15 (10 dígitos). Ej: 1123493023.'
@@ -39,6 +40,7 @@ export const MENSAJE_NOMBRE_CLIENTE = `El nombre del cliente debe tener entre 1 
 export const MENSAJE_DIRECCION = `Indicá la dirección de entrega (entre ${MIN_DIRECCION} y ${MAX_DIRECCION} caracteres).`
 export const MENSAJE_LOCALIDAD = 'Elegí la localidad de entrega.'
 export const MENSAJE_REFERENCIAS = `Las indicaciones para el repartidor pueden tener hasta ${MAX_REFERENCIAS} caracteres.`
+export const MENSAJE_ACLARACION = `La aclaración para la cocina puede tener hasta ${MAX_ACLARACION} caracteres.`
 
 export type TipoEntregaOnline = 'retiro' | 'delivery'
 export type MetodoPagoOnline = 'efectivo' | 'transferencia'
@@ -63,6 +65,8 @@ export type PedidoOnlineValidado = {
   idLocalidad: number | null
   referencias: string | null
   metodoPago: MetodoPagoOnline
+  // Para la cocina, de todo el pedido ("2 sin cebolla, la otra completa"). Vacía = null.
+  aclaracion: string | null
   items: ItemPedidoOnline[]
 }
 
@@ -74,11 +78,26 @@ export function digitosTelefono(texto: string) {
 // Indicaciones para el repartidor: opcionales; vacías = null. Devuelve undefined si no
 // son válidas (tipo o largo), para que cada llamador elija el error.
 export function limpiarReferencias(valor: unknown): string | null | undefined {
+  return limpiarTextoOpcional(valor, MAX_REFERENCIAS)
+}
+
+// Aclaración para la cocina: misma regla que las indicaciones (opcional, vacía = null).
+export function limpiarAclaracion(valor: unknown): string | null | undefined {
+  return limpiarTextoOpcional(valor, MAX_ACLARACION)
+}
+
+function limpiarTextoOpcional(valor: unknown, maximo: number): string | null | undefined {
   if (valor === undefined || valor === null) return null
   if (typeof valor !== 'string') return undefined
   const texto = valor.trim()
-  if (texto.length > MAX_REFERENCIAS) return undefined
+  if (texto.length > maximo) return undefined
   return texto || null
+}
+
+function validarAclaracion(valor: unknown): string | null {
+  const aclaracion = limpiarAclaracion(valor)
+  if (aclaracion === undefined) throw new ErrorPedido(400, MENSAJE_ACLARACION)
+  return aclaracion
 }
 
 export type CampoDelivery = 'telefono' | 'direccion' | 'idLocalidad' | 'referencias'
@@ -200,7 +219,7 @@ export function validarPedidoOnline(cuerpo: unknown): PedidoOnlineValidado {
   const datos = objeto(cuerpo, 'Enviá un objeto JSON con los datos del pedido.')
   soloCampos(
     datos,
-    ['slugSucursal', 'cliente', 'tipoEntrega', 'direccion', 'idLocalidad', 'referencias', 'metodoPago', 'items'],
+    ['slugSucursal', 'cliente', 'tipoEntrega', 'direccion', 'idLocalidad', 'referencias', 'metodoPago', 'aclaracion', 'items'],
     'El pedido tiene campos que no se reconocen.',
   )
 
@@ -245,6 +264,7 @@ export function validarPedidoOnline(cuerpo: unknown): PedidoOnlineValidado {
     idLocalidad,
     referencias,
     metodoPago: datos.metodoPago,
+    aclaracion: validarAclaracion(datos.aclaracion),
     items: validarItems(datos.items),
   }
 }
@@ -259,6 +279,7 @@ export type PedidoCajaValidado = {
   direccion: string | null
   idLocalidad: number | null
   referencias: string | null
+  aclaracion: string | null
   items: ItemPedidoOnline[]
 }
 
@@ -271,7 +292,7 @@ export function validarPedidoCaja(cuerpo: unknown): PedidoCajaValidado {
   const datos = objeto(cuerpo, 'Enviá un objeto JSON con los datos del pedido.')
   soloCampos(
     datos,
-    ['cliente', 'tipoEntrega', 'metodoPago', 'items', ...CAMPOS_DELIVERY],
+    ['cliente', 'tipoEntrega', 'metodoPago', 'aclaracion', 'items', ...CAMPOS_DELIVERY],
     'El pedido tiene campos que no se reconocen.',
   )
 
@@ -291,6 +312,7 @@ export function validarPedidoCaja(cuerpo: unknown): PedidoCajaValidado {
     throw new ErrorPedido(400, 'Elegí el método de pago: efectivo o transferencia.')
   }
   const metodoPago = datos.metodoPago
+  const aclaracion = validarAclaracion(datos.aclaracion)
   const items = validarItems(datos.items)
 
   if (tipoEntrega === 'retiro') {
@@ -299,14 +321,14 @@ export function validarPedidoCaja(cuerpo: unknown): PedidoCajaValidado {
     }
     return {
       cliente: { nombre, telefono: null }, tipoEntrega, metodoPago,
-      direccion: null, idLocalidad: null, referencias: null, items,
+      direccion: null, idLocalidad: null, referencias: null, aclaracion, items,
     }
   }
 
   const entrega = validarDatosDelivery({ ...datos, telefono: cliente.telefono })
   return {
     cliente: { nombre, telefono: entrega.telefono }, tipoEntrega, metodoPago,
-    direccion: entrega.direccion, idLocalidad: entrega.idLocalidad, referencias: entrega.referencias, items,
+    direccion: entrega.direccion, idLocalidad: entrega.idLocalidad, referencias: entrega.referencias, aclaracion, items,
   }
 }
 

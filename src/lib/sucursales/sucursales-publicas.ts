@@ -3,6 +3,7 @@
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
+import { ordenarVariaciones } from '@/lib/productos/variacion-principal'
 
 const camposSucursalPublica = {
   idSucursal: true, nombre: true, slug: true, direccion: true, horario: true, whatsapp: true,
@@ -58,8 +59,10 @@ export type ProductoMenu = {
   idProducto: number
   nombre: string
   descripcion: string | null
+  // Precio de la variación más barata (o el único, si no tiene variaciones).
   precio: number
-  // Solo las disponibles, de la más barata a la más cara (y por nombre).
+  // Solo las disponibles, en el orden de su categoría: LA PRIMERA ES LA PRINCIPAL (la que
+  // la tarjeta muestra y el modal deja elegida). Ver lib/productos/variacion-principal.ts.
   variaciones: VariacionMenu[]
   // Solo los extras activos asociados al producto, por nombre.
   extras: ExtraMenu[]
@@ -87,6 +90,7 @@ export async function obtenerMenuSucursal(idSucursal: number): Promise<Categoria
     select: {
       idCategoria: true,
       nombre: true,
+      nombresVariaciones: true,
       productos: {
         where: productoVisible,
         orderBy: [{ nombre: 'asc' }, { idProducto: 'asc' }],
@@ -106,10 +110,11 @@ export async function obtenerMenuSucursal(idSucursal: number): Promise<Categoria
       },
     },
   })
-  return categorias.map((categoria) => ({
+  return categorias.map(({ nombresVariaciones, ...categoria }) => ({
     ...categoria,
-    productos: categoria.productos.map(({ extras, ...producto }) => ({
+    productos: categoria.productos.map(({ extras, variaciones, ...producto }) => ({
       ...producto,
+      variaciones: ordenarVariaciones(variaciones, nombresVariaciones),
       extras: extras.map(({ extra }) => extra),
     })),
   }))

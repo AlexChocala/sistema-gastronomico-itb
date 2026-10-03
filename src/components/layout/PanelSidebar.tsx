@@ -108,7 +108,8 @@ export function PanelSidebar({ rol, nombreNegocio }: { rol: string; nombreNegoci
                 </span>
               )
             })}
-            {seccion.conPantallas && (
+            {/* El admin no opera pedidos: Caja y Cocina no son para él, y el monitor es para clientes. */}
+            {seccion.conPantallas && rol !== 'admin' && (
               <details className="group">
                 <summary className={claseItem + ' cursor-pointer list-none text-muted hover:bg-surface-muted/60 hover:text-text [&::-webkit-details-marker]:hidden'}>
                   <MonitorPlay strokeWidth={trazoIcono} className={claseIcono} />

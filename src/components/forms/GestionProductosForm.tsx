@@ -6,11 +6,17 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Power, Search, Store, Tags, X,
 } from '@/components/icons'
 import { IconoCategoria } from '@/components/icons/IconoCategoria'
+import { CampoVariaciones } from '@/components/productos/CampoVariaciones'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import { Aviso } from '@/components/ui/Aviso'
 import { BotonesExportar, type DatosExportables } from '@/components/ui/BotonesExportar'
 import { extrasDisponiblesDeEjemplo } from '@/lib/productos/extras-api'
 import type { ExtraAsignado, ExtraDisponible } from '@/lib/productos/extras-tipos'
+import {
+  armarVariaciones, filaPrincipal, filasIniciales, filasParaCategoria,
+  type FilaVariacion, type VariacionGuardada,
+} from '@/lib/productos/variaciones-formulario'
+import { ordenarVariaciones, variacionPrincipal } from '@/lib/productos/variacion-principal'
 import { hoyEnArgentina } from '@/lib/reportes/fechas'
 import type { RolNombre } from '@/types'
 
@@ -29,9 +35,11 @@ type Producto = {
   }[]
   // Opcional hasta que la API de productos devuelva los extras (ver extras-tipos.ts).
   extras?: ExtraAsignado[]
+  // Las vigentes, de la más barata a la más cara.
+  variaciones: VariacionGuardada[]
 }
 
-type Categoria = { idCategoria: number; nombre: string }
+type Categoria = { idCategoria: number; nombre: string; nombresVariaciones: string[] }
 type Sucursal = { idSucursal: number; nombre: string }
 type RespuestaListado = {
   productos: Producto[]
@@ -85,6 +93,7 @@ const formularioVacio = {
   idCategoria: '',
   idSucursales: [] as string[],
   idExtras: [] as string[],
+  variaciones: [] as FilaVariacion[],
 }
 
 export function GestionProductosForm({ rol }: { rol: RolNombre }) {
@@ -118,6 +127,9 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
 
   const totalPaginas = Math.max(1, Math.ceil(total / limite))
   const extrasDeCategoria = extras.filter((extra) => String(extra.idCategoria) === formulario.idCategoria)
+  const categoriaElegida = categorias.find((categoria) => String(categoria.idCategoria) === formulario.idCategoria)
+  // Con variaciones elegidas, el precio sale de ellas y la carta muestra la principal.
+  const principal = filaPrincipal(formulario.variaciones)
 
   useEffect(() => {
     let paginaActiva = true
@@ -200,13 +212,15 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
     setFormulario((actual) => ({ ...actual, [campo]: valor }))
   }
 
-  // Cada categoría tiene sus extras: al cambiarla se habilitan todos los de la nueva
-  // (lo más común) y se desmarcan las excepciones.
+  // Cada categoría tiene sus extras y sus variaciones: al cambiarla se habilitan todos los
+  // de la nueva (lo más común) y se desmarcan las excepciones.
   function cambiarCategoria(idCategoria: string) {
+    const nombres = categorias.find((categoria) => String(categoria.idCategoria) === idCategoria)?.nombresVariaciones ?? []
     setFormulario((actual) => ({
       ...actual,
       idCategoria,
       idExtras: extras.filter((extra) => String(extra.idCategoria) === idCategoria).map((extra) => String(extra.idExtra)),
+      variaciones: filasParaCategoria(nombres, actual.variaciones),
     }))
   }
 
@@ -223,8 +237,10 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
     setMostrarFormulario(false)
   }
 
+  // Un producto nuevo arranca disponible en la sucursal en la que se está trabajando.
   function abrirNuevoProducto() {
-    setFormulario(formularioVacio)
+    const enSucursalActiva = sucursales.some((otra) => otra.idSucursal === sucursal?.idSucursal)
+    setFormulario({ ...formularioVacio, idSucursales: enSucursalActiva && sucursal ? [String(sucursal.idSucursal)] : [] })
     setIdEdicion(null)
     setMensaje('')
     setError('')
@@ -240,6 +256,10 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
       idCategoria: String(producto.idCategoria),
       idSucursales: producto.sucursales.map((sucursal) => String(sucursal.idSucursal)),
       idExtras: (producto.extras ?? []).map((extra) => String(extra.idExtra)),
+      variaciones: filasIniciales(
+        categorias.find((categoria) => categoria.idCategoria === producto.idCategoria)?.nombresVariaciones ?? [],
+        producto,
+      ),
     })
     setMensaje('')
     setError('')
@@ -250,6 +270,11 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
     evento.preventDefault()
     if (formulario.idSucursales.length === 0) {
       setError('Elegí al menos una sucursal para el producto.')
+      return
+    }
+    const resultadoVariaciones = armarVariaciones(formulario.variaciones)
+    if ('error' in resultadoVariaciones) {
+      setError(resultadoVariaciones.error)
       return
     }
     setCargando(true)
@@ -265,10 +290,12 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
           body: JSON.stringify({
             nombre: formulario.nombre,
             descripcion: formulario.descripcion,
-            precio: Number(formulario.precio),
+            // Con variaciones, el precio del producto es el de la más barata.
+            precio: resultadoVariaciones.precio ?? Number(formulario.precio),
             idCategoria: Number(formulario.idCategoria),
             idSucursales: formulario.idSucursales.map(Number),
             ...(extrasDeEjemplo ? {} : { idExtras: formulario.idExtras.map(Number) }),
+            variaciones: resultadoVariaciones.variaciones,
           }),
         },
       )
@@ -463,7 +490,11 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
         )}
 
         <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4">
-          {productos.map((producto) => (
+          {productos.map((producto) => {
+            // Igual que en la carta: el precio de la variación principal (si tiene).
+            const nombresCategoria = categorias.find((categoria) => categoria.idCategoria === producto.idCategoria)?.nombresVariaciones ?? []
+            const principalProducto = variacionPrincipal(producto.variaciones, nombresCategoria)
+            return (
               <article
                 key={producto.idProducto}
                 className={`flex flex-col gap-4 rounded-3xl bg-surface p-5 shadow-sm transition-shadow hover:shadow-md ${producto.activo ? '' : 'opacity-60'}`}
@@ -499,8 +530,20 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
                   </span>
                 </p>
 
+                {producto.variaciones.length > 0 && (
+                  <p className="text-xs text-muted">
+                    Variaciones:{' '}
+                    <span className="text-text">
+                      {ordenarVariaciones(producto.variaciones, nombresCategoria).map((variacion) => variacion.nombre).join(' · ')}
+                    </span>
+                  </p>
+                )}
+
                 <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-4">
-                  <p className="text-lg font-bold">{formatoPrecio.format(producto.precio)}</p>
+                  <p className="text-lg font-bold">
+                    {formatoPrecio.format(producto.precio + (principalProducto?.precioAdicional ?? 0))}
+                    {principalProducto && <span className="ml-1.5 text-sm font-normal text-muted">{principalProducto.nombre}</span>}
+                  </p>
                   <div className="flex gap-1">
                     <button
                       type="button"
@@ -525,7 +568,8 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
                   </div>
                 </div>
               </article>
-          ))}
+            )
+          })}
         </div>
 
         {totalPaginas > 1 && (
@@ -579,117 +623,153 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
               </button>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-2 sm:col-span-2">
+            {/* En el orden en que se piensa: la categoría define el precio (variaciones) y los extras. */}
+            <div className="flex flex-col gap-6">
+              <fieldset className="flex flex-col gap-2">
+                <legend className="mb-2 text-sm">Categoría</legend>
+                {categorias.length === 0 ? (
+                  <p className="text-xs text-danger">No hay categorías activas. Creala primero en Categorías.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {categorias.map((categoria) => (
+                      <label
+                        key={categoria.idCategoria}
+                        className="inline-flex cursor-pointer items-center gap-2 rounded-full border-2 border-border px-4 py-2 text-sm text-muted transition-colors hover:text-text has-checked:border-accent has-checked:bg-accent-soft has-checked:text-text has-focus-visible:outline-2 has-focus-visible:outline-accent"
+                      >
+                        <input
+                          type="radio"
+                          name="categoria-producto"
+                          className="sr-only"
+                          checked={formulario.idCategoria === String(categoria.idCategoria)}
+                          onChange={() => cambiarCategoria(String(categoria.idCategoria))}
+                          disabled={cargando}
+                          required
+                        />
+                        <IconoCategoria categoria={categoria.nombre} className="size-4 text-accent" />
+                        {categoria.nombre}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </fieldset>
+
+              <div className="flex flex-col gap-2">
                 <label htmlFor="nombre" className="text-sm">Nombre</label>
                 <input id="nombre" value={formulario.nombre} className={claseCampo}
                   onChange={(evento) => cambiarCampo('nombre', evento.target.value)} disabled={cargando} required />
               </div>
-              <div className="flex flex-col gap-2 sm:col-span-2">
+              <div className="flex flex-col gap-2">
                 <label htmlFor="descripcion" className="text-sm">
                   Descripción <span className="text-muted">(opcional)</span>
                 </label>
                 <input id="descripcion" value={formulario.descripcion} className={claseCampo}
                   onChange={(evento) => cambiarCampo('descripcion', evento.target.value)} disabled={cargando} />
               </div>
-              <div className="flex flex-col gap-2">
-                <label htmlFor="precio" className="text-sm">Precio</label>
-                <input id="precio" type="number" inputMode="decimal" min="0.01" step="0.01"
-                  value={formulario.precio} className={claseCampo}
-                  onChange={(evento) => cambiarCampo('precio', evento.target.value)} disabled={cargando} required />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label htmlFor="categoria" className="text-sm">Categoría</label>
-                <div className="relative">
-                  <select
-                    id="categoria"
-                    value={formulario.idCategoria}
-                    onChange={(evento) => cambiarCategoria(evento.target.value)}
-                    disabled={cargando || categorias.length === 0}
-                    required
-                    className={`${claseCampo} cursor-pointer appearance-none pr-10`}
-                  >
-                    <option value="">Seleccioná una categoría</option>
-                    {categorias.map((categoria) => (
-                      <option key={categoria.idCategoria} value={categoria.idCategoria}>
-                        {categoria.nombre}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted" />
-                </div>
-                {categorias.length === 0 && (
-                  <p className="text-xs text-danger">No hay categorías activas disponibles.</p>
-                )}
-              </div>
 
-              <fieldset className="flex flex-col gap-2 sm:col-span-2">
-                <legend className="mb-2 text-sm">Disponible en</legend>
-                <div className="flex flex-wrap gap-2">
-                  {sucursales.map((sucursal) => {
-                    const idSucursal = String(sucursal.idSucursal)
-                    return (
-                      <label
-                        key={sucursal.idSucursal}
-                        className="inline-flex cursor-pointer items-center gap-2 rounded-full border-2 border-border px-4 py-2 text-sm text-muted transition-colors hover:text-text has-checked:border-accent has-checked:bg-accent-soft has-checked:text-text"
-                      >
-                        <input
-                          type="checkbox"
-                          className="sr-only"
-                          checked={formulario.idSucursales.includes(idSucursal)}
-                          onChange={(evento) => cambiarSeleccion('idSucursales', idSucursal, evento.target.checked)}
-                          disabled={cargando}
-                        />
-                        <Store className="size-4" />
-                        {sucursal.nombre}
-                      </label>
-                    )
-                  })}
-                </div>
-                {sucursales.length === 0 && (
-                  <p className="text-xs text-danger">No hay sucursales activas disponibles.</p>
-                )}
-              </fieldset>
-
-              {formulario.idCategoria && (
-                <fieldset className="flex flex-col gap-2 sm:col-span-2">
-                  <legend className="mb-2 text-sm">
-                    Extras que admite <span className="text-muted">(opcional)</span>
-                  </legend>
-                  {extrasDeEjemplo && extrasDeCategoria.length > 0 && (
-                    <Aviso tipo="info" titulo="Datos de ejemplo" className="mb-2">
-                      Los extras todavía no están conectados con la base: lo que elijas acá no se guarda.
-                    </Aviso>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    {extrasDeCategoria.map((extra) => {
-                      const idExtra = String(extra.idExtra)
-                      return (
-                        <label
-                          key={extra.idExtra}
-                          className="inline-flex cursor-pointer items-center gap-2 rounded-full border-2 border-border px-4 py-2 text-sm text-muted transition-colors hover:text-text has-checked:border-accent has-checked:bg-accent-soft has-checked:text-text"
-                        >
-                          <input
-                            type="checkbox"
-                            className="sr-only"
-                            checked={formulario.idExtras.includes(idExtra)}
-                            onChange={(evento) => cambiarSeleccion('idExtras', idExtra, evento.target.checked)}
-                            disabled={cargando}
-                          />
-                          {extra.nombre}
-                          <span className="tabular-nums">
-                            {extra.precioAdicional > 0 ? `+${formatoPrecio.format(extra.precioAdicional)}` : 'Sin cargo'}
+              {!categoriaElegida ? (
+                <p className="rounded-2xl bg-bg p-4 text-center text-sm text-muted">
+                  Elegí una categoría para cargar el precio, las variaciones y los extras.
+                </p>
+              ) : (
+                <>
+                  {/* El precio, destacado: único o por variación. */}
+                  <section aria-labelledby="titulo-precio" className="flex flex-col gap-3 rounded-2xl bg-bg p-4">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <h3 id="titulo-precio" className="font-semibold">Precio</h3>
+                      {principal && (
+                        <p className="text-xs text-muted">
+                          En la carta:{' '}
+                          <span className="text-text">
+                            {principal.nombre}
+                            {Number(principal.precio) > 0 && ` · ${formatoPrecio.format(Number(principal.precio))}`}
                           </span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                  {extrasDeCategoria.length === 0 && (
-                    <p className="text-xs text-muted">
-                      Esta categoría no tiene extras.{rol === 'admin' && ' Si los necesita, cargalos en Productos → Extras.'}
-                    </p>
-                  )}
-                </fieldset>
+                        </p>
+                      )}
+                    </div>
+                    {!principal && (
+                      <div className="relative">
+                        <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-muted">$</span>
+                        <input id="precio" type="number" inputMode="decimal" min="0.01" step="0.01"
+                          value={formulario.precio} aria-label="Precio" placeholder="Precio del producto"
+                          className={`${claseCampo} bg-surface pl-8 text-base`}
+                          onChange={(evento) => cambiarCampo('precio', evento.target.value)} disabled={cargando} required />
+                      </div>
+                    )}
+                    <CampoVariaciones
+                      filas={formulario.variaciones}
+                      onCambiar={(variaciones) => setFormulario((actual) => ({ ...actual, variaciones }))}
+                      nombreCategoria={categoriaElegida.nombre}
+                      deshabilitado={cargando}
+                    />
+                  </section>
+
+                  <fieldset className="flex flex-col gap-2">
+                    <legend className="mb-2 text-sm">
+                      Extras que admite <span className="text-muted">(opcional)</span>
+                    </legend>
+                    {extrasDeEjemplo && extrasDeCategoria.length > 0 && (
+                      <Aviso tipo="info" titulo="Datos de ejemplo" className="mb-2">
+                        Los extras todavía no están conectados con la base: lo que elijas acá no se guarda.
+                      </Aviso>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {extrasDeCategoria.map((extra) => {
+                        const idExtra = String(extra.idExtra)
+                        return (
+                          <label
+                            key={extra.idExtra}
+                            className="inline-flex cursor-pointer items-center gap-2 rounded-full border-2 border-border px-4 py-2 text-sm text-muted transition-colors hover:text-text has-checked:border-accent has-checked:bg-accent-soft has-checked:text-text"
+                          >
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={formulario.idExtras.includes(idExtra)}
+                              onChange={(evento) => cambiarSeleccion('idExtras', idExtra, evento.target.checked)}
+                              disabled={cargando}
+                            />
+                            {extra.nombre}
+                            <span className="tabular-nums">
+                              {extra.precioAdicional > 0 ? `+${formatoPrecio.format(extra.precioAdicional)}` : 'Sin cargo'}
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    {extrasDeCategoria.length === 0 && (
+                      <p className="text-xs text-muted">
+                        Esta categoría no tiene extras.{rol === 'admin' && ' Si los necesita, cargalos en Productos → Extras.'}
+                      </p>
+                    )}
+                  </fieldset>
+
+                  <fieldset className="flex flex-col gap-2">
+                    <legend className="mb-2 text-sm">Disponible en</legend>
+                    <div className="flex flex-wrap gap-2">
+                      {sucursales.map((sucursal) => {
+                        const idSucursal = String(sucursal.idSucursal)
+                        return (
+                          <label
+                            key={sucursal.idSucursal}
+                            className="inline-flex cursor-pointer items-center gap-2 rounded-full border-2 border-border px-4 py-2 text-sm text-muted transition-colors hover:text-text has-checked:border-accent has-checked:bg-accent-soft has-checked:text-text"
+                          >
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={formulario.idSucursales.includes(idSucursal)}
+                              onChange={(evento) => cambiarSeleccion('idSucursales', idSucursal, evento.target.checked)}
+                              disabled={cargando}
+                            />
+                            <Store className="size-4" />
+                            {sucursal.nombre}
+                          </label>
+                        )
+                      })}
+                    </div>
+                    {sucursales.length === 0 && (
+                      <p className="text-xs text-danger">No hay sucursales activas disponibles.</p>
+                    )}
+                  </fieldset>
+                </>
               )}
             </div>
 

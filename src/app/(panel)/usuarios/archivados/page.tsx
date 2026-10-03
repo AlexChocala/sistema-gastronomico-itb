@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { ArrowLeft, CircleUserRound, RotateCcw, Store } from '@/components/icons'
+import { etiquetaRol, rolSinSucursal } from '@/lib/usuarios/roles'
 
 type UsuarioArchivado = {
   idUsuario: number
@@ -169,13 +170,13 @@ export default function UsuariosArchivadosPage() {
                   <Button
                     key={nombre}
                     type="button"
-                    className={`w-auto! rounded-full! capitalize ${
+                    className={`w-auto! rounded-full! ${
                       rol === nombre ? 'bg-accent! text-on-accent! hover:bg-accent-hover!' : ''
                     }`}
                     variant={rol === nombre ? 'primario' : 'secundario'}
                     onClick={() => setRol(nombre)}
                   >
-                    {nombre}
+                    {etiquetaRol(nombre)}
                   </Button>
                 ))}
               </div>
@@ -304,8 +305,8 @@ export default function UsuariosArchivadosPage() {
                         </div>
                       </td>
                       <td className="border-b border-border px-3 py-4">
-                        <span className="rounded-full bg-bg px-3 py-1 capitalize">
-                          {usuario.rol.nombre}
+                        <span className="rounded-full bg-bg px-3 py-1">
+                          {etiquetaRol(usuario.rol.nombre)}
                         </span>
                       </td>
                       <td className="border-b border-border px-3 py-4">
@@ -313,7 +314,7 @@ export default function UsuariosArchivadosPage() {
                           <Store size={16} className="text-accent" aria-hidden="true" />
                           {usuario.sucursal
                             ? nombreSucursal(usuario.sucursal.nombre)
-                            : 'Sin sucursal'}
+                            : rolSinSucursal(usuario.rol.nombre) ? 'Todas las sucursales' : 'Sin sucursal'}
                         </span>
                       </td>
                       <td className="border-b border-border px-3 py-4 text-right">

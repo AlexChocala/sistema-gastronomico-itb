@@ -1,5 +1,7 @@
 import type { PrismaClient, Prisma } from '@prisma/client'
-import { ErrorProducto, idValido, leerId, leerCuerpo, validarProducto } from './productos-validacion'
+import {
+  ErrorProducto, idValido, leerId, leerCuerpo, validarProducto, type VariacionProducto,
+} from './productos-validacion'
 import { validarCategoria } from './categorias-validacion'
 import { validarExtra } from './extras-validacion'
 
@@ -18,10 +20,16 @@ const camposProducto = {
     select: { idExtra: true },
     orderBy: { idExtra: 'asc' },
   },
+  // Las vigentes, de la más barata a la más cara (igual que en la carta).
+  variaciones: {
+    where: { disponible: true },
+    select: { idVariacion: true, nombre: true, precioAdicional: true },
+    orderBy: [{ precioAdicional: 'asc' }, { nombre: 'asc' }],
+  },
 } satisfies Prisma.ProductoSelect
 
 const camposCategoria = {
-  idCategoria: true, nombre: true, descripcion: true, orden: true, activa: true,
+  idCategoria: true, nombre: true, descripcion: true, orden: true, activa: true, nombresVariaciones: true,
   _count: { select: { productos: true, extras: true } },
 } satisfies Prisma.CategoriaSelect
 
@@ -124,6 +132,48 @@ async function nombreExtraDisponible(
   if (existente) throw new ErrorProducto(409, 'Ya existe un extra con ese nombre en esta categoría.')
 }
 
+// Deja las variaciones del producto iguales a la lista recibida:
+// - con idVariacion: se edita (tiene que ser de este producto);
+// - sin id: se crea, o se reactiva una oculta con el mismo nombre;
+// - las que no vienen: se borran, salvo que ya estén en algún pedido (la base no deja
+//   borrarlas y el historial las necesita): esas solo se ocultan (disponible = false).
+async function sincronizarVariaciones(
+  tx: Prisma.TransactionClient,
+  idProducto: number,
+  variaciones: VariacionProducto[],
+) {
+  const actuales = await tx.variacion.findMany({
+    where: { idProducto },
+    select: { idVariacion: true, nombre: true, disponible: true, _count: { select: { detallesPedido: true } } },
+  })
+  const porId = new Map(actuales.map((actual) => [actual.idVariacion, actual]))
+  const conservadas = new Set<number>()
+
+  for (const { idVariacion, nombre, precioAdicional } of variaciones) {
+    if (idVariacion !== undefined && !porId.has(idVariacion)) {
+      throw new ErrorProducto(400, 'Hay una variación que no es de este producto.')
+    }
+    const oculta = idVariacion === undefined
+      ? actuales.find((actual) => !actual.disponible && actual.nombre.toLowerCase() === nombre.toLowerCase())
+      : undefined
+    const id = idVariacion ?? oculta?.idVariacion
+    if (id === undefined) {
+      await tx.variacion.create({ data: { idProducto, nombre, precioAdicional, disponible: true } })
+    } else {
+      conservadas.add(id)
+      await tx.variacion.update({ where: { idVariacion: id }, data: { nombre, precioAdicional, disponible: true } })
+    }
+  }
+
+  const sobrantes = actuales.filter((actual) => !conservadas.has(actual.idVariacion) && actual.disponible)
+  const usadas = sobrantes.filter((actual) => actual._count.detallesPedido > 0).map((actual) => actual.idVariacion)
+  const libres = sobrantes.filter((actual) => actual._count.detallesPedido === 0).map((actual) => actual.idVariacion)
+  if (usadas.length > 0) {
+    await tx.variacion.updateMany({ where: { idVariacion: { in: usadas } }, data: { disponible: false } })
+  }
+  if (libres.length > 0) await tx.variacion.deleteMany({ where: { idVariacion: { in: libres } } })
+}
+
 export function crearControladorProductos(db: PrismaClient, leerSesion: () => Promise<Sesion>) {
   async function proteger(
     request: Request,
@@ -201,7 +251,8 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
         // El formulario necesita también categorías que todavía no tienen productos.
         categorias: await tx.categoria.findMany({
           where: { activa: true },
-          select: { idCategoria: true, nombre: true },
+          // nombresVariaciones: lo que el formulario ofrece para tildar en cada producto.
+          select: { idCategoria: true, nombre: true, nombresVariaciones: true },
           orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
         }),
         sucursales: await tx.sucursal.findMany({
@@ -244,6 +295,10 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
             extras: {
               create: datos.idExtras!.map((idExtra) => ({ idExtra })),
             },
+            // En un producto nuevo no hay variaciones previas: se ignora cualquier id.
+            variaciones: {
+              create: (datos.variaciones ?? []).map(({ nombre, precioAdicional }) => ({ nombre, precioAdicional })),
+            },
           },
           select: camposProducto,
         })
@@ -268,7 +323,7 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
           await extrasDeCategoria(tx, datos.idExtras, idCategoriaFinal)
         }
         await nombreDisponible(tx, datos.nombre ?? actual.nombre, idCategoriaFinal, idProducto)
-        const { idSucursales, idExtras, ...cambiosProducto } = datos
+        const { idSucursales, idExtras, variaciones, ...cambiosProducto } = datos
         // El nuevo precio y su historial se guardan juntos; los pedidos previos conservan sus importes.
         await tx.producto.update({
           where: { idProducto },
@@ -304,6 +359,7 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
             await tx.productoExtra.createMany({ data: idExtras.map((idExtra) => ({ idProducto, idExtra })) })
           }
         }
+        if (variaciones !== undefined) await sincronizarVariaciones(tx, idProducto, variaciones)
         return tx.producto.findUniqueOrThrow({ where: { idProducto }, select: camposProducto })
       }, { isolationLevel: 'Serializable' })
       return responder({ producto })
@@ -332,6 +388,7 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
           nombre: datos.nombre!,
           descripcion: datos.descripcion ?? null,
           orden: datos.orden!,
+          nombresVariaciones: datos.nombresVariaciones ?? [],
         },
         select: camposCategoria,
       })

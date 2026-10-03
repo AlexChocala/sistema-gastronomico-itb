@@ -21,6 +21,8 @@ export type PedidoCreado = {
   // Solo delivery (null en retiro).
   direccion?: string | null
   referencias?: string | null
+  // Para la cocina, de todo el pedido (null si no escribió nada).
+  aclaracion?: string | null
   metodoPago: MetodoPagoOnline
   estadoPedido: string
   estadoPago: string
@@ -114,6 +116,12 @@ export function PedidoConfirmado({ pedido, slug, refTitulo }: {
             )
           })}
         </ul>
+        {pedido.aclaracion && (
+          <p className="rounded-2xl bg-bg px-3 py-2 text-sm font-normal break-words">
+            <span className="block text-xs text-muted">Aclaración para la cocina</span>
+            {pedido.aclaracion}
+          </p>
+        )}
         <div className="flex items-baseline justify-between border-t border-border/60 pt-3">
           <span className="font-semibold">Total</span>
           <span className="text-xl font-semibold tabular-nums">{formatearPrecio(pedido.total)}</span>

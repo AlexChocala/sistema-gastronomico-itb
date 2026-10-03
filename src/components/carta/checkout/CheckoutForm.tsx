@@ -164,6 +164,8 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
           }
         : {}),
       metodoPago,
+      // La aclaración para la cocina se escribe en el carrito; vacía no se manda.
+      ...(carrito.aclaracion.trim() ? { aclaracion: carrito.aclaracion.trim() } : {}),
       // Una línea por combinación; sin variación no se manda idVariacion.
       items: carrito.items.map(({ idProducto, cantidad, idVariacion, extras }) => ({
         idProducto,
@@ -224,7 +226,13 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_20rem] lg:items-start">
-      <ResumenPedido items={carrito.items} total={carrito.total} cantidadTotal={carrito.cantidadTotal} slug={slug} />
+      <ResumenPedido
+        items={carrito.items}
+        total={carrito.total}
+        cantidadTotal={carrito.cantidadTotal}
+        aclaracion={carrito.aclaracion.trim()}
+        slug={slug}
+      />
 
       <form onSubmit={enviar} noValidate className="flex flex-col gap-5 lg:order-first" aria-busy={enviando}>
         <Seccion titulo="Tus datos">
@@ -374,7 +382,7 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
                 onElegir={() => { setMetodoPago('transferencia'); limpiarError('metodoPago') }}
                 icono={<Landmark className="size-5" aria-hidden="true" />}
                 titulo="Transferencia"
-                detalle="Alias o CBU"
+                detalle="Con alias"
                 idError={errores.metodoPago ? 'error-pago' : undefined}
               />
             </div>
@@ -393,7 +401,7 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
             <div className="flex gap-3 rounded-2xl bg-accent-soft p-4 text-sm font-normal">
               <Info className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
               <p>
-                Al confirmar te mostramos el alias y el CBU para transferir, junto con el número de tu pedido.{' '}
+                Al confirmar te mostramos el alias para transferir, junto con el número de tu pedido.{' '}
                 {sucursal.whatsapp
                   ? 'Después nos mandás el comprobante por WhatsApp y empezamos a prepararlo cuando verifiquemos el pago.'
                   : 'Una vez realizada la transferencia, enviá el comprobante por WhatsApp. Empezamos a preparar tu pedido cuando verifiquemos el pago.'}
@@ -498,10 +506,11 @@ function OpcionFija({ icono, titulo, detalle }: { icono: ReactNode; titulo: stri
   )
 }
 
-function ResumenPedido({ items, total, cantidadTotal, slug }: {
+function ResumenPedido({ items, total, cantidadTotal, aclaracion, slug }: {
   items: ItemCarrito[]
   total: number
   cantidadTotal: number
+  aclaracion: string
   slug: string
 }) {
   return (
@@ -526,6 +535,12 @@ function ResumenPedido({ items, total, cantidadTotal, slug }: {
           )
         })}
       </ul>
+      {aclaracion && (
+        <p className="rounded-2xl bg-bg px-3 py-2 text-sm font-normal break-words">
+          <span className="block text-xs text-muted">Aclaración para la cocina</span>
+          {aclaracion}
+        </p>
+      )}
       <div className="flex items-baseline justify-between border-t border-border/60 pt-3">
         <span className="text-sm text-muted">Total · {textoProductos(cantidadTotal)}</span>
         <span className="text-xl font-semibold tabular-nums">{formatearPrecio(total)}</span>

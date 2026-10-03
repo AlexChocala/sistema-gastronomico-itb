@@ -5,11 +5,12 @@
 
 import { BotonDescarga, BotonesExportar } from '@/components/ui/BotonesExportar'
 import { exportarExcel } from '@/lib/reportes/exportar-excel'
-import { exportarPdf } from '@/lib/reportes/exportar-pdf'
+import { exportarPdf, type NegocioReporte } from '@/lib/reportes/exportar-pdf'
 import type { Pestana, Valor } from '@/lib/reportes/pestanas'
 import type { Agrupacion, DatosReportes } from '@/lib/reportes/tipos'
 
 export type ContextoDescarga = {
+  negocio: NegocioReporte
   // Textos del encabezado, ej. "Del 01/09/2026 al 28/09/2026" y "Todas las sucursales".
   periodo: string
   sucursal: string
@@ -33,7 +34,7 @@ function aNombreDeArchivo(texto: string) {
 }
 
 export function BotonesDescarga({ datos, pestana, filas, agrupacion, contexto, deshabilitado, obtenerImagenGrafico }: BotonesDescargaProps) {
-  const { periodo, sucursal, sufijoArchivo } = contexto
+  const { negocio, periodo, sucursal, sufijoArchivo } = contexto
   const sinDatos = deshabilitado || datos.resumen.cantidadPedidos === 0
 
   return (
@@ -44,7 +45,7 @@ export function BotonesDescarga({ datos, pestana, filas, agrupacion, contexto, d
         deshabilitado={sinDatos}
         generar={() =>
           exportarPdf({
-            pestana, filas, resumen: datos.resumen, periodo, sucursal,
+            negocio, pestana, filas, resumen: datos.resumen, periodo, sucursal,
             imagenGrafico: obtenerImagenGrafico(),
             nombreArchivo: `reporte-${aNombreDeArchivo(pestana.titulo)}_${sufijoArchivo}.pdf`,
           })
@@ -54,7 +55,7 @@ export function BotonesDescarga({ datos, pestana, filas, agrupacion, contexto, d
         texto="Excel"
         descripcion="Descargar Excel con todos los reportes"
         deshabilitado={sinDatos}
-        generar={() => exportarExcel({ datos, agrupacion, periodo, sucursal, nombreArchivo: `reportes_${sufijoArchivo}.xlsx` })}
+        generar={() => exportarExcel({ negocio, datos, agrupacion, periodo, sucursal, nombreArchivo: `reportes_${sufijoArchivo}.xlsx` })}
       />
       {pestana.id === 'pedidos' && (
         <BotonesExportar

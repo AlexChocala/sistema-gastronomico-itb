@@ -7,7 +7,7 @@ export default async function DashboardPage() {
 
   return (
     <main className="p-6" lang="es">
-      <ResumenDelDia nombre={sesion?.user.name ?? 'Usuario'} />
+      <ResumenDelDia nombre={sesion?.user.name ?? 'Usuario'} puedeAbrirCaja={sesion?.user.rol !== 'admin'} />
     </main>
   )
 }

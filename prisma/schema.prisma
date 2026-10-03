@@ -44,9 +44,11 @@ model Negocio {
   tiktok      String?
   facebook    String?
   // Datos para que el cliente pague por transferencia desde el menú digital. Esa opción
-  // se ofrece solo si hay titular y al menos alias o CBU/CVU.
+  // se ofrece solo si están los tres: titular, alias y CUIT/CUIL. El CUIT no sirve para
+  // transferir: el cliente lo compara con el que le muestra su banco al usar el alias.
   transferenciaAlias   String?
-  transferenciaCbu     String?
+  // Solo los 11 dígitos, sin guiones (se agregan al mostrarlo).
+  transferenciaCuit    String? @db.VarChar(11)
   transferenciaTitular String?
 }
 
@@ -109,6 +111,9 @@ model Categoria {
   descripcion String?
   orden       Int
   activa      Boolean @default(true)
+  // Nombres de variaciones sugeridos para los productos de esta categoría
+  // (ej: ["Chica", "Mediana", "Grande"]). Las variaciones reales, con precio, están en Variacion.
+  nombresVariaciones String[] @default([])
 
   productos Producto[]
   extras    Extra[]
@@ -221,6 +226,8 @@ model Pedido {
   direccion String?
   // Indicaciones para el repartidor (solo delivery, hasta 200 caracteres).
   referencias String?
+  // Aclaración para la cocina, para todo el pedido (ej: "2 sin cebolla, la otra completa").
+  aclaracion String? @db.VarChar(200)
 
   subtotal  Float
   total     Float

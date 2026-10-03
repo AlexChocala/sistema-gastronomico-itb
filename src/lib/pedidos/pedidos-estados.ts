@@ -78,6 +78,8 @@ export interface PedidoPantalla extends PedidoTransicion {
   idLocalidad: number | null
   localidad: string | null
   referencias: string | null
+  // Para la cocina, de todo el pedido (null si no hay).
+  aclaracion: string | null
   items: ItemPedidoPantalla[]
   total: number
 }

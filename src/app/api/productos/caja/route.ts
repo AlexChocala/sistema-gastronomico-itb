@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { NextResponse } from 'next/server'
 import { authOptions } from '@/lib/auth/auth'
 import { prisma } from '@/lib/db/prisma'
+import { ordenarVariaciones } from '@/lib/productos/variacion-principal'
 import { obtenerSucursalActiva } from '@/lib/sucursales/sucursal-activa'
 
 export async function GET() {
@@ -52,7 +53,19 @@ export async function GET() {
                 idProducto: true,
                 nombre: true,
                 precio: true,
-                categoria: { select: { nombre: true } },
+                categoria: { select: { nombre: true, nombresVariaciones: true } },
+                // Si tiene, Caja pide elegir una (igual que la carta): la API de pedidos la exige.
+                variaciones: {
+                  where: { disponible: true },
+                  select: { idVariacion: true, nombre: true, precioAdicional: true },
+                  orderBy: [{ precioAdicional: 'asc' }, { nombre: 'asc' }],
+                },
+                // Los extras activos que admite, igual que en la carta.
+                extras: {
+                  where: { extra: { activo: true } },
+                  orderBy: { extra: { nombre: 'asc' } },
+                  select: { extra: { select: { idExtra: true, nombre: true, precioAdicional: true } } },
+                },
               },
             },
           },
@@ -70,6 +83,9 @@ export async function GET() {
         nombre: producto.nombre,
         categoria: producto.categoria.nombre,
         precio: producto.precio,
+        // En el orden de su categoría: la primera es la principal.
+        variaciones: ordenarVariaciones(producto.variaciones, producto.categoria.nombresVariaciones),
+        extras: producto.extras.map(({ extra }) => extra),
         disponible,
       })),
       localidadesDelivery: sucursal.localidadesDelivery.map((zona) => zona.localidad),

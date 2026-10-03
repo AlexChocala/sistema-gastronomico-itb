@@ -97,7 +97,8 @@ function EncabezadoTarjeta({ titulo, subtitulo }: { titulo: string; subtitulo: s
 
 const sinSuscripcion = () => () => {}
 
-export function ResumenDelDia({ nombre }: { nombre: string }) {
+// `puedeAbrirCaja`: el admin no carga pedidos, así que no ve el acceso a Caja.
+export function ResumenDelDia({ nombre, puedeAbrirCaja }: { nombre: string; puedeAbrirCaja: boolean }) {
   const { sucursal } = useSucursalActiva()
   const { pedidos, cargando, error, recargar } = usePedidosPantalla(sucursal?.idSucursal ?? null)
   // "Hoy" y las horas dependen de la zona horaria del navegador: se calculan solo en el
@@ -153,16 +154,18 @@ export function ResumenDelDia({ nombre }: { nombre: string }) {
             <span className="first-letter:uppercase">{formatoFecha.format(hoy)}</span>
           </p>
         </div>
-        <a
-          href="/pantallas/caja"
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm text-on-accent transition-colors hover:bg-accent-hover"
-        >
-          <Wallet className="size-4" />
-          Abrir caja
-          <ExternalLink className="size-3.5" />
-        </a>
+        {puedeAbrirCaja && (
+          <a
+            href="/pantallas/caja"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm text-on-accent transition-colors hover:bg-accent-hover"
+          >
+            <Wallet className="size-4" />
+            Abrir caja
+            <ExternalLink className="size-3.5" />
+          </a>
+        )}
       </header>
 
       <EstadoConexion error={error} onReintentar={() => void recargar()} />

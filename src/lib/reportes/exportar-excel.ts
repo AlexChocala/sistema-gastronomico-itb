@@ -2,10 +2,13 @@
 // como números (se pueden sumar y ordenar) y los montos con formato de pesos.
 // SheetJS se carga recién al exportar.
 
+import type { NegocioReporte } from './exportar-pdf'
+import { momentoEnArgentina } from './fechas'
 import { PESTANAS } from './pestanas'
 import type { Agrupacion, DatosReportes } from './tipos'
 
 type OpcionesExcel = {
+  negocio: NegocioReporte
   datos: DatosReportes
   agrupacion: Agrupacion
   periodo: string
@@ -15,20 +18,22 @@ type OpcionesExcel = {
 
 const FORMATO_PESOS = '"$" #,##0'
 
-export async function exportarExcel({ datos, agrupacion, periodo, sucursal, nombreArchivo }: OpcionesExcel) {
+export async function exportarExcel({ negocio, datos, agrupacion, periodo, sucursal, nombreArchivo }: OpcionesExcel) {
   const XLSX = await import('xlsx')
   const libro = XLSX.utils.book_new()
 
   const { totalVendido, cantidadPedidos, ticketPromedio } = datos.resumen
   const resumen = XLSX.utils.aoa_to_sheet([
-    ['Período', periodo],
+    ['Negocio', negocio.nombre],
     ['Sucursal', sucursal],
+    ['Período', `${periodo} · Pedidos entregados`],
+    ['Generado', momentoEnArgentina()],
     ['Total vendido', totalVendido],
     ['Pedidos entregados', cantidadPedidos],
     ['Ticket promedio', ticketPromedio],
   ])
-  resumen.B3.z = FORMATO_PESOS
   resumen.B5.z = FORMATO_PESOS
+  resumen.B7.z = FORMATO_PESOS
   resumen['!cols'] = [{ wch: 20 }, { wch: 32 }]
   XLSX.utils.book_append_sheet(libro, resumen, 'Resumen')
 

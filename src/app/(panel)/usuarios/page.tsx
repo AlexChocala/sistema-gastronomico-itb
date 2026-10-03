@@ -3,10 +3,12 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, Copy, KeyRound, Pencil, Plus, Power, Store, Trash2, X } from '@/components/icons'
+import { Copy, KeyRound, Pencil, Plus, Power, ShieldCheck, Store, Trash2, X } from '@/components/icons'
 import { BotonesExportar, type DatosExportables } from '@/components/ui/BotonesExportar'
 import { Button } from '@/components/ui/Button'
+import { Desplegable } from '@/components/ui/Desplegable'
 import { hoyEnArgentina } from '@/lib/reportes/fechas'
+import { etiquetaRol, rolSinSucursal } from '@/lib/usuarios/roles'
 
 const COLUMNAS_EXPORTAR = ['ID', 'Nombre', 'Apellido', 'Email', 'Rol', 'Sucursal', 'Estado']
 
@@ -50,40 +52,47 @@ function iniciales(u: Usuario) {
   return `${u.nombre[0] ?? ''}${u.apellido[0] ?? ''}`.toUpperCase()
 }
 
-// Campo con label para el modal del formulario.
+// Sucursal que se muestra en la tabla y en la exportación.
+function textoSucursal(u: Usuario) {
+  if (u.sucursal) return nombreSucursal(u.sucursal.nombre)
+  return rolSinSucursal(u.rol.nombre) ? 'Todas las sucursales' : ''
+}
+
+// Campo con label para el modal del formulario. Sin `id`, el label es un texto: los
+// desplegables se nombran solos (aria-label) y no son un <input> al que apuntar.
 function Campo({
   id,
   label,
+  className = '',
   children,
 }: {
-  id: string
+  id?: string
   label: string
+  className?: string
   children: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor={id} className="text-sm">{label}</label>
+    <div className={`flex flex-col gap-2 ${className}`}>
+      {id ? <label htmlFor={id} className="text-sm">{label}</label> : <span className="text-sm">{label}</span>}
       {children}
     </div>
   )
 }
 
-// Select con la misma forma de pastilla que los inputs.
-function Selector(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <div className="relative">
-      <select {...props} className={`${claseCampo} cursor-pointer appearance-none pr-10`} />
-      <ChevronDown className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted" />
-    </div>
-  )
+type FormUsuario = {
+  nombre: string
+  apellido: string
+  email: string
+  idRol: number | null
+  idSucursal: number | null
 }
 
-const formVacio = {
+const formVacio: FormUsuario = {
   nombre: '',
   apellido: '',
   email: '',
-  idRol: '',
-  idSucursal: '',
+  idRol: null,
+  idSucursal: null,
 }
 
 export default function UsuariosPage() {
@@ -106,6 +115,9 @@ export default function UsuariosPage() {
   const usuarioEditado = usuarios.find((u) => u.idUsuario === editandoId) ?? null
 
   const [form, setForm] = useState(formVacio)
+  const rolElegido = roles.find((r) => r.idRol === form.idRol) ?? null
+  // El admin no elige sucursal: trabaja con todas.
+  const llevaSucursal = !rolElegido || !rolSinSucursal(rolElegido.nombre)
 
   async function cargarDatos() {
     setLoading(true)
@@ -174,7 +186,7 @@ export default function UsuariosPage() {
     return () => window.removeEventListener('keydown', alPresionarTecla)
   }, [confirmarRestablecer])
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
@@ -191,8 +203,8 @@ export default function UsuariosPage() {
       nombre: u.nombre,
       apellido: u.apellido,
       email: u.email,
-      idRol: String(u.idRol),
-      idSucursal: u.idSucursal ? String(u.idSucursal) : '',
+      idRol: u.idRol,
+      idSucursal: u.idSucursal,
     })
     setError('')
     setMostrarForm(true)
@@ -209,6 +221,16 @@ export default function UsuariosPage() {
     e.preventDefault()
     setError('')
 
+    // Los desplegables no son <select required>: se validan acá.
+    if (form.idRol === null) {
+      setError('Elegí el rol del usuario.')
+      return
+    }
+    if (llevaSucursal && form.idSucursal === null) {
+      setError('Elegí la sucursal donde trabaja.')
+      return
+    }
+
     const esEdicion = editandoId !== null
     const url = esEdicion ? `/api/usuarios/${editandoId}` : '/api/usuarios'
     const method = esEdicion ? 'PUT' : 'POST'
@@ -216,11 +238,7 @@ export default function UsuariosPage() {
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...form,
-        idRol: Number(form.idRol),
-        idSucursal: Number(form.idSucursal),
-      }),
+      body: JSON.stringify({ ...form, idSucursal: llevaSucursal ? form.idSucursal : null }),
     })
 
     const data = await res.json()
@@ -278,7 +296,7 @@ export default function UsuariosPage() {
   function datosParaExportar(): DatosExportables {
     return {
       filas: usuarios.map((u) => [
-        u.idUsuario, u.nombre, u.apellido, u.email, u.rol.nombre, u.sucursal ? nombreSucursal(u.sucursal.nombre) : '',
+        u.idUsuario, u.nombre, u.apellido, u.email, etiquetaRol(u.rol.nombre), textoSucursal(u),
         u.activo ? 'Activo' : 'Inactivo',
       ]),
       json: usuarios.map((u) => ({
@@ -411,13 +429,13 @@ export default function UsuariosPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="rounded-full bg-bg px-2.5 py-1 text-xs capitalize">{u.rol.nombre}</span>
+                      <span className="rounded-full bg-bg px-2.5 py-1 text-xs">{etiquetaRol(u.rol.nombre)}</span>
                     </td>
                     <td className="px-4 py-3">
-                      {u.sucursal ? (
+                      {textoSucursal(u) ? (
                         <span className="inline-flex items-center gap-1.5 text-muted">
                           <Store className="size-4" />
-                          {nombreSucursal(u.sucursal.nombre)}
+                          {textoSucursal(u)}
                         </span>
                       ) : (
                         <span className="text-muted">—</span>
@@ -474,13 +492,15 @@ export default function UsuariosPage() {
       </section>
 
       {mostrarForm && esAdmin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-text/40 p-4">
+        // El scroll va en el fondo y no en el formulario: así la lista de un desplegable
+        // puede salir del recuadro sin quedar recortada. `m-auto` centra sin cortar arriba.
+        <div className="fixed inset-0 z-50 flex overflow-y-auto bg-text/40 p-4">
           <form
             onSubmit={handleSubmit}
             role="dialog"
             aria-modal="true"
             aria-labelledby="titulo-formulario-usuario"
-            className="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col gap-5 overflow-y-auto rounded-3xl bg-surface p-6 shadow-xl"
+            className="m-auto flex w-full max-w-xl flex-col gap-5 rounded-3xl bg-surface p-6 shadow-xl"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -506,24 +526,36 @@ export default function UsuariosPage() {
               <Campo id="apellido" label="Apellido">
                 <input id="apellido" name="apellido" value={form.apellido} onChange={handleChange} required className={claseCampo} />
               </Campo>
-              <Campo id="email" label="Email">
+              <Campo id="email" label="Email" className="sm:col-span-2">
                 <input id="email" name="email" type="email" value={form.email} onChange={handleChange} required className={claseCampo} />
               </Campo>
-              <Campo id="idRol" label="Rol">
-                <Selector id="idRol" name="idRol" value={form.idRol} onChange={handleChange} required>
-                  <option value="" disabled hidden>Seleccionar rol</option>
-                  {roles.map((r) => (
-                    <option key={r.idRol} value={r.idRol}>{r.nombre}</option>
-                  ))}
-                </Selector>
+              <Campo label="Rol">
+                <Desplegable
+                  etiqueta="Rol"
+                  icono={ShieldCheck}
+                  opciones={roles.map((r) => ({ valor: r.idRol, texto: etiquetaRol(r.nombre) }))}
+                  valor={form.idRol}
+                  onElegir={(idRol) => setForm({ ...form, idRol })}
+                  textoVacio="Elegí un rol"
+                />
               </Campo>
-              <Campo id="idSucursal" label="Sucursal">
-                <Selector id="idSucursal" name="idSucursal" value={form.idSucursal} onChange={handleChange} required>
-                  <option value="" disabled hidden>Seleccionar sucursal</option>
-                  {sucursales.map((s) => (
-                    <option key={s.idSucursal} value={s.idSucursal}>{nombreSucursal(s.nombre)}</option>
-                  ))}
-                </Selector>
+              <Campo label="Sucursal">
+                {llevaSucursal ? (
+                  <Desplegable
+                    etiqueta="Sucursal"
+                    icono={Store}
+                    opciones={sucursales.map((s) => ({ valor: s.idSucursal, texto: nombreSucursal(s.nombre) }))}
+                    valor={form.idSucursal}
+                    onElegir={(idSucursal) => setForm({ ...form, idSucursal })}
+                    textoVacio="Elegí una sucursal"
+                  />
+                ) : (
+                  // Mismo alto que el desplegable, para que la fila no salte al cambiar de rol.
+                  <p className="flex items-center gap-3 rounded-full border border-transparent bg-bg px-4 py-2 text-sm text-muted">
+                    <Store className="size-4 shrink-0 text-accent" />
+                    Todas las sucursales
+                  </p>
+                )}
               </Campo>
             </div>
 

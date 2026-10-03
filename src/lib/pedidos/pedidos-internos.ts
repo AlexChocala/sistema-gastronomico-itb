@@ -34,7 +34,7 @@ const MAX_PEDIDOS_LISTA = 500
 
 const camposPedido = {
   idPedido: true, idSucursal: true, fecha: true, origenPedido: true, estadoPedido: true, metodoPago: true,
-  estadoPago: true, direccion: true, referencias: true, total: true, idLocalidad: true, idCliente: true,
+  estadoPago: true, direccion: true, referencias: true, aclaracion: true, total: true, idLocalidad: true, idCliente: true,
   idTipoEntrega: true,
   cliente: { select: { nombre: true, apellido: true, telefono: true } },
   tipoEntrega: { select: { nombre: true } },
@@ -70,6 +70,7 @@ function aPantalla(fila: FilaPedido): PedidoPantalla {
     idLocalidad: fila.idLocalidad,
     localidad: fila.localidad?.nombre ?? null,
     referencias: fila.referencias,
+    aclaracion: fila.aclaracion,
     items: fila.detalles.map((detalle) => ({
       idProducto: detalle.idProducto,
       cantidad: detalle.cantidad,
@@ -110,7 +111,8 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
   leerSesion: () => Promise<S | null>,
   sucursalDe: (sesion: S) => Promise<number | null>,
 ) {
-  // Cualquier rol del personal (admin, supervisor, empleado) opera los pedidos de su sucursal.
+  // Supervisor y empleado operan los pedidos de su sucursal. El admin solo los ve: así no
+  // carga ni mueve un pedido por error (por ejemplo, con otra sucursal activa).
   async function proteger(
     request: Request,
     escritura: boolean,
@@ -121,10 +123,14 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
       if (!sesion || !idValido(sesion.user?.idUsuario)) throw new ErrorPedido(401, 'Iniciá sesión para ver los pedidos.')
       const usuario = await db.usuario.findUnique({
         where: { idUsuario: sesion.user.idUsuario },
-        select: { activo: true, debeCambiarContrasena: true },
+        select: { activo: true, debeCambiarContrasena: true, rol: { select: { nombre: true } } },
       })
       if (!usuario?.activo) throw new ErrorPedido(403, 'El usuario no está habilitado.')
       if (usuario.debeCambiarContrasena) throw new ErrorPedido(403, 'Primero tenés que cambiar tu contraseña.')
+      // El rol se lee de la base y no de la sesión, por si se lo cambiaron hace poco.
+      if (escritura && usuario.rol.nombre === 'admin') {
+        throw new ErrorPedido(403, 'El administrador puede ver los pedidos, pero no cargarlos ni cambiarlos.')
+      }
       if (escritura && !mismoOrigen(request)) throw new ErrorPedido(403, 'La solicitud debe realizarse desde esta aplicación.')
       const idSucursal = await sucursalDe(sesion)
       if (idSucursal === null) throw new ErrorPedido(400, 'Tu usuario no tiene una sucursal asignada.')
@@ -186,6 +192,7 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
             estadoPago: 'pagado',
             direccion: pedido.direccion,
             referencias: pedido.referencias,
+            aclaracion: pedido.aclaracion,
             subtotal: total,
             total,
             idCliente: cliente.idCliente,

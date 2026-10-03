@@ -2,9 +2,11 @@
 
 // Pantalla de Cocina (pestaña aparte, sin sidebar). Muestra los pedidos a preparar y
 // cambia su estado; ese mismo estado es el que lee la pantalla de Pedidos Mostrador.
-// "Listo" también vale para un pedido que nadie marcó como "Pendiente" (recibido → listo).
+// Un solo botón por pedido con la próxima acción: recibido → en preparación → listo.
+// Así todo pedido pasa por "En preparación" en el mostrador antes de "Para retirar".
 
-import { Bike, Check, CircleUserRound, ShoppingBag } from '@/components/icons'
+import { useState } from 'react'
+import { Bike, CircleUserRound, ShoppingBag } from '@/components/icons'
 import { EstadoConexion } from '@/components/pedidos/EstadoConexion'
 import { PastillaSucursal, useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import { puedeIrACocina, usePedidosPantalla, type PedidoPantalla } from '@/lib/pedidos/pedidos-pantallas'
@@ -15,18 +17,37 @@ const etiquetaEntrega = {
   delivery: { texto: 'Delivery', icono: Bike, clase: 'bg-warning-surface text-warning' },
 }
 
+// El estado se informa con una etiqueta; el verde queda para lo que ya está listo.
+const etiquetaEstado = {
+  nuevo: { texto: 'Nuevo', clasePunto: 'bg-muted', claseTexto: 'text-muted' },
+  enPreparacion: { texto: 'En preparación', clasePunto: 'bg-order-preparing', claseTexto: 'text-order-preparing' },
+}
+
 function TarjetaPedido({
   pedido,
-  onPendiente,
+  onEmpezar,
   onListo,
 }: {
   pedido: PedidoPantalla
-  onPendiente: () => void
-  onListo: () => void
+  onEmpezar: () => Promise<unknown>
+  onListo: () => Promise<unknown>
 }) {
   const entrega = etiquetaEntrega[pedido.tipoEntrega]
   const IconoEntrega = entrega.icono
   const enPreparacion = pedido.estado === 'en_preparacion'
+  const estado = etiquetaEstado[enPreparacion ? 'enPreparacion' : 'nuevo']
+  // Bloquea el botón hasta que responda el servidor: como queda en el mismo lugar,
+  // un doble toque pasaría el pedido de "Nuevo" a "Listo" sin querer.
+  const [enviando, setEnviando] = useState(false)
+
+  async function avanzar() {
+    setEnviando(true)
+    try {
+      await (enPreparacion ? onListo() : onEmpezar())
+    } finally {
+      setEnviando(false)
+    }
+  }
 
   return (
     <article className="flex flex-col rounded-3xl bg-surface p-5 shadow-sm">
@@ -45,12 +66,10 @@ function TarjetaPedido({
           <IconoEntrega className="size-4" strokeWidth={2} />
           {entrega.texto}
         </span>
-        {enPreparacion && (
-          <span className="inline-flex items-center gap-1.5 text-sm text-order-preparing">
-            <span className="size-2 rounded-full bg-order-preparing" />
-            En preparación
-          </span>
-        )}
+        <span className={`inline-flex items-center gap-1.5 text-sm ${estado.claseTexto}`}>
+          <span className={`size-2 rounded-full ${estado.clasePunto}`} />
+          {estado.texto}
+        </span>
       </div>
 
       <ul className="mt-4 flex flex-1 flex-col gap-2 text-base">
@@ -69,22 +88,23 @@ function TarjetaPedido({
         })}
       </ul>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 border-t border-border pt-4">
+      {/* Instrucción para cocinar: destacada para que no se pase por alto. */}
+      {pedido.aclaracion && (
+        <p className="mt-4 rounded-2xl bg-warning-surface px-4 py-3 text-base font-semibold break-words">
+          <span className="block text-xs font-normal text-warning">Aclaración</span>
+          {pedido.aclaracion}
+        </p>
+      )}
+
+      {/* Mismo color en los dos pasos: es una acción, no un estado. */}
+      <div className="mt-5 border-t border-border pt-4">
         <button
           type="button"
-          onClick={onPendiente}
-          disabled={enPreparacion}
-          className="cursor-pointer rounded-full border border-border bg-surface py-3 transition-colors hover:bg-bg disabled:cursor-not-allowed disabled:border-transparent disabled:bg-surface-muted disabled:text-muted"
+          onClick={() => void avanzar()}
+          disabled={enviando}
+          className="w-full cursor-pointer rounded-full bg-accent py-3 font-semibold text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-wait disabled:opacity-60"
         >
-          {enPreparacion ? 'En preparación' : 'Pendiente'}
-        </button>
-        <button
-          type="button"
-          onClick={onListo}
-          className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-order-ready py-3 text-on-primary transition-opacity hover:opacity-90"
-        >
-          <Check className="size-5" strokeWidth={2.25} />
-          Listo
+          {enPreparacion ? 'Marcar como listo' : 'Empezar a preparar'}
         </button>
       </div>
     </article>
@@ -134,8 +154,8 @@ export default function CocinaPage() {
               <TarjetaPedido
                 key={pedido.idPedido}
                 pedido={pedido}
-                onPendiente={() => void marcarEnPreparacion(pedido.idPedido)}
-                onListo={() => void marcarListo(pedido.idPedido)}
+                onEmpezar={() => marcarEnPreparacion(pedido.idPedido)}
+                onListo={() => marcarListo(pedido.idPedido)}
               />
             ))}
           </div>

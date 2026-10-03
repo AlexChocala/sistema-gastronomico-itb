@@ -15,11 +15,13 @@ import {
   MAX_NOMBRE_NEGOCIO,
   MAX_TITULAR_TRANSFERENCIA,
   REDES_SOCIALES,
+  cuitValido,
+  formatearCuit,
   validarNegocio,
   type RedSocial,
 } from '@/lib/negocio/negocio-validacion'
 
-type CampoTransferencia = 'transferenciaAlias' | 'transferenciaCbu' | 'transferenciaTitular'
+type CampoTransferencia = 'transferenciaAlias' | 'transferenciaCuit' | 'transferenciaTitular'
 
 type ValoresNegocio = { nombre: string; descripcion: string } & Record<RedSocial | CampoTransferencia, string>
 
@@ -59,7 +61,7 @@ function valoresDe(negocio: NegocioApi): ValoresNegocio {
     tiktok: negocio.tiktok ?? '',
     facebook: negocio.facebook ?? '',
     transferenciaAlias: negocio.transferenciaAlias ?? '',
-    transferenciaCbu: negocio.transferenciaCbu ?? '',
+    transferenciaCuit: negocio.transferenciaCuit ?? '',
     transferenciaTitular: negocio.transferenciaTitular ?? '',
   }
 }
@@ -74,6 +76,18 @@ function Seccion({ id, titulo, descripcion, children }: { id: string; titulo: st
       {children}
     </section>
   )
+}
+
+// Debajo del CUIT: la indicación mientras se escribe y, con los 11 números, cómo lo va a
+// ver el cliente (o el aviso si el número no existe).
+function AyudaCuit({ id, cuit }: { id: string; cuit: string }) {
+  if (cuit.length < 11) {
+    return <p id={id} className="text-xs text-muted">Solo números, sin guiones ni espacios (11 dígitos).</p>
+  }
+  if (!cuitValido(cuit)) {
+    return <p id={id} className="text-xs text-danger">Ese CUIT/CUIL no es válido. Revisá que esté bien escrito.</p>
+  }
+  return <p id={id} className="text-xs text-muted">Así lo ve el cliente: <span className="text-text">{formatearCuit(cuit)}</span></p>
 }
 
 function Contador({ id, actual, maximo }: { id: string; actual: number; maximo: number }) {
@@ -270,17 +284,21 @@ export function ConfiguracionNegocioForm({ inicial, logoUrl: logoUrlInicial, tie
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="negocio-transferencia-cbu" className="text-sm">CBU o CVU</label>
+            <label htmlFor="negocio-transferencia-cuit" className="text-sm">CUIT o CUIL del titular</label>
             <input
-              id="negocio-transferencia-cbu" value={valores.transferenciaCbu}
-              onChange={(e) => cambiar('transferenciaCbu', e.target.value)}
-              // 22 dígitos; se toleran espacios si se pega agrupado.
-              maxLength={30} inputMode="numeric" autoComplete="off" spellCheck={false} placeholder="22 números"
+              id="negocio-transferencia-cuit" value={valores.transferenciaCuit}
+              // Solo dígitos: lo demás (letras, guiones, espacios) se descarta al escribir o pegar.
+              onChange={(e) => cambiar('transferenciaCuit', e.target.value.replace(/\D/g, ''))}
+              maxLength={11} inputMode="numeric" autoComplete="off" spellCheck={false} placeholder="Ej: 20123456786"
+              aria-describedby="ayuda-cuit"
               className={claseInput}
             />
+            <AyudaCuit id="ayuda-cuit" cuit={valores.transferenciaCuit} />
           </div>
         </div>
-        <p className="text-xs text-muted">Hace falta el titular y al menos el alias o el CBU/CVU.</p>
+        <p className="text-xs text-muted">
+          Hacen falta los tres datos. El CUIT/CUIL le permite al cliente comprobar que el titular que le muestra su banco es el correcto.
+        </p>
       </Seccion>
 
       {error && <AvisoError>{error}</AvisoError>}

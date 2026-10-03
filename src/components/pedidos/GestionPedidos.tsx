@@ -262,9 +262,12 @@ function TarjetaPedido({
   onGuardarDelivery,
   onCancelarEdicion,
   onAccion,
+  soloLectura,
 }: {
   pedido: PedidoPantalla
   acciones: Acciones
+  // Admin: ve el pedido completo, sin botones para cambiarlo.
+  soloLectura: boolean
   // Hay una acción de este pedido esperando respuesta del servidor.
   ocupado: boolean
   editandoEntrega: boolean
@@ -334,6 +337,13 @@ function TarjetaPedido({
         )}
       </ul>
 
+      {pedido.aclaracion && (
+        <p className="rounded-2xl bg-warning-surface px-3 py-2 text-sm break-words">
+          <span className="block text-xs text-warning">Aclaración para la cocina</span>
+          {pedido.aclaracion}
+        </p>
+      )}
+
       {/* Celular, dirección e indicaciones: solo para el personal (esta pantalla). */}
       {!editandoEntrega && <DatosEntrega pedido={pedido} />}
 
@@ -343,7 +353,7 @@ function TarjetaPedido({
           <span className="text-xl font-bold">{formatoPrecio.format(pedido.total)}</span>
         </div>
 
-        {accion ? (
+        {soloLectura ? null : accion ? (
           <button
             type="button"
             onClick={() => onAccion(accion)}
@@ -365,9 +375,9 @@ function TarjetaPedido({
           </p>
         )}
 
-        {accion && pista && <p className="-mt-1 text-center text-xs text-muted">{pista}</p>}
+        {!soloLectura && accion && pista && <p className="-mt-1 text-center text-xs text-muted">{pista}</p>}
 
-        {editandoEntrega ? (
+        {soloLectura ? null : editandoEntrega ? (
           <FormularioDelivery
             pedido={pedido}
             zonas={zonas}
@@ -394,7 +404,7 @@ const sinSuscripcion = () => () => {}
 
 type UltimaAccion = { texto: string; deshacer: () => Promise<ResultadoAccion> }
 
-export function GestionPedidos() {
+export function GestionPedidos({ soloLectura }: { soloLectura: boolean }) {
   const { sucursal } = useSucursalActiva()
   const pedidosPantalla = usePedidosPantalla(sucursal?.idSucursal ?? null)
   const {
@@ -494,7 +504,11 @@ export function GestionPedidos() {
     <div className="flex flex-col gap-6">
       <header>
         <h1 className="page-title">Pedidos</h1>
-        <p className="mt-1 text-sm text-muted">Entregá, cobrá y seguí cada pedido de la sucursal.</p>
+        <p className="mt-1 text-sm text-muted">
+          {soloLectura
+            ? 'Seguí cada pedido de la sucursal. Los cargan y entregan supervisores y empleados.'
+            : 'Entregá, cobrá y seguí cada pedido de la sucursal.'}
+        </p>
       </header>
 
       <EstadoConexion
@@ -577,6 +591,7 @@ export function GestionPedidos() {
               onCambiarEntrega={() => cambiarEntrega(pedido)}
               onGuardarDelivery={(datos) => void guardarDelivery(pedido, datos)}
               onCancelarEdicion={() => setEditandoEntrega(null)}
+              soloLectura={soloLectura}
             />
           ))}
         </div>
