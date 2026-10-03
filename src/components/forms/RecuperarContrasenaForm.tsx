@@ -49,8 +49,7 @@ export function RecuperarContrasenaForm() {
         descripcion={
           <>
             Si <strong className="text-text">{email}</strong> está registrado, vas a recibir un link
-            para restablecer tu contraseña. Por ahora el link se muestra en la consola del servidor
-            (todavía no hay un proveedor de email real configurado).
+            para restablecer tu contraseña. Si no lo ves, revisá la carpeta de spam.
           </>
         }
       >
