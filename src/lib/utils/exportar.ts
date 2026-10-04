@@ -12,10 +12,11 @@ export function descargarArchivo(contenido: BlobPart, tipo: string, nombreArchiv
   setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-// Con BOM al principio para que Excel lea bien los acentos si se abre ahí.
-export async function descargarCsv(nombreArchivo: string, columnas: string[], filas: ValorCelda[][]) {
+// El CSV con encabezado conserva el BOM para Excel; sin encabezado empieza con el primer dato.
+export async function descargarCsv(nombreArchivo: string, columnas: string[], filas: ValorCelda[][], conEncabezado = true) {
   const { default: Papa } = await import('papaparse')
-  descargarArchivo('﻿' + Papa.unparse({ fields: columnas, data: filas }), 'text/csv;charset=utf-8', nombreArchivo)
+  const contenido = conEncabezado ? '\uFEFF' + Papa.unparse({ fields: columnas, data: filas }) : Papa.unparse(filas)
+  descargarArchivo(contenido, 'text/csv;charset=utf-8', nombreArchivo)
 }
 
 export function descargarJson(nombreArchivo: string, datos: unknown) {

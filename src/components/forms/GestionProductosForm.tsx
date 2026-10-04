@@ -9,6 +9,7 @@ import { IconoCategoria } from '@/components/icons/IconoCategoria'
 import { CampoVariaciones } from '@/components/productos/CampoVariaciones'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import { Aviso } from '@/components/ui/Aviso'
+import { BotonImportar } from '@/components/ui/BotonImportar'
 import { BotonesExportar, type DatosExportables } from '@/components/ui/BotonesExportar'
 import { extrasDisponiblesDeEjemplo } from '@/lib/productos/extras-api'
 import type { ExtraAsignado, ExtraDisponible } from '@/lib/productos/extras-tipos'
@@ -372,7 +373,7 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
             {idSucursalFiltro === null ? 'en todas las sucursales' : `en ${sucursal?.nombre ?? 'tu sucursal'}`}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-start gap-2">
           <BotonesExportar
             nombreArchivo={`productos_${hoyEnArgentina()}`}
             columnas={COLUMNAS_EXPORTAR}
@@ -380,6 +381,7 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
             deshabilitado={cargando || total === 0}
             tamano="normal"
           />
+          {rol === 'admin' && <BotonImportar entidad="productos" onImportado={() => setRecarga((actual) => actual + 1)} />}
           <button type="button" className={claseBotonSecundario}
             onClick={() => router.push('/productos/categorias')} disabled={cargando}>
             <Tags className="size-4" />

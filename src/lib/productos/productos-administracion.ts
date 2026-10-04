@@ -1,3 +1,7 @@
+import {
+  leerImportacion, buscarPorNombre, validarCampos, verificarErrores, estadoImportado,
+  normalizarNombre, esRegistro, responderErrorImportacion,
+} from '@/lib/utils/importar'
 import type { PrismaClient, Prisma } from '@prisma/client'
 import {
   ErrorProducto, idValido, leerId, leerCuerpo, validarProducto, type VariacionProducto,
@@ -210,6 +214,94 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
   }
 
   return {
+    importar: (request: Request) => proteger(request, true, async () => {
+      try {
+        const archivo = await leerImportacion(request, 'productos')
+        const creados = await db.$transaction(async (tx) => {
+          const errores = [...archivo.errores]
+          const [categorias, sucursales] = await Promise.all([
+            tx.categoria.findMany({ select: { idCategoria: true, nombre: true, activa: true } }),
+            tx.sucursal.findMany({ select: { idSucursal: true, nombre: true, activa: true } }),
+          ])
+          const nombresArchivo = new Set<string>()
+          const productos = archivo.filas.map(({ fila, formato, datos }) => {
+            const categoria = buscarPorNombre(datos.categoria, categorias, fila, 'Categoría', errores)
+            if (categoria && !categoria.activa) errores.push({ fila, campo: 'Categoría', mensaje: 'La categoría debe estar activa.' })
+            const asignaciones: { idSucursal: number; disponible: boolean }[] = []
+            let lista: unknown = datos.sucursales
+            if (formato === 'csv' && typeof lista === 'string') {
+              const texto = lista
+              lista = (sucursales.some((s) => normalizarNombre(s.nombre) === normalizarNombre(texto))
+                ? [texto] : texto.split(',')).filter((nombre) => nombre.trim()).map((nombre) => ({ nombre, disponible: true }))
+            }
+            if (!Array.isArray(lista)) {
+              errores.push({ fila, campo: 'Sucursales', mensaje: 'Las sucursales deben ser una lista con nombre y disponibilidad.' })
+            } else {
+              for (const valor of lista) {
+                if (!esRegistro(valor)) {
+                  errores.push({ fila, campo: 'Sucursales', mensaje: 'Cada sucursal debe tener nombre y disponibilidad.' })
+                  continue
+                }
+                const sucursal = buscarPorNombre(valor.nombre, sucursales, fila, 'Sucursales', errores)
+                if (sucursal && !sucursal.activa) errores.push({ fila, campo: 'Sucursales', mensaje: `La sucursal ${sucursal.nombre} debe estar activa.` })
+                if (typeof valor.disponible !== 'boolean') errores.push({ fila, campo: 'Sucursales', mensaje: 'La disponibilidad debe ser true o false.' })
+                if (sucursal) asignaciones.push({ idSucursal: sucursal.idSucursal, disponible: valor.disponible === true })
+              }
+            }
+            const precio = formato === 'csv' && typeof datos.precio === 'string'
+              ? (/^\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(datos.precio.trim()) ? Number(datos.precio) : NaN)
+              : datos.precio
+            const validado = validarCampos({
+              nombre: datos.nombre, descripcion: datos.descripcion ?? null, precio,
+              ...(categoria ? { idCategoria: categoria.idCategoria } : {}),
+              idSucursales: asignaciones.map((s) => s.idSucursal), idExtras: [],
+              activo: estadoImportado(datos.activo, formato),
+            }, validarProducto, {
+              nombre: 'Nombre', descripcion: 'Descripción', precio: 'Precio', idCategoria: 'Categoría',
+              idSucursales: 'Sucursales', activo: 'Estado',
+            }, fila, errores)
+            if (validado.nombre && categoria) {
+              const clave = JSON.stringify([categoria.idCategoria, normalizarNombre(validado.nombre)])
+              if (nombresArchivo.has(clave)) errores.push({ fila, campo: 'Nombre', mensaje: 'El nombre y la categoría se repiten dentro del archivo.' })
+              nombresArchivo.add(clave)
+            }
+            return { fila, datos: validado, asignaciones }
+          })
+          const candidatos = productos.filter((p) => p.datos.nombre && p.datos.idCategoria)
+          const existentes = candidatos.length ? await tx.producto.findMany({
+            where: { OR: candidatos.map(({ datos }) => ({ nombre: { equals: datos.nombre!, mode: 'insensitive' as const }, idCategoria: datos.idCategoria! })) },
+            select: { nombre: true, idCategoria: true },
+          }) : []
+          const nombresExistentes = new Set(existentes.map((p) => JSON.stringify([p.idCategoria, normalizarNombre(p.nombre)])))
+          for (const { fila, datos } of candidatos) {
+            if (nombresExistentes.has(JSON.stringify([datos.idCategoria, normalizarNombre(datos.nombre!)]))) {
+              errores.push({ fila, campo: 'Nombre', mensaje: 'Ya existe un producto con ese nombre y categoría.' })
+            }
+          }
+          verificarErrores(errores)
+          // Ninguna escritura empieza hasta validar el archivo completo.
+          for (const { datos, asignaciones } of productos) {
+            const { activo, ...alta } = datos
+            const validado = validarProducto(alta, false)
+            await tx.producto.create({
+              data: {
+                nombre: validado.nombre!, descripcion: validado.descripcion ?? null,
+                precio: validado.precio!, idCategoria: validado.idCategoria!, activo,
+                historialPrecios: { create: { precioAnterior: null, precioNuevo: validado.precio! } },
+                sucursales: { create: asignaciones },
+              },
+              select: { idProducto: true },
+            })
+          }
+          return productos.length
+        }, { isolationLevel: 'Serializable', timeout: 60000 })
+        return responder({ creados }, 201)
+      } catch (error) {
+        return responderErrorImportacion(error)
+      }
+    }, ['admin']),
+
+
     listar: (request: Request) => proteger(request, false, async () => {
       const parametros = new URL(request.url).searchParams
       const parametrosPermitidos = ['pagina', 'limite', 'estado', 'busqueda', 'idCategoria', 'idSucursal']
