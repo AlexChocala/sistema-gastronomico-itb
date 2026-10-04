@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Copy, KeyRound, Pencil, Plus, Power, ShieldCheck, Store, Trash2, X } from '@/components/icons'
 import { BotonesExportar, type DatosExportables } from '@/components/ui/BotonesExportar'
+import { BotonImportar } from '@/components/ui/BotonImportar'
 import { Button } from '@/components/ui/Button'
 import { Desplegable } from '@/components/ui/Desplegable'
 import { hoyEnArgentina } from '@/lib/reportes/fechas'
@@ -318,7 +319,7 @@ export default function UsuariosPage() {
         <p className="mt-1 text-sm text-muted">Administrá las cuentas, roles y sucursales del personal.</p>
       </div>
       {esAdmin && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-start gap-2">
           <BotonesExportar
             nombreArchivo={`usuarios_${hoyEnArgentina()}`}
             columnas={COLUMNAS_EXPORTAR}
@@ -326,6 +327,7 @@ export default function UsuariosPage() {
             deshabilitado={usuarios.length === 0}
             tamano="normal"
           />
+          <BotonImportar entidad="usuarios" onImportado={() => void cargarDatos()} />
           <Button
             type="button"
             variant="secundario"

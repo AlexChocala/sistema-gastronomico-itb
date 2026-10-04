@@ -1,7 +1,7 @@
 'use client'
 
 // Botones de descarga. BotonDescarga muestra "Generando…" mientras arma el archivo y
-// "Reintentar" si falla. BotonesExportar es el par CSV / JSON de un listado (Reportes,
+// "Reintentar" si falla. BotonesExportar ofrece CSV y JSON de un listado (Reportes,
 // Productos, Usuarios).
 
 import { useState } from 'react'
@@ -69,7 +69,7 @@ export function BotonesExportar({ nombreArchivo, columnas, obtenerDatos, deshabi
         descripcion="Descargar CSV"
         deshabilitado={deshabilitado}
         tamano={tamano}
-        generar={async () => descargarCsv(`${nombreArchivo}.csv`, columnas, (await obtenerDatos()).filas)}
+        generar={async () => descargarCsv(`${nombreArchivo}.csv`, columnas, (await obtenerDatos()).filas, false)}
       />
       <BotonDescarga
         texto="JSON"

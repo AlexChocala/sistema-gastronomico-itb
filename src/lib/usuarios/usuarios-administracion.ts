@@ -1,7 +1,11 @@
+import {
+  leerImportacion, buscarPorNombre, validarCampos, verificarErrores, estadoImportado,
+  normalizarNombre, esRegistro, responderErrorImportacion,
+} from '@/lib/utils/importar'
 import type { PrismaClient, Prisma } from '@prisma/client'
 import bcrypt from 'bcrypt'
 import { ErrorUsuario, idValido, leerId, leerCuerpo, validarUsuario } from './usuarios-validacion'
-import { rolSinSucursal } from './roles'
+import { rolSinSucursal, etiquetaRol } from './roles'
 
 type Sesion = { user: { idUsuario: number } } | null
 
@@ -99,6 +103,87 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
   }
 
   return {
+    importar: (request: Request) => proteger(request, ['admin'], true, async () => {
+      try {
+        const archivo = await leerImportacion(request, 'usuarios')
+        async function preparar(tx: Prisma.TransactionClient) {
+          const errores = [...archivo.errores]
+          const [roles, sucursales] = await Promise.all([
+            tx.rol.findMany({ select: { idRol: true, nombre: true } }),
+            tx.sucursal.findMany({ select: { idSucursal: true, nombre: true, activa: true } }),
+          ])
+          const emailsArchivo = new Set<string>()
+          const usuarios = archivo.filas.map(({ fila, formato, datos }) => {
+            const rol = buscarPorNombre(datos.rol, roles, fila, 'Rol', errores, (r) => etiquetaRol(r.nombre))
+            const sinSucursal = rol && rolSinSucursal(rol.nombre)
+            const nombre = formato === 'json' && esRegistro(datos.sucursal) ? datos.sucursal.nombre : datos.sucursal
+            const vacia = nombre === null || nombre === ''
+            const todas = formato === 'csv' && typeof nombre === 'string' && normalizarNombre(nombre) === 'todas las sucursales'
+            let idSucursal: number | null = null
+            if (sinSucursal && (vacia || todas)) {
+              idSucursal = null
+            } else {
+              const sucursal = buscarPorNombre(nombre, sucursales, fila, 'Sucursal', errores,
+                formato === 'csv' ? (s) => s.nombre.replace('Prueba - ', '') : undefined)
+              if (sucursal && !sucursal.activa) errores.push({ fila, campo: 'Sucursal', mensaje: 'La sucursal debe estar activa.' })
+              if (sucursal && !sinSucursal) idSucursal = sucursal.idSucursal
+            }
+            const validado = validarCampos({
+              nombre: datos.nombre, apellido: datos.apellido, email: datos.email,
+              ...(rol ? { idRol: rol.idRol } : {}), idSucursal,
+              activo: estadoImportado(datos.activo, formato),
+            }, validarUsuario, {
+              nombre: 'Nombre', apellido: 'Apellido', email: 'Email', idRol: 'Rol', idSucursal: 'Sucursal', activo: 'Estado',
+            }, fila, errores)
+            if (validado.email) {
+              if (emailsArchivo.has(validado.email)) errores.push({ fila, campo: 'Email', mensaje: 'El email se repite dentro del archivo.' })
+              emailsArchivo.add(validado.email)
+            }
+            return { fila, datos: validado }
+          })
+          const existentes = emailsArchivo.size ? await tx.usuario.findMany({
+            where: { OR: [...emailsArchivo].map((email) => ({ email: { equals: email, mode: 'insensitive' as const } })) },
+            select: { email: true },
+          }) : []
+          const emailsExistentes = new Set(existentes.map((u) => u.email.toLowerCase()))
+          for (const { fila, datos } of usuarios) {
+            if (datos.email && emailsExistentes.has(datos.email)) errores.push({ fila, campo: 'Email', mensaje: 'El email ya existe en la base de datos.' })
+          }
+          verificarErrores(errores)
+          return usuarios
+        }
+
+        const usuarios = await preparar(db)
+        // El hash se calcula fuera de la transacción, con concurrencia limitada.
+        // Cada cuenta tiene una contraseña diferente que nunca sale de este método.
+        const hashes: string[] = []
+        for (let i = 0; i < usuarios.length; i += 4) {
+          hashes.push(...await Promise.all(usuarios.slice(i, i + 4).map(() => bcrypt.hash(generarPasswordAleatoria(), 10))))
+        }
+        const creados = await db.$transaction(async (tx) => {
+          // Revalidar evita guardar con referencias o emails que cambiaron mientras
+          // calculábamos los hashes. Todos los registros se guardan juntos.
+          const confirmados = await preparar(tx)
+          const resultado = await tx.usuario.createMany({
+            data: confirmados.map(({ datos }, indice) => {
+              const { activo, ...alta } = datos
+              const validado = validarUsuario(alta, false)
+              return {
+                nombre: validado.nombre!, apellido: validado.apellido!, email: validado.email!,
+                idRol: validado.idRol!, idSucursal: validado.idSucursal ?? null, activo,
+                passwordHash: hashes[indice], debeCambiarContrasena: true,
+              }
+            }),
+          })
+          return resultado.count
+        }, { isolationLevel: 'Serializable', timeout: 60000 })
+        return responder({ creados }, 201)
+      } catch (error) {
+        return responderErrorImportacion(error)
+      }
+    }),
+
+
     // Ver el listado: solo admin.
     listar: (request: Request) => proteger(request, ['admin'], false, async (idUsuarioSesion) => {
       const parametros = new URL(request.url).searchParams
