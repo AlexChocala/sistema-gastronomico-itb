@@ -1,16 +1,19 @@
 'use client'
 
 import { useEffect, useState, type FormEvent } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
-  ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Power, Search, Store, Tags, X,
+  ChevronLeft, ChevronRight, Package, Pencil, Plus, Power, Search, Store, X,
 } from '@/components/icons'
 import { IconoCategoria } from '@/components/icons/IconoCategoria'
 import { CampoVariaciones } from '@/components/productos/CampoVariaciones'
+import { CrearCategoriaRapida } from '@/components/productos/CrearCategoriaRapida'
+import { CrearExtraRapido } from '@/components/productos/CrearExtraRapido'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import { Aviso } from '@/components/ui/Aviso'
-import { BotonImportar } from '@/components/ui/BotonImportar'
-import { BotonesExportar, type DatosExportables } from '@/components/ui/BotonesExportar'
+import { Desplegable } from '@/components/ui/Desplegable'
+import { ExportarImportar } from '@/components/ui/ExportarImportar'
+import type { CategoriaCreada } from '@/lib/productos/categorias-api'
 import { extrasDisponiblesDeEjemplo } from '@/lib/productos/extras-api'
 import type { ExtraAsignado, ExtraDisponible } from '@/lib/productos/extras-tipos'
 import {
@@ -19,6 +22,7 @@ import {
 } from '@/lib/productos/variaciones-formulario'
 import { ordenarVariaciones, variacionPrincipal } from '@/lib/productos/variacion-principal'
 import { hoyEnArgentina } from '@/lib/reportes/fechas'
+import type { DatosExportables } from '@/lib/utils/exportar'
 import type { RolNombre } from '@/types'
 
 type Producto = {
@@ -53,6 +57,11 @@ type RespuestaListado = {
 }
 type RespuestaError = { error?: string }
 type FiltroEstado = 'todos' | 'activos' | 'inactivos'
+const OPCIONES_ESTADO: { valor: FiltroEstado; texto: string }[] = [
+  { valor: 'todos', texto: 'Todos los estados' },
+  { valor: 'activos', texto: 'Solo activos' },
+  { valor: 'inactivos', texto: 'Solo inactivos' },
+]
 
 const formatoPrecio = new Intl.NumberFormat('es-AR', {
   style: 'currency',
@@ -98,7 +107,6 @@ const formularioVacio = {
 }
 
 export function GestionProductosForm({ rol }: { rol: RolNombre }) {
-  const router = useRouter()
   const [productos, setProductos] = useState<Producto[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
@@ -112,6 +120,9 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
   const [error, setError] = useState('')
   const [cargando, setCargando] = useState(true)
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
+  // Panel "Nueva categoría" abierto en el formulario: bloquea el resto hasta crearla.
+  const [creandoCategoria, setCreandoCategoria] = useState(false)
+  const bloqueadoPorCategoria = creandoCategoria || categorias.length === 0
   const [busqueda, setBusqueda] = useState('')
   const [busquedaAplicada, setBusquedaAplicada] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos')
@@ -183,6 +194,7 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
       if (evento.key !== 'Escape' || cargando) return
       setFormulario(formularioVacio)
       setIdEdicion(null)
+      setCreandoCategoria(false)
       setMostrarFormulario(false)
     }
     window.addEventListener('keydown', alPresionarTecla)
@@ -215,14 +227,33 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
 
   // Cada categoría tiene sus extras y sus variaciones: al cambiarla se habilitan todos los
   // de la nueva (lo más común) y se desmarcan las excepciones.
-  function cambiarCategoria(idCategoria: string) {
-    const nombres = categorias.find((categoria) => String(categoria.idCategoria) === idCategoria)?.nombresVariaciones ?? []
+  // `nombres` se pasa cuando la categoría se acaba de crear y todavía no está en `categorias`.
+  function cambiarCategoria(idCategoria: string, nombres = categorias.find((categoria) => String(categoria.idCategoria) === idCategoria)?.nombresVariaciones ?? []) {
     setFormulario((actual) => ({
       ...actual,
       idCategoria,
       idExtras: extras.filter((extra) => String(extra.idCategoria) === idCategoria).map((extra) => String(extra.idExtra)),
       variaciones: filasParaCategoria(nombres, actual.variaciones),
     }))
+  }
+
+  // Creada desde el formulario (CrearCategoriaRapida): se suma a la lista y queda elegida.
+  function agregarCategoriaCreada(categoria: CategoriaCreada) {
+    setCategorias((actuales) => [...actuales, categoria])
+    cambiarCategoria(String(categoria.idCategoria), categoria.nombresVariaciones)
+    setCreandoCategoria(false)
+  }
+
+  // Elegir una categoría que ya existe cancela la creación de una nueva.
+  function elegirCategoriaExistente(idCategoria: string) {
+    setCreandoCategoria(false)
+    cambiarCategoria(idCategoria)
+  }
+
+  // Creado desde el formulario (CrearExtraRapido): se suma a los de la categoría y queda tildado.
+  function agregarExtraCreado(extra: ExtraDisponible) {
+    setExtras((actuales) => [...actuales, extra])
+    cambiarSeleccion('idExtras', String(extra.idExtra), true)
   }
 
   function cambiarSeleccion(campo: 'idSucursales' | 'idExtras', id: string, seleccionado: boolean) {
@@ -235,6 +266,7 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
   function cerrarFormulario() {
     setFormulario(formularioVacio)
     setIdEdicion(null)
+    setCreandoCategoria(false)
     setMostrarFormulario(false)
   }
 
@@ -245,6 +277,7 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
     setIdEdicion(null)
     setMensaje('')
     setError('')
+    setCreandoCategoria(false)
     setMostrarFormulario(true)
   }
 
@@ -264,6 +297,7 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
     })
     setMensaje('')
     setError('')
+    setCreandoCategoria(false)
     setMostrarFormulario(true)
   }
 
@@ -368,32 +402,20 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="page-title">Productos</h1>
-          <p className="mt-1 text-sm text-muted">
-            <span className="text-text">{total}</span> {total === 1 ? 'producto' : 'productos'}{' '}
-            {idSucursalFiltro === null ? 'en todas las sucursales' : `en ${sucursal?.nombre ?? 'tu sucursal'}`}
-          </p>
+          <p className="mt-1 text-sm text-muted">Cargá y editá lo que se vende en tu menú.</p>
         </div>
         <div className="flex flex-wrap items-start gap-2">
-          <BotonesExportar
-            nombreArchivo={`productos_${hoyEnArgentina()}`}
+          {/* Importar es solo del admin: un supervisor podría cargar datos masivos por error. */}
+          <ExportarImportar
+            entidad="productos"
             columnas={COLUMNAS_EXPORTAR}
+            nombreArchivo={`productos_${hoyEnArgentina()}`}
+            cantidad={total}
+            aclaracionCantidad="Con los filtros que tenés aplicados."
             obtenerDatos={obtenerProductosParaExportar}
-            deshabilitado={cargando || total === 0}
-            tamano="normal"
+            puedeImportar={rol === 'admin'}
+            onImportado={() => setRecarga((actual) => actual + 1)}
           />
-          {rol === 'admin' && <BotonImportar entidad="productos" onImportado={() => setRecarga((actual) => actual + 1)} />}
-          <button type="button" className={claseBotonSecundario}
-            onClick={() => router.push('/productos/categorias')} disabled={cargando}>
-            <Tags className="size-4" />
-            Categorías
-          </button>
-     {(rol === 'admin' || rol === 'supervisor') && (
-            <button type="button" className={claseBotonSecundario}
-              onClick={() => router.push('/productos/extras')} disabled={cargando}>
-              <Plus className="size-4" />
-              Extras
-            </button>
-          )}
           <button type="button" className={claseBotonAcento} onClick={abrirNuevoProducto} disabled={cargando}>
             <Plus className="size-4" />
             Nuevo producto
@@ -401,49 +423,11 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
         </div>
       </header>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-5">
+        {/* Buscador a la izquierda (es lo más usado) y selectores a la derecha, separados. */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Toggle y no desplegable: se va y vuelve seguido entre la sucursal y el catálogo completo. */}
-            {puedeElegir && sucursal && (
-              <div className="grid grid-cols-2 gap-1 rounded-full bg-surface-muted/60 p-1 text-sm">
-                {[
-                  { todas: false, texto: sucursal.nombre },
-                  { todas: true, texto: 'Todas las sucursales' },
-                ].map(({ todas, texto }) => (
-                  <button
-                    key={texto}
-                    type="button"
-                    onClick={() => {
-                      setPagina(1)
-                      setVerTodasLasSucursales(todas)
-                    }}
-                    aria-pressed={verTodasLasSucursales === todas}
-                    className={`inline-flex cursor-pointer items-center justify-center gap-1.5 truncate rounded-full px-3 py-1.5 transition-colors ${verTodasLasSucursales === todas ? 'bg-surface text-text shadow-sm' : 'text-muted hover:text-text'}`}
-                  >
-                    {!todas && <Store className="size-3.5 shrink-0 text-accent" />}
-                    {texto}
-                  </button>
-                ))}
-              </div>
-            )}
-            {/* Activos/Inactivos se cambia poco: desplegable en vez de una fila de botones. */}
-            <div className="relative">
-              <select
-                value={filtroEstado}
-                onChange={(evento) => cambiarFiltroEstado(evento.target.value as FiltroEstado)}
-                aria-label="Filtrar por estado"
-                className="cursor-pointer appearance-none rounded-full bg-surface py-2 pr-9 pl-4 text-sm shadow-sm outline-none focus:ring-2 focus:ring-accent"
-              >
-                <option value="todos">Todos los estados</option>
-                <option value="activos">Solo activos</option>
-                <option value="inactivos">Solo inactivos</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted" />
-            </div>
-          </div>
           <form onSubmit={buscar} role="search"
-            className="flex w-full items-center gap-2 rounded-full bg-surface px-4 py-2 shadow-sm sm:w-72">
+            className="flex w-full items-center gap-2 rounded-full bg-surface px-4 py-2 shadow-sm sm:w-80">
             <Search className="size-4 shrink-0 text-muted" />
             <input
               type="search"
@@ -454,6 +438,44 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
               className="w-full bg-transparent text-sm outline-none placeholder:text-muted"
             />
           </form>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Toggle y no desplegable: se va y vuelve seguido entre la sucursal y el catálogo completo. */}
+            {puedeElegir && sucursal && (
+              <div className="grid grid-cols-2 gap-1 rounded-full bg-surface-muted/60 p-1 text-sm">
+                {[
+                  { todas: false, texto: sucursal.nombre, descripcion: `Solo ${sucursal.nombre}` },
+                  { todas: true, texto: 'Todas', descripcion: 'Todas las sucursales' },
+                ].map(({ todas, texto, descripcion }) => (
+                  <button
+                    key={texto}
+                    type="button"
+                    onClick={() => {
+                      setPagina(1)
+                      setVerTodasLasSucursales(todas)
+                    }}
+                    aria-pressed={verTodasLasSucursales === todas}
+                    aria-label={descripcion}
+                    title={descripcion}
+                    className={`inline-flex cursor-pointer items-center justify-center gap-1.5 truncate rounded-full px-3 py-1.5 transition-colors ${verTodasLasSucursales === todas ? 'bg-surface text-text shadow-sm' : 'text-muted hover:text-text'}`}
+                  >
+                    {!todas && <Store className="size-3.5 shrink-0 text-accent" />}
+                    {texto}
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* Activos/Inactivos se cambia poco: desplegable en vez de una fila de botones. */}
+            <div className="w-52">
+              <Desplegable
+                etiqueta="Estado"
+                icono={Power}
+                opciones={OPCIONES_ESTADO}
+                valor={filtroEstado}
+                onElegir={cambiarFiltroEstado}
+                textoVacio="Todos los estados"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -476,6 +498,12 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
       </div>
 
       <section className="flex flex-col gap-4" aria-live="polite" aria-busy={cargando}>
+        {/* Cuántos resultados hay con los filtros elegidos, justo arriba de las tarjetas. */}
+        {productos.length > 0 && (
+          <p className="text-sm text-muted">
+            <span className="font-medium text-text">{total}</span> {total === 1 ? 'producto' : 'productos'}
+          </p>
+        )}
         {mensaje && (
           <p className="rounded-2xl bg-success/10 px-4 py-3 text-sm text-success">{mensaje}</p>
         )}
@@ -485,7 +513,25 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
         {cargando && productos.length === 0 && (
           <p className="rounded-3xl bg-surface p-10 text-center text-muted">Cargando productos...</p>
         )}
-        {!cargando && productos.length === 0 && !error && (
+        {/* Local recién empezado: sin categorías no hay productos. Se lo guía, sin cara de error. */}
+        {!cargando && productos.length === 0 && !error && categorias.length === 0 && (
+          <div className="flex flex-col items-center gap-3 rounded-3xl bg-surface p-10 text-center">
+            <span className="grid size-12 place-items-center rounded-full bg-accent-soft">
+              <Package className="size-6 text-accent" />
+            </span>
+            <div className="flex flex-col gap-1">
+              <h2 className="text-lg">Empezá armando tu carta</h2>
+              <p className="max-w-md text-sm text-muted">
+                Creá las categorías de tu menú (Hamburguesas, Pizzas, Bebidas…) y después cargá tus productos.
+              </p>
+            </div>
+            <Link href="/productos/categorias" className={claseBotonAcento}>
+              <Plus className="size-4" />
+              Crear categorías
+            </Link>
+          </div>
+        )}
+        {!cargando && productos.length === 0 && !error && categorias.length > 0 && (
           <p className="rounded-3xl bg-surface p-10 text-center text-muted">
             No hay productos que coincidan con los filtros.
           </p>
@@ -608,9 +654,10 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="titulo-formulario-producto"
-            className="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col gap-5 overflow-y-auto rounded-3xl bg-surface p-6 shadow-xl"
+            className="flex max-h-[calc(100dvh-2rem)] w-full max-w-xl flex-col rounded-3xl bg-surface shadow-xl"
           >
-            <div className="flex items-start justify-between gap-3">
+            {/* Título y botones fijos; solo el contenido del medio tiene scroll. */}
+            <div className="flex items-start justify-between gap-3 px-6 pt-6 pb-4">
               <div>
                 <h2 id="titulo-formulario-producto" className="text-lg">
                   {idEdicion === null ? 'Nuevo producto' : 'Editar producto'}
@@ -626,11 +673,19 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
             </div>
 
             {/* En el orden en que se piensa: la categoría define el precio (variaciones) y los extras. */}
-            <div className="flex flex-col gap-6">
+            <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pb-6">
               <fieldset className="flex flex-col gap-2">
                 <legend className="mb-2 text-sm">Categoría</legend>
                 {categorias.length === 0 ? (
-                  <p className="text-xs text-danger">No hay categorías activas. Creala primero en Categorías.</p>
+                  <CrearCategoriaRapida
+                    nombresExistentes={[]}
+                    onCreada={agregarCategoriaCreada}
+                    abierta
+                    onAbrir={() => {}}
+                    onCerrar={() => {}}
+                    sinCategorias
+                    deshabilitado={cargando}
+                  />
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {categorias.map((categoria) => (
@@ -642,8 +697,8 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
                           type="radio"
                           name="categoria-producto"
                           className="sr-only"
-                          checked={formulario.idCategoria === String(categoria.idCategoria)}
-                          onChange={() => cambiarCategoria(String(categoria.idCategoria))}
+                          checked={!creandoCategoria && formulario.idCategoria === String(categoria.idCategoria)}
+                          onChange={() => elegirCategoriaExistente(String(categoria.idCategoria))}
                           disabled={cargando}
                           required
                         />
@@ -651,10 +706,23 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
                         {categoria.nombre}
                       </label>
                     ))}
+                    <CrearCategoriaRapida
+                      nombresExistentes={categorias.map((categoria) => categoria.nombre)}
+                      onCreada={agregarCategoriaCreada}
+                      abierta={creandoCategoria}
+                      onAbrir={() => setCreandoCategoria(true)}
+                      onCerrar={() => setCreandoCategoria(false)}
+                      sinCategorias={false}
+                      deshabilitado={cargando}
+                    />
                   </div>
                 )}
               </fieldset>
 
+              {/* Mientras se crea una categoría el resto se ve pero no se puede tocar: todavía no
+                  hay categoría elegida, y sus variaciones y extras aparecen recién al crearla. */}
+              <div inert={bloqueadoPorCategoria} aria-hidden={bloqueadoPorCategoria}
+                className={`flex flex-col gap-6 transition-opacity motion-reduce:transition-none ${bloqueadoPorCategoria ? 'opacity-40 select-none' : ''}`}>
               <div className="flex flex-col gap-2">
                 <label htmlFor="nombre" className="text-sm">Nombre</label>
                 <input id="nombre" value={formulario.nombre} className={claseCampo}
@@ -668,9 +736,11 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
                   onChange={(evento) => cambiarCampo('descripcion', evento.target.value)} disabled={cargando} />
               </div>
 
-              {!categoriaElegida ? (
+              {!categoriaElegida || creandoCategoria ? (
                 <p className="rounded-2xl bg-bg p-4 text-center text-sm text-muted">
-                  Elegí una categoría para cargar el precio, las variaciones y los extras.
+                  {creandoCategoria
+                    ? 'Al crear la categoría vas a cargar acá el precio, las variaciones y los extras.'
+                    : 'Elegí una categoría para cargar el precio, las variaciones y los extras.'}
                 </p>
               ) : (
                 <>
@@ -736,12 +806,16 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
                           </label>
                         )
                       })}
+                      {/* Con datos de ejemplo no se crea: no se guardaría. */}
+                      {!extrasDeEjemplo && (
+                        <CrearExtraRapido
+                          idCategoria={categoriaElegida.idCategoria}
+                          nombreCategoria={categoriaElegida.nombre}
+                          onCreado={agregarExtraCreado}
+                          deshabilitado={cargando}
+                        />
+                      )}
                     </div>
-                    {extrasDeCategoria.length === 0 && (
-                      <p className="text-xs text-muted">
-                        Esta categoría no tiene extras.{rol === 'admin' && ' Si los necesita, cargalos en Productos → Extras.'}
-                      </p>
-                    )}
                   </fieldset>
 
                   <fieldset className="flex flex-col gap-2">
@@ -773,18 +847,19 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
                   </fieldset>
                 </>
               )}
+              </div>
+
+              {error && (
+                <p role="alert" className="rounded-2xl bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
+              )}
             </div>
 
-            {error && (
-              <p role="alert" className="rounded-2xl bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
-            )}
-
-            <div className="grid grid-cols-[auto_1fr] gap-2">
+            <div className="grid grid-cols-[auto_1fr] gap-2 border-t border-border px-6 py-4">
               <button type="button" onClick={cerrarFormulario} disabled={cargando}
                 className={`${claseBotonSecundario} px-5 py-3`}>
                 Cancelar
               </button>
-              <button type="submit" disabled={cargando || categorias.length === 0 || sucursales.length === 0}
+              <button type="submit" disabled={cargando || bloqueadoPorCategoria || sucursales.length === 0}
                 className={`${claseBotonAcento} py-3`}>
                 {cargando ? 'Guardando...' : idEdicion === null ? 'Crear producto' : 'Guardar cambios'}
               </button>

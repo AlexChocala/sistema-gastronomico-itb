@@ -110,6 +110,7 @@ export function calcularReportes(
   const porSucursal = new Map(sucursales.map((s) => [s.idSucursal, { ...s, totalVendido: 0, cantidadPedidos: 0 }]))
   const ventasPorMetodoPago = (['efectivo', 'transferencia'] as const).map((metodoPago) => ({ metodoPago, totalVendido: 0, cantidadPedidos: 0 }))
   const ventasPorOrigen = (['mostrador', 'online'] as const).map((origen) => ({ origen, totalVendido: 0, cantidadPedidos: 0 }))
+  const ventasPorEntrega = (['retiro', 'delivery'] as const).map((tipoEntrega) => ({ tipoEntrega, totalVendido: 0, cantidadPedidos: 0 }))
   const productos = new Map<number, ProductoMasVendido>()
   const franjas = new Map<string, { diaSemana: number; hora: number; cantidad: number }>()
   const filas: PedidoReporte[] = []
@@ -133,6 +134,7 @@ export function calcularReportes(
       periodo, ventasPorHora[hora], porSucursal.get(pedido.idSucursal),
       ventasPorMetodoPago.find((f) => f.metodoPago === metodoPago),
       ventasPorOrigen.find((f) => f.origen === origen),
+      ventasPorEntrega.find((f) => f.tipoEntrega === tipoEntrega),
     ]) {
       if (fila) { fila.totalVendido += pedido.total; fila.cantidadPedidos++ }
     }
@@ -168,6 +170,7 @@ export function calcularReportes(
     ventasPorSucursal: filtros.sucursal === 'todas' ? redondear([...porSucursal.values()]) : null,
     ventasPorMetodoPago: redondear(ventasPorMetodoPago),
     ventasPorOrigen: redondear(ventasPorOrigen),
+    ventasPorEntrega: redondear(ventasPorEntrega),
     demanda: [...franjas.values()].map(({ diaSemana, hora, cantidad }) => ({
       diaSemana, hora, promedioPedidos: Math.round(cantidad / vecesPorDia[diaSemana] * 10) / 10,
     })).sort((a, b) => a.diaSemana - b.diaSemana || a.hora - b.hora),

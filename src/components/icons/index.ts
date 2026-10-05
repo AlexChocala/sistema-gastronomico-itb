@@ -20,7 +20,9 @@ export { Hamburger, Pizza, Sandwich, CupSoda, IceCreamCone, Salad, Search, Plus,
 export { Banknote, Landmark, ArrowLeft, Printer, CircleCheck } from 'lucide-react'
 
 // Productos — gestión
-export { Pencil, Power, Store, Tags, X, ChevronLeft, ChevronRight } from 'lucide-react'
+export { Pencil, Power, Store, X, ChevronLeft, ChevronRight } from 'lucide-react'
+// Menú lateral: Productos → Lista de productos, Categorías y Extras
+export { List, Tags, Layers } from 'lucide-react'
 
 // Dashboard
 export { Receipt, Flame, Globe, CalendarDays, Clock, CheckCheck } from 'lucide-react'
@@ -37,7 +39,10 @@ export { Phone } from 'lucide-react'
 export { IconoInstagram, IconoTikTok, IconoFacebook, IconoWhatsapp } from './Redes'
 
 // Usuarios — gestión
-export { KeyRound, Copy } from 'lucide-react'
+export { KeyRound, Copy, ArrowUpDown } from 'lucide-react'
+
+// Importar y exportar (productos, usuarios y reportes)
+export { FileUp, Download } from 'lucide-react'
 
 // Configuración — logo del negocio
 export { ImagePlus } from 'lucide-react'

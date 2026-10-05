@@ -37,24 +37,15 @@ export function CampoVariaciones({
   return (
     <div className="flex flex-col gap-3">
       {deCategoria.length > 0 ? (
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-muted">Variaciones de {nombreCategoria}. Destildá las que no vende.</p>
-            <button type="button" onClick={alternarTodas} disabled={deshabilitado}
-              className="shrink-0 cursor-pointer text-xs text-accent hover:underline">
-              {todasElegidas ? 'Quitar todas' : 'Usar todas'}
-            </button>
-          </div>
-          <p className="text-xs text-muted">
-            La principal es la que se muestra en la carta. Se cambia ordenando las variaciones en Categorías
-            → {nombreCategoria} (vale para todos sus productos).
-          </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-muted">Destildá las variaciones de {nombreCategoria} que no vende.</p>
+          <button type="button" onClick={alternarTodas} disabled={deshabilitado}
+            className="shrink-0 cursor-pointer text-xs text-accent hover:underline">
+            {todasElegidas ? 'Quitar todas' : 'Usar todas'}
+          </button>
         </div>
       ) : (
-        <p className="text-xs text-muted">
-          {nombreCategoria} no tiene variaciones. Si sus productos se venden en varios tamaños, agregalas en
-          Categorías para usarlas en todos; o cargá una solo para este producto.
-        </p>
+        filas.length > 0 && <p className="text-xs text-muted">Variaciones solo para este producto.</p>
       )}
 
       {filas.length > 0 && (
@@ -83,7 +74,10 @@ export function CampoVariaciones({
                 <span className={`flex min-w-0 items-center gap-2 text-sm ${fila.elegida ? '' : 'text-muted line-through'}`}>
                   <span className="truncate">{fila.nombre}</span>
                   {fila === principal && (
-                    <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent no-underline">
+                    <span
+                      title={`Es el precio que muestra la carta. Se cambia ordenando las variaciones en Categorías → ${nombreCategoria}.`}
+                      className="shrink-0 cursor-help rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent no-underline"
+                    >
                       Principal
                     </span>
                   )}
@@ -130,7 +124,7 @@ export function CampoVariaciones({
           className="inline-flex w-fit cursor-pointer items-center gap-1.5 text-sm text-accent hover:underline"
         >
           <Plus className="size-4" />
-          Agregar una variación solo para este producto
+          {filas.length === 0 ? '¿Se vende en varios tamaños? Agregá una variación' : 'Agregar variación'}
         </button>
       )}
     </div>

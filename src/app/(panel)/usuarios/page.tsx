@@ -1,15 +1,20 @@
 ﻿// src/app/(panel)/usuarios/page.tsx
+// Usuarios activos y archivados en la misma pantalla: la URL elige la vista
+// (/usuarios o /usuarios/archivados, que reutiliza este componente). Los archivados son
+// los mismos usuarios en otro estado, por eso comparten tabla, búsqueda y filtros.
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Copy, KeyRound, Pencil, Plus, Power, ShieldCheck, Store, Trash2, X } from '@/components/icons'
-import { BotonesExportar, type DatosExportables } from '@/components/ui/BotonesExportar'
-import { BotonImportar } from '@/components/ui/BotonImportar'
-import { Button } from '@/components/ui/Button'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
+import {
+  ArrowUpDown, Copy, KeyRound, Pencil, Plus, Power, RotateCcw, Search, ShieldCheck, Store, Trash2, X,
+} from '@/components/icons'
 import { Desplegable } from '@/components/ui/Desplegable'
+import { ExportarImportar } from '@/components/ui/ExportarImportar'
 import { hoyEnArgentina } from '@/lib/reportes/fechas'
 import { etiquetaRol, rolSinSucursal } from '@/lib/usuarios/roles'
+import type { DatosExportables } from '@/lib/utils/exportar'
 
 const COLUMNAS_EXPORTAR = ['ID', 'Nombre', 'Apellido', 'Email', 'Rol', 'Sucursal', 'Estado']
 
@@ -44,6 +49,26 @@ const claseBotonAcento =
   'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm text-on-accent transition-colors hover:bg-accent-hover'
 const claseBotonIcono =
   'flex size-9 cursor-pointer items-center justify-center rounded-full transition-colors'
+type Vista = 'activos' | 'archivados'
+type Orden = 'nombre' | 'apellido' | 'rol' | 'sucursal'
+
+const ORDENES: { valor: Orden; texto: string }[] = [
+  { valor: 'nombre', texto: 'Ordenar por nombre' },
+  { valor: 'apellido', texto: 'Ordenar por apellido' },
+  { valor: 'rol', texto: 'Ordenar por rol' },
+  { valor: 'sucursal', texto: 'Ordenar por sucursal' },
+]
+
+function compararUsuarios(orden: Orden) {
+  const texto = (u: Usuario) => ({
+    nombre: `${u.nombre} ${u.apellido}`,
+    apellido: `${u.apellido} ${u.nombre}`,
+    rol: etiquetaRol(u.rol.nombre),
+    sucursal: textoSucursal(u),
+  })[orden]
+  return (a: Usuario, b: Usuario) =>
+    texto(a).localeCompare(texto(b), 'es') || `${a.nombre} ${a.apellido}`.localeCompare(`${b.nombre} ${b.apellido}`, 'es')
+}
 
 function nombreSucursal(nombre: string) {
   return nombre.replace('Prueba - ', '')
@@ -96,10 +121,27 @@ const formVacio: FormUsuario = {
   idSucursal: null,
 }
 
+// Las dos listas a la vez: así el selector Activos | Archivados muestra cuántos hay en cada una.
+async function pedirUsuarios() {
+  const [resActivos, resArchivados] = await Promise.all([
+    fetch('/api/usuarios', { cache: 'no-store' }),
+    fetch('/api/usuarios?estado=archivados', { cache: 'no-store' }),
+  ])
+  if ([resActivos.status, resArchivados.status].some((estado) => estado === 401 || estado === 403)) return null
+  const [activos, archivados] = await Promise.all([resActivos.json(), resArchivados.json()])
+  return { ...activos, archivados: (archivados.usuarios ?? []) as Usuario[] }
+}
+
 export default function UsuariosPage() {
   const router = useRouter()
+  const vista: Vista = usePathname() === '/usuarios/archivados' ? 'archivados' : 'activos'
 
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [archivados, setArchivados] = useState<Usuario[]>([])
+  const [busqueda, setBusqueda] = useState('')
+  const [filtroRol, setFiltroRol] = useState('')
+  const [filtroSucursal, setFiltroSucursal] = useState('')
+  const [orden, setOrden] = useState<Orden>('nombre')
   const [roles, setRoles] = useState<Rol[]>([])
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
   const [esAdmin, setEsAdmin] = useState(false)
@@ -120,17 +162,9 @@ export default function UsuariosPage() {
   // El admin no elige sucursal: trabaja con todas.
   const llevaSucursal = !rolElegido || !rolSinSucursal(rolElegido.nombre)
 
-  async function cargarDatos() {
-    setLoading(true)
-    const res = await fetch('/api/usuarios')
-
-    if (res.status === 403 || res.status === 401) {
-      router.replace('/dashboard')
-      return
-    }
-
-    const data = await res.json()
+  function aplicarDatos(data: NonNullable<Awaited<ReturnType<typeof pedirUsuarios>>>) {
     setUsuarios(data.usuarios ?? [])
+    setArchivados(data.archivados)
     setRoles(data.roles ?? [])
     setSucursales(data.sucursales ?? [])
     setEsAdmin(data.esAdmin ?? false)
@@ -138,23 +172,26 @@ export default function UsuariosPage() {
     setLoading(false)
   }
 
+  async function cargarDatos() {
+    setLoading(true)
+    const data = await pedirUsuarios()
+    if (!data) {
+      router.replace('/dashboard')
+      return
+    }
+    aplicarDatos(data)
+  }
+
   useEffect(() => {
     let paginaActiva = true
 
     async function cargarInicial() {
-      const res = await fetch('/api/usuarios')
-      if (res.status === 403 || res.status === 401) {
+      const data = await pedirUsuarios()
+      if (!data) {
         router.replace('/dashboard')
         return
       }
-      const data = await res.json()
-      if (!paginaActiva) return
-      setUsuarios(data.usuarios ?? [])
-      setRoles(data.roles ?? [])
-      setSucursales(data.sucursales ?? [])
-      setEsAdmin(data.esAdmin ?? false)
-      setIdUsuarioSesion(data.idUsuarioSesion ?? null)
-      setLoading(false)
+      if (paginaActiva) aplicarDatos(data)
     }
 
     void cargarInicial()
@@ -293,14 +330,41 @@ export default function UsuariosPage() {
     cargarDatos()
   }
 
+  // PATCH sin cuerpo: reactiva la cuenta (la misma API que usaba la pantalla de archivados).
+  async function reactivarUsuario(u: Usuario) {
+    setError('')
+    const res = await fetch(`/api/usuarios/${u.idUsuario}`, { method: 'PATCH' })
+    const data = await res.json()
+    if (!res.ok) {
+      setError(data.error || 'No se pudo reactivar el usuario')
+      return
+    }
+    cargarDatos()
+  }
+
+  // Búsqueda por nombre, apellido o email, filtros y orden: sobre la lista de la vista elegida.
+  const textoBuscado = busqueda.trim().toLocaleLowerCase('es')
+  const usuariosVisibles = (vista === 'activos' ? usuarios : archivados)
+    .filter((u) => {
+      const coincideTexto = !textoBuscado
+        || [u.nombre, u.apellido, `${u.nombre} ${u.apellido}`, u.email].some((valor) => valor.toLocaleLowerCase('es').includes(textoBuscado))
+      const coincideRol = !filtroRol || String(u.idRol) === filtroRol
+      const coincideSucursal = !filtroSucursal
+        || (filtroSucursal === 'todas' ? u.idSucursal === null : String(u.idSucursal) === filtroSucursal)
+      return coincideTexto && coincideRol && coincideSucursal
+    })
+    .sort(compararUsuarios(orden))
+  const hayFiltros = textoBuscado !== '' || filtroRol !== '' || filtroSucursal !== ''
+
   // Campo por campo, para que nada sensible que agregue la API llegue al archivo.
+  // Sale lo que se ve: la vista elegida, con su búsqueda y filtros.
   function datosParaExportar(): DatosExportables {
     return {
-      filas: usuarios.map((u) => [
+      filas: usuariosVisibles.map((u) => [
         u.idUsuario, u.nombre, u.apellido, u.email, etiquetaRol(u.rol.nombre), textoSucursal(u),
         u.activo ? 'Activo' : 'Inactivo',
       ]),
-      json: usuarios.map((u) => ({
+      json: usuariosVisibles.map((u) => ({
         idUsuario: u.idUsuario,
         nombre: u.nombre,
         apellido: u.apellido,
@@ -320,22 +384,16 @@ export default function UsuariosPage() {
       </div>
       {esAdmin && (
         <div className="flex flex-wrap items-start gap-2">
-          <BotonesExportar
-            nombreArchivo={`usuarios_${hoyEnArgentina()}`}
+          <ExportarImportar
+            entidad="usuarios"
             columnas={COLUMNAS_EXPORTAR}
+            nombreArchivo={`usuarios_${hoyEnArgentina()}`}
+            cantidad={usuariosVisibles.length}
+            aclaracionCantidad={vista === 'archivados' || hayFiltros ? 'Los que se ven en la lista, con la búsqueda y los filtros.' : undefined}
             obtenerDatos={datosParaExportar}
-            deshabilitado={usuarios.length === 0}
-            tamano="normal"
+            puedeImportar={esAdmin}
+            onImportado={() => void cargarDatos()}
           />
-          <BotonImportar entidad="usuarios" onImportado={() => void cargarDatos()} />
-          <Button
-            type="button"
-            variant="secundario"
-            className="w-auto! rounded-full! px-5! py-2.5! text-sm"
-            onClick={() => router.push('/usuarios/archivados')}
-          >
-            Usuarios archivados
-          </Button>
           <button type="button" className={claseBotonAcento} onClick={abrirNuevo}>
             <Plus className="size-4" />
             Nuevo usuario
@@ -392,13 +450,101 @@ export default function UsuariosPage() {
         <p role="alert" className="rounded-2xl bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
       )}
 
+      <div className="flex flex-col gap-5">
+        {/* Activos | Archivados: el mismo estilo que el selector de sucursal de Productos. */}
+        <nav aria-label="Estado de las cuentas" className="grid w-fit grid-cols-2 gap-1 rounded-full bg-surface-muted/60 p-1 text-sm">
+          {([
+            { valor: 'activos', texto: 'Activos', href: '/usuarios', cantidad: usuarios.length },
+            { valor: 'archivados', texto: 'Archivados', href: '/usuarios/archivados', cantidad: archivados.length },
+          ] as const).map((opcion) => (
+            <Link
+              key={opcion.valor}
+              href={opcion.href}
+              aria-current={vista === opcion.valor ? 'page' : undefined}
+              className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-1.5 transition-colors ${vista === opcion.valor ? 'bg-surface text-text shadow-sm' : 'text-muted hover:text-text'}`}
+            >
+              {opcion.texto}
+              <span className="rounded-full bg-bg px-2 text-xs tabular-nums text-muted">{opcion.cantidad}</span>
+            </Link>
+          ))}
+        </nav>
+
+        {/* Buscador a la izquierda y filtros a la derecha, como en Productos. Filtra al escribir:
+            la lista de personal es corta y llega completa. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <label className="flex w-full items-center gap-2 rounded-full bg-surface px-4 py-2 shadow-sm sm:w-80">
+            <Search className="size-4 shrink-0 text-muted" />
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por nombre o email"
+              aria-label="Buscar usuario por nombre, apellido o email"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-muted"
+            />
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-48">
+              <Desplegable
+                etiqueta="Rol"
+                icono={ShieldCheck}
+                opciones={[{ valor: '', texto: 'Todos los roles' }, ...roles.map((r) => ({ valor: String(r.idRol), texto: etiquetaRol(r.nombre) }))]}
+                valor={filtroRol}
+                onElegir={setFiltroRol}
+                textoVacio="Todos los roles"
+              />
+            </div>
+            <div className="w-56">
+              <Desplegable
+                etiqueta="Sucursal"
+                icono={Store}
+                opciones={[
+                  { valor: '', texto: 'Todas las sucursales' },
+                  ...sucursales.map((s) => ({ valor: String(s.idSucursal), texto: nombreSucursal(s.nombre) })),
+                  // El admin no tiene sucursal asignada: trabaja con todas.
+                  { valor: 'todas', texto: 'Sin sucursal fija (admin)' },
+                ]}
+                valor={filtroSucursal}
+                onElegir={setFiltroSucursal}
+                textoVacio="Todas las sucursales"
+              />
+            </div>
+            <div className="w-56">
+              <Desplegable
+                etiqueta="Orden"
+                icono={ArrowUpDown}
+                opciones={ORDENES}
+                valor={orden}
+                onElegir={setOrden}
+                textoVacio="Ordenar por nombre"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <section className="flex flex-col gap-3">
         <p className="text-sm text-muted">
-          <span className="text-text">{usuarios.length}</span> {usuarios.length === 1 ? 'usuario' : 'usuarios'}
+          <span className="font-medium text-text">{usuariosVisibles.length}</span>{' '}
+          {usuariosVisibles.length === 1 ? 'usuario' : 'usuarios'}{vista === 'archivados' && (usuariosVisibles.length === 1 ? ' archivado' : ' archivados')}
         </p>
 
-        {usuarios.length === 0 ? (
-          <p className="rounded-3xl bg-surface p-10 text-center text-muted">No hay usuarios para mostrar.</p>
+        {usuariosVisibles.length === 0 ? (
+          vista === 'archivados' && !hayFiltros ? (
+            <div className="flex flex-col items-center gap-3 rounded-3xl bg-surface p-10 text-center">
+              <span className="grid size-12 place-items-center rounded-full bg-bg">
+                <RotateCcw className="size-5 text-muted" />
+              </span>
+              <div className="flex flex-col gap-1">
+                <h2 className="text-lg">No hay usuarios archivados</h2>
+                <p className="max-w-md text-sm text-muted">Cuando desactivás una cuenta aparece acá, y la podés reactivar cuando quieras.</p>
+              </div>
+            </div>
+          ) : (
+            <p className="rounded-3xl bg-surface p-10 text-center text-muted">
+              {hayFiltros ? 'No hay usuarios que coincidan con la búsqueda.' : 'No hay usuarios para mostrar.'}
+            </p>
+          )
         ) : (
           <div className="overflow-x-auto rounded-3xl bg-surface p-2 shadow-sm">
             <table className="w-full min-w-[44rem] text-left text-sm">
@@ -412,7 +558,7 @@ export default function UsuariosPage() {
                 </tr>
               </thead>
               <tbody>
-                {usuarios.map((u) => (
+                {usuariosVisibles.map((u) => (
                   <tr
                     key={u.idUsuario}
                     className={`border-t border-bg transition-colors hover:bg-bg/60 ${u.activo ? '' : 'text-muted'}`}
@@ -446,10 +592,25 @@ export default function UsuariosPage() {
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1.5 text-xs ${u.activo ? 'text-success' : 'text-muted'}`}>
                         <span className={`size-1.5 rounded-full ${u.activo ? 'bg-success' : 'bg-muted'}`} />
-                        {u.activo ? 'Activo' : 'Inactivo'}
+                        {u.activo ? 'Activo' : 'Archivado'}
                       </span>
                     </td>
-                    {esAdmin && (
+                    {esAdmin && vista === 'archivados' && (
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => reactivarUsuario(u)}
+                            aria-label={`Reactivar ${u.nombre} ${u.apellido}`}
+                            className={`${claseBotonSecundario} py-1.5`}
+                          >
+                            <RotateCcw className="size-4" />
+                            Reactivar
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                    {esAdmin && vista === 'activos' && (
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1">
                           <button

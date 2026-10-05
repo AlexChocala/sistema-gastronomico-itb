@@ -6,7 +6,7 @@ import type { MetodoPago, OrigenPedido, TipoEntrega } from '@/lib/pedidos/pedido
 import { formatearPrecio } from '@/lib/utils/precio'
 import type { Agrupacion, DatosReportes } from './tipos'
 
-export type IdPestana = 'periodo' | 'horario' | 'productos' | 'sucursales' | 'pago' | 'origen' | 'demanda' | 'pedidos'
+export type IdPestana = 'periodo' | 'horario' | 'productos' | 'sucursales' | 'pago' | 'origen' | 'entrega' | 'demanda' | 'pedidos'
 export type TipoGrafico = 'linea' | 'barras' | 'barrasHorizontales' | 'torta' | 'mapa'
 export type Formato = 'texto' | 'numero' | 'precio'
 export type Valor = string | number
@@ -102,6 +102,13 @@ export const PESTANAS: Pestana[] = [
     titulo: 'Canales de venta',
     columnas: [{ titulo: 'Canal', formato: 'texto' }, PEDIDOS, TOTAL],
     filas: (datos) => datos.ventasPorOrigen.map((f) => [NOMBRES_ORIGEN[f.origen], f.cantidadPedidos, f.totalVendido]),
+    grafico: { tipo: 'torta', etiqueta: 0, valor: 1 },
+  },
+  {
+    id: 'entrega',
+    titulo: 'Tipos de entrega',
+    columnas: [{ titulo: 'Entrega', formato: 'texto' }, PEDIDOS, TOTAL],
+    filas: (datos) => datos.ventasPorEntrega.map((f) => [NOMBRES_ENTREGA[f.tipoEntrega], f.cantidadPedidos, f.totalVendido]),
     grafico: { tipo: 'torta', etiqueta: 0, valor: 1 },
   },
   {

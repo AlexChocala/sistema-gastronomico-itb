@@ -66,16 +66,16 @@ export function filasIniciales(
   return [...deCategoria, ...propias]
 }
 
-// Al cambiar de categoría: aparecen las variaciones de la nueva (conservando lo que ya se
-// había cargado con el mismo nombre) y lo elegido que no está en ella queda como propio.
+// Al cambiar de categoría: aparecen las variaciones de la nueva (conservando el precio de
+// las que tienen el mismo nombre) y siguen solo las propias del producto. Las de la
+// categoría anterior se descartan: si no, al pasar de Pizza a Hamburguesa quedaban
+// "Entera" y "Media" como si el usuario las hubiera agregado.
 export function filasParaCategoria(nombresCategoria: string[], actuales: FilaVariacion[]): FilaVariacion[] {
   const deCategoria = nombresCategoria.map((nombre): FilaVariacion => {
     const previa = actuales.find((fila) => mismoNombre(fila.nombre, nombre))
     return previa ? { ...previa, nombre, propia: false } : { clave: nuevaClave(), nombre, precio: '', elegida: true, propia: false }
   })
-  const propias = actuales
-    .filter((fila) => (fila.propia || fila.elegida) && !nombresCategoria.some((nombre) => mismoNombre(nombre, fila.nombre)))
-    .map((fila) => ({ ...fila, propia: true }))
+  const propias = actuales.filter((fila) => fila.propia && !nombresCategoria.some((nombre) => mismoNombre(nombre, fila.nombre)))
   return [...deCategoria, ...propias]
 }
 

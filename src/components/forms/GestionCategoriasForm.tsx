@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, GripVertical, Package, Pencil, Plus, Power, RotateCcw, X } from '@/components/icons'
+import { GripVertical, Package, Pencil, Plus, Power, X } from '@/components/icons'
 import { IconoCategoria } from '@/components/icons/IconoCategoria'
 import { MAX_NOMBRE_VARIACION, MAX_VARIACIONES } from '@/lib/productos/productos-validacion'
 import { CATEGORIAS_SUGERIDAS, type CategoriaSugerida } from '@/lib/productos/sugerencias-categorias'
@@ -345,29 +345,17 @@ export function GestionCategoriasForm({ rol }: { rol: RolNombre }) {
           <h1 className="page-title">Categorías</h1>
           <p className="mt-1 text-sm text-muted">Organizá y ordená las secciones del menú.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className={claseBotonSecundario} onClick={() => router.push('/productos')}>
-            <ArrowLeft className="size-4" />
-            Productos
-          </button>
-          <button type="button" className={claseBotonAcento} onClick={abrirNueva} disabled={cargando}>
-            <Plus className="size-4" />
-            Nueva categoría
-          </button>
-        </div>
+        <button type="button" className={`${claseBotonAcento} self-start`} onClick={abrirNueva} disabled={cargando}>
+          <Plus className="size-4" />
+          Nueva categoría
+        </button>
       </header>
 
       <section className="flex flex-col gap-4" aria-live="polite" aria-busy={cargando}>
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-muted">
-            <span className="text-text">{categorias.length}</span>{' '}
-            {categorias.length === 1 ? 'categoría' : 'categorías'}
-          </p>
-          <button type="button" className={claseBotonSecundario} onClick={() => void listar()} disabled={cargando}>
-            <RotateCcw className={`size-4 ${cargando ? 'animate-spin [animation-direction:reverse]' : ''}`} />
-            Actualizar
-          </button>
-        </div>
+        <p className="text-sm text-muted">
+          <span className="font-medium text-text">{categorias.length}</span>{' '}
+          {categorias.length === 1 ? 'categoría' : 'categorías'}
+        </p>
 
         {mensaje && (
           <p className="rounded-2xl bg-success/10 px-4 py-3 text-sm text-success">{mensaje}</p>

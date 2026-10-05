@@ -13,7 +13,7 @@ import { obtenerReportes, type ResultadoReportes } from '@/lib/reportes/reportes
 import type { Agrupacion, DatosReportes } from '@/lib/reportes/tipos'
 import type { OpcionSucursal } from '@/lib/sucursales/sucursal-activa'
 import { MENSAJES } from '@/lib/utils/mensajes'
-import { BotonesDescarga, type ContextoDescarga } from './BotonesDescarga'
+import { ExportarReporte, type ContextoDescarga } from './ExportarReporte'
 import { FiltrosReportes, type Filtros } from './FiltrosReportes'
 import { GraficoReporte } from './GraficoReporte'
 import { MapaDemanda } from './MapaDemanda'
@@ -174,7 +174,7 @@ function Pestanas({ datos, agrupacion, contexto, descargasHabilitadas }: Pestana
 
   return (
     <section className="flex flex-col gap-5 rounded-3xl bg-surface p-5 shadow-sm">
-      <BotonesDescarga
+      <ExportarReporte
         datos={datos}
         pestana={actual}
         filas={filas}

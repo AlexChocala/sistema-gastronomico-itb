@@ -34,6 +34,7 @@ export type ProductoMasVendido = { idProducto: number; nombre: string; cantidad:
 export type VentaPorSucursal = Totales & { idSucursal: number; nombre: string }
 export type VentaPorMetodoPago = Totales & { metodoPago: MetodoPago }
 export type VentaPorOrigen = Totales & { origen: OrigenPedido }
+export type VentaPorEntrega = Totales & { tipoEntrega: TipoEntrega }
 
 // Promedio de pedidos por día de la semana (0 = domingo) y hora, en el rango elegido.
 // Solo las combinaciones con pedidos.
@@ -61,6 +62,7 @@ export type DatosReportes = {
   ventasPorSucursal: VentaPorSucursal[] | null // null si se filtró una sucursal
   ventasPorMetodoPago: VentaPorMetodoPago[]
   ventasPorOrigen: VentaPorOrigen[]
+  ventasPorEntrega: VentaPorEntrega[]
   demanda: DemandaEsperada[]
   pedidos: PedidoReporte[]
 }

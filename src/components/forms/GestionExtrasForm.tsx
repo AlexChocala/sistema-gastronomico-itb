@@ -1,8 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { useRouter } from 'next/navigation'
-import { ArrowLeft, Package, Pencil, Plus, Power, RotateCcw, X } from '@/components/icons'
+import { Package, Pencil, Plus, Power, X } from '@/components/icons'
 import { Aviso } from '@/components/ui/Aviso'
 import { AvisoFlotante } from '@/components/ui/AvisoFlotante'
 import { crearExtra, desactivarExtra, editarExtra, listarExtras } from '@/lib/productos/extras-api'
@@ -46,7 +45,6 @@ function categoriaValida(datos: RespuestaListadoExtras, ...candidatas: (number |
 }
 
 export function GestionExtrasForm({ idCategoriaInicial }: { idCategoriaInicial: number | null }) {
-  const router = useRouter()
   const [datos, setDatos] = useState(sinDatos)
   const [esEjemplo, setEsEjemplo] = useState(false)
   const [idCategoria, setIdCategoria] = useState<number | null>(idCategoriaInicial)
@@ -209,16 +207,10 @@ export function GestionExtrasForm({ idCategoriaInicial }: { idCategoriaInicial: 
             Agregados que el cliente puede sumar. Cada categoría tiene los suyos.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className={claseBotonSecundario} onClick={() => router.push('/productos')}>
-            <ArrowLeft className="size-4" />
-            Productos
-          </button>
-          <button type="button" className={claseBotonAcento} onClick={abrirNuevo} disabled={cargando || !categoria}>
-            <Plus className="size-4" />
-            Nuevo extra
-          </button>
-        </div>
+        <button type="button" className={`${claseBotonAcento} self-start`} onClick={abrirNuevo} disabled={cargando || !categoria}>
+          <Plus className="size-4" />
+          Nuevo extra
+        </button>
       </header>
 
       {esEjemplo && (
@@ -230,28 +222,22 @@ export function GestionExtrasForm({ idCategoriaInicial }: { idCategoriaInicial: 
         <Aviso tipo="error" onCerrar={() => setError('')}>{error}</Aviso>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Categorías">
-          {datos.categorias.map((actual) => (
-            <button
-              key={actual.idCategoria}
-              type="button"
-              role="tab"
-              aria-selected={actual.idCategoria === idCategoria}
-              onClick={() => elegirCategoria(actual.idCategoria)}
-              className={claseChip(actual.idCategoria === idCategoria)}
-            >
-              {actual.nombre}
-              <span className="rounded-full bg-bg px-2 text-xs text-muted tabular-nums">
-                {datos.extras.filter((extra) => extra.idCategoria === actual.idCategoria).length}
-              </span>
-            </button>
-          ))}
-        </div>
-        <button type="button" className={claseBotonSecundario} onClick={() => void listar()} disabled={cargando}>
-          <RotateCcw className={`size-4 ${cargando ? 'animate-spin [animation-direction:reverse]' : ''}`} />
-          Actualizar
-        </button>
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Categorías">
+        {datos.categorias.map((actual) => (
+          <button
+            key={actual.idCategoria}
+            type="button"
+            role="tab"
+            aria-selected={actual.idCategoria === idCategoria}
+            onClick={() => elegirCategoria(actual.idCategoria)}
+            className={claseChip(actual.idCategoria === idCategoria)}
+          >
+            {actual.nombre}
+            <span className="rounded-full bg-bg px-2 text-xs text-muted tabular-nums">
+              {datos.extras.filter((extra) => extra.idCategoria === actual.idCategoria).length}
+            </span>
+          </button>
+        ))}
       </div>
 
       <section className="flex flex-col gap-4" aria-busy={cargando}>

@@ -172,6 +172,7 @@ export function generarDatosDeEjemplo(filtros: FiltrosReportes): DatosReportes {
   const porSucursal = new Map(sucursales.map((s) => [s.idSucursal, { ...s, totalVendido: 0, cantidadPedidos: 0 }]))
   const ventasPorMetodoPago = (['efectivo', 'transferencia'] as const).map((metodoPago) => ({ metodoPago, totalVendido: 0, cantidadPedidos: 0 }))
   const ventasPorOrigen = (['mostrador', 'online'] as const).map((origen) => ({ origen, totalVendido: 0, cantidadPedidos: 0 }))
+  const ventasPorEntrega = (['retiro', 'delivery'] as const).map((tipoEntrega) => ({ tipoEntrega, totalVendido: 0, cantidadPedidos: 0 }))
   const pedidosPorFranja = new Map<string, number>()
 
   for (const pedido of pedidos) {
@@ -183,6 +184,7 @@ export function generarDatosDeEjemplo(filtros: FiltrosReportes): DatosReportes {
     sumar(porSucursal.get(pedido.idSucursal)!, pedido)
     sumar(ventasPorMetodoPago.find((fila) => fila.metodoPago === pedido.metodoPago)!, pedido)
     sumar(ventasPorOrigen.find((fila) => fila.origen === pedido.origen)!, pedido)
+    sumar(ventasPorEntrega.find((fila) => fila.tipoEntrega === pedido.tipoEntrega)!, pedido)
 
     for (const linea of pedido.lineas) {
       const fila = productos.get(linea.idProducto) ?? { cantidad: 0, totalVendido: 0 }
@@ -224,6 +226,7 @@ export function generarDatosDeEjemplo(filtros: FiltrosReportes): DatosReportes {
     ventasPorSucursal: filtros.sucursal === 'todas' ? [...porSucursal.values()] : null,
     ventasPorMetodoPago,
     ventasPorOrigen,
+    ventasPorEntrega,
     demanda,
     pedidos: pedidos
       .map((p): PedidoReporte => ({

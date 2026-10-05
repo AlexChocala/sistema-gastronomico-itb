@@ -1,16 +1,20 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LogoMise } from '@/components/acceso/ElementosAcceso'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import {
-  ChartColumn, ChefHat, ChevronDown, ClipboardList, ExternalLink, LayoutDashboard,
-  Monitor, MonitorPlay, Package, Settings, Store, Users, Wallet,
+  ChartColumn, ChefHat, ChevronDown, ClipboardList, ExternalLink, LayoutDashboard, Layers, List,
+  Monitor, MonitorPlay, Package, Settings, Store, Tags, Users, Wallet,
   type LucideIcon,
 } from '@/components/icons'
 
-type Enlace = { href: string; texto: string; icono: LucideIcon; roles?: string[] }
+// subenlaces: las pantallas de una sección (ej. Productos → Categorías). Se ven como el
+// grupo Pantallas: desplegados mientras estás en la sección, y la flecha los contrae.
+type Subenlace = { href: string; texto: string; icono: LucideIcon }
+type Enlace = { href: string; texto: string; icono: LucideIcon; roles?: string[]; subenlaces?: Subenlace[] }
 type Pendiente = { texto: string; icono: LucideIcon }
 
 type Seccion = {
@@ -35,7 +39,16 @@ const secciones: Seccion[] = [
     titulo: 'Operaciones',
     roles: ['admin', 'supervisor'],
     enlaces: [
-      { href: '/productos', texto: 'Productos', icono: Package },
+      {
+        href: '/productos',
+        texto: 'Productos',
+        icono: Package,
+        subenlaces: [
+          { href: '/productos', texto: 'Lista de productos', icono: List },
+          { href: '/productos/categorias', texto: 'Categorías', icono: Tags },
+          { href: '/productos/extras', texto: 'Extras', icono: Layers },
+        ],
+      },
       { href: '/reportes', texto: 'Reportes', icono: ChartColumn },
     ],
     pendientes: [],
@@ -71,6 +84,9 @@ export function PanelSidebar({ rol, nombreNegocio }: { rol: string; nombreNegoci
   const rutaActual = usePathname()
   const { sucursal } = useSucursalActiva()
   const seccionesVisibles = secciones.filter((seccion) => esVisible(seccion.roles, rol))
+  // Grupos con subenlaces que el usuario abrió o cerró con la flecha. Si no lo tocó, el
+  // grupo está abierto mientras estás dentro de su sección.
+  const [gruposTocados, setGruposTocados] = useState<Record<string, boolean>>({})
 
   // El monitor de Mostrador es público (sin sesión): la sucursal viaja en la URL.
   function hrefPantalla(href: string) {
@@ -92,11 +108,46 @@ export function PanelSidebar({ rol, nombreNegocio }: { rol: string; nombreNegoci
             {seccion.enlaces.filter((enlace) => esVisible(enlace.roles, rol)).map((enlace) => {
               const activo = rutaActual === enlace.href || rutaActual.startsWith(enlace.href + '/')
               const Icono = enlace.icono
+              // Con subenlaces, la página actual la marca el subenlace y no la sección.
+              const esPaginaActual = activo && !enlace.subenlaces
+              const abierto = gruposTocados[enlace.href] ?? activo
+              const idSubenlaces = `subenlaces-${enlace.href.slice(1)}`
               return (
-                <Link key={enlace.href} href={enlace.href} aria-current={activo ? 'page' : undefined} className={claseItem + ' ' + (activo ? 'bg-surface-muted font-medium text-text' : 'text-muted hover:bg-surface-muted/60 hover:text-text')}>
-                  <Icono strokeWidth={trazoIcono} className={claseIcono + ' ' + (activo ? 'text-accent' : '')} />
-                  {enlace.texto}
-                </Link>
+                <div key={enlace.href} className="flex flex-col gap-1">
+                  <div className="relative">
+                    <Link href={enlace.href} aria-current={esPaginaActual ? 'page' : undefined} className={claseItem + ' ' + (enlace.subenlaces ? 'pr-11 ' : '') + (activo ? 'bg-surface-muted font-medium text-text' : 'text-muted hover:bg-surface-muted/60 hover:text-text')}>
+                      <Icono strokeWidth={trazoIcono} className={claseIcono + ' ' + (activo ? 'text-accent' : '')} />
+                      {enlace.texto}
+                    </Link>
+                    {enlace.subenlaces && (
+                      <button
+                        type="button"
+                        onClick={() => setGruposTocados((actuales) => ({ ...actuales, [enlace.href]: !abierto }))}
+                        aria-expanded={abierto}
+                        aria-controls={idSubenlaces}
+                        aria-label={`${abierto ? 'Contraer' : 'Desplegar'} ${enlace.texto}`}
+                        className="absolute top-1/2 right-2 grid size-8 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-muted transition-colors hover:bg-surface-muted hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
+                      >
+                        <ChevronDown size={16} strokeWidth={trazoIcono} className={`transition-transform motion-reduce:transition-none ${abierto ? 'rotate-180' : ''}`} />
+                      </button>
+                    )}
+                  </div>
+                  {abierto && enlace.subenlaces && (
+                    <div id={idSubenlaces} className="ml-5 flex flex-col gap-1 border-l border-border pl-1.5">
+                      {enlace.subenlaces.map((subenlace) => {
+                        const subActivo = rutaActual === subenlace.href
+                        const SubIcono = subenlace.icono
+                        return (
+                          <Link key={subenlace.href} href={subenlace.href} aria-current={subActivo ? 'page' : undefined}
+                            className={claseSubItem + ' ' + (subActivo ? 'bg-surface-muted/60 font-medium text-text' : 'text-muted hover:bg-surface-muted/60 hover:text-text')}>
+                            <SubIcono strokeWidth={trazoIcono} className={claseIcono + ' ' + (subActivo ? 'text-accent' : '')} />
+                            {subenlace.texto}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               )
             })}
             {seccion.pendientes.map((pendiente) => {
