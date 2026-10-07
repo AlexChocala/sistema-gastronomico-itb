@@ -55,8 +55,25 @@ export default function SucursalesPage() {
     setLoading(false)
   }
 
+  // Carga inicial: `loading` ya arranca en true, así que el efecto solo setea estado
+  // cuando llega la respuesta (no en el mismo render). Si la pantalla se desmonta
+  // antes, se descarta la respuesta.
   useEffect(() => {
-    cargarDatos()
+    let paginaActiva = true
+
+    async function cargarInicial() {
+      const res = await fetch('/api/sucursales')
+      const data = await res.json()
+      if (!paginaActiva) return
+      setSucursales(data.sucursales ?? [])
+      setLocalidades(data.localidades ?? [])
+      setLoading(false)
+    }
+
+    void cargarInicial()
+    return () => {
+      paginaActiva = false
+    }
   }, [])
 
   function abrirNuevo() {
