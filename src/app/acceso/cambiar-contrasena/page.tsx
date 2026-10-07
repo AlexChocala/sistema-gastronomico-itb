@@ -6,8 +6,8 @@
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import bcrypt from 'bcrypt'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { authOptions } from '@/lib/auth/auth'
+import { prisma } from '@/lib/db/prisma'
 import { CambiarContrasenaForm } from '@/components/forms/CambiarContrasenaForm'
 
 export default async function CambiarContrasenaPage() {

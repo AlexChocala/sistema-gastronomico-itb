@@ -1,40 +1,10 @@
-// Recibe un email. Si existe un usuario con ese email, genera un token de recupero
-// y lo "envía" (por ahora, lib/email.ts solo lo imprime por consola).
-//
-// Cómo se guarda el token
-// ------------------------
-// No hay un modelo en prisma/schema.prisma para tokens de recupero, y no lo vamos a
-// sumar nosotros (ese schema lo maneja otro equipo). En vez de agregar una tabla, el
-// token es *stateless*: firmamos con HMAC-SHA256 el id del usuario + una fecha de
-// expiración, usando el mismo secreto que NextAuth (NEXTAUTH_SECRET). Es la opción más
-// simple posible — no hay nada que guardar ni limpiar en la base, el token se
-// autoverifica, como un JWT hecho a mano con el módulo `crypto` de Node (sin sumar la
-// librería jsonwebtoken).
-//
-// Cómo se invalida el token al usarse (sin tabla nueva)
-// -------------------------------------------------------
-// Un token firmado solo con (idUsuario + expiración) sigue siendo válido las veces que
-// se quiera hasta que expira — si alguien reutiliza el link, la API lo vuelve a aceptar.
-// Para que "usarlo" lo invalide, la firma también depende del passwordHash actual del
-// usuario: HMAC(secreto, payload + passwordHash). Al cambiar la contraseña, bcrypt genera
-// un salt nuevo, así que passwordHash cambia SIEMPRE (incluso si se vuelve a poner la
-// misma contraseña en texto plano) — la firma calculada con el hash viejo ya no coincide
-// con la que se recalcula al verificar, y el token queda inválido solo, sin persistir
-// nada. Es la misma idea que usa Django en su PasswordResetTokenGenerator (mezcla
-// user.password en el hash del token) — acá el equivalente casero con `crypto`.
-//
-// Ojo: por eso verificarTokenReset ahora es async y necesita ir a buscar el usuario a
-// la base (para leer su passwordHash actual) — antes de este fix la verificación era
-// pura función de los datos del propio token, sin tocar la base.
-//
-// No metemos el passwordHash (ni un fragmento) en el token en sí — solo se usa como
-// material para calcular el HMAC del lado del servidor. El token que viaja en la URL
-// nunca expone nada del hash de contraseña de nadie.
+// Genera un enlace de recuperación y lo envía por email al usuario.
+// Vence a los 30 minutos y deja de ser válido cuando cambia la contraseña.
 
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import crypto from 'crypto'
-import { prisma } from '@/lib/prisma'
-import { enviarEmailRecupero } from '@/lib/email'
+import { prisma } from '@/lib/db/prisma'
+import { sendPasswordResetEmail } from '@/lib/email/mailer'
 
 const DURACION_TOKEN_MS = 30 * 60 * 1000 // 30 minutos
 
@@ -92,19 +62,45 @@ export async function verificarTokenReset(token: string): Promise<number | null>
 export async function POST(request: Request) {
   const { email } = await request.json()
 
-  if (!email) {
+  if (!email || typeof email !== 'string') {
     return NextResponse.json({ error: 'El email es obligatorio' }, { status: 400 })
   }
 
-  const usuario = await prisma.usuario.findUnique({ where: { email } })
+  // Para generar el enlace solo necesitamos el identificador, el email y el hash.
+  // select evita consultar otros campos del usuario, como debeCambiarContrasena,
+  // que pertenece al flujo de ingreso y no interviene en este recupero.
+  const usuario = await prisma.usuario.findUnique({
+    where: { email },
+    select: { idUsuario: true, email: true, passwordHash: true },
+  })
 
-  // Si el usuario no existe, respondemos igual que si existiera. Así evitamos que
-  // alguien use este endpoint para averiguar qué emails están registrados
-  // (enumeración de usuarios).
+  // Si el usuario no existe, no se genera token ni se envía nada, pero respondemos
+  // igual que si existiera. Así evitamos que alguien use este endpoint para averiguar
+  // qué emails están registrados (enumeración de usuarios).
   if (usuario) {
-    const token = generarTokenReset(usuario.idUsuario, usuario.passwordHash)
-    const link = `${process.env.NEXTAUTH_URL ?? 'http://localhost:3000'}/acceso/restablecer-contrasena?token=${token}`
-    enviarEmailRecupero(usuario.email, link)
+    const urlBase = process.env.APP_URL?.replace(/\/+$/, '')
+
+    if (!urlBase) {
+      console.error('Falta APP_URL en las variables de entorno: no se envió el email de recupero.')
+    } else {
+      const token = generarTokenReset(usuario.idUsuario, usuario.passwordHash)
+      const link = `${urlBase}/acceso/restablecer-contrasena?token=${token}`
+      const destinatario = usuario.email
+
+      // after() envía el mail después de responder. Con await, la respuesta tardaría
+      // más solo cuando el email existe, y midiendo ese tiempo se podría saber qué
+      // emails están registrados.
+      after(async () => {
+        try {
+          await sendPasswordResetEmail(destinatario, link)
+        } catch (error) {
+          // Solo el código del error (ej. EAUTH). Nunca el email, el link ni el token.
+          const codigo =
+            typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : 'DESCONOCIDO'
+          console.error('No se pudo enviar el email de recupero. Código:', codigo)
+        }
+      })
+    }
   }
 
   return NextResponse.json({

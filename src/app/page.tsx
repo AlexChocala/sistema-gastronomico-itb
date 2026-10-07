@@ -1,69 +1,132 @@
-import Image from "next/image";
+// Home pública (a donde llega el QR): identidad del negocio y selector de sucursal.
+//   Sin negocio configurado → aviso neutro.
+//   Sin sucursales activas  → aviso amable.
+//   Una sola sucursal       → directo a su menú (/{slug}).
+//   Varias                  → tarjetas para elegir.
+// No requiere sesión: "/" no está en el matcher de src/proxy.ts.
 
-export default function Home() {
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { connection } from 'next/server'
+import { ChevronRight, Clock, IconoWhatsapp, MapPin, UtensilsCrossed } from '@/components/icons'
+import { Card } from '@/components/ui/Card'
+import { AvatarNegocio, ChipsEntrega, RedesNegocio } from '@/components/carta/compartidos/IdentidadNegocio'
+import { obtenerNegocioPublico } from '@/lib/negocio/negocio'
+import { listarSucursalesPublicas, type SucursalPublica } from '@/lib/sucursales/sucursales-publicas'
+import { linkWhatsapp } from '@/lib/sucursales/sucursales-validacion'
+
+export async function generateMetadata(): Promise<Metadata> {
+  await connection()
+  const negocio = await obtenerNegocioPublico()
+  return {
+    title: negocio ? `${negocio.nombre} · Pedí online` : 'Menú online',
+    description: negocio?.descripcion ?? undefined,
+  }
+}
+
+export default async function Home() {
+  // Los datos cambian desde el panel: la página se arma en cada visita, no en el build.
+  await connection()
+  const negocio = await obtenerNegocioPublico()
+
+  if (!negocio) {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-bg px-4 py-12 text-text">
+        <Card className="flex flex-col items-center gap-3 text-center">
+          <span className="flex size-14 items-center justify-center rounded-full bg-surface-muted text-muted">
+            <UtensilsCrossed className="size-6" aria-hidden="true" />
+          </span>
+          <h1 className="text-lg font-semibold">Estamos preparando nuestro menú</h1>
+          <p className="text-sm text-muted">Volvé a pasar en un ratito.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  const sucursales = await listarSucursalesPublicas()
+  // Con una sola sucursal no hay nada que elegir.
+  if (sucursales.length === 1) redirect(`/${sucursales[0].slug}`)
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="flex flex-1 justify-center bg-bg px-4 py-12 text-text">
+      <main className="flex w-full max-w-md flex-col items-center gap-6">
+        <AvatarNegocio nombre={negocio.nombre} logoUrl={negocio.logoUrl} />
+
+        <div className="flex flex-col items-center gap-1 text-center">
+          <h1 className="page-title">{negocio.nombre}</h1>
+          {negocio.descripcion && <p className="text-sm text-muted">{negocio.descripcion}</p>}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+
+        <RedesNegocio negocio={negocio} />
+
+        <section aria-labelledby="titulo-sucursales" className="mt-4 flex w-full flex-col gap-3">
+          {sucursales.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 rounded-3xl bg-surface p-6 text-center shadow-sm">
+              <h2 id="titulo-sucursales" className="font-semibold">Por ahora no estamos tomando pedidos online</h2>
+              <p className="text-sm text-muted">Seguinos en nuestras redes para enterarte cuándo volvemos.</p>
+            </div>
+          ) : (
+            <>
+              <h2 id="titulo-sucursales" className="section-label text-center">
+                Elegí tu local más cercano
+              </h2>
+              <ul className="flex flex-col gap-3">
+                {sucursales.map((sucursal) => (
+                  <li key={sucursal.idSucursal}>
+                    <TarjetaSucursal sucursal={sucursal} />
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
       </main>
     </div>
-  );
+  )
+}
+
+// El link a la sucursal y el botón de WhatsApp son hermanos (no uno dentro del otro): un
+// elemento interactivo no puede ir dentro de otro.
+function TarjetaSucursal({ sucursal }: { sucursal: SucursalPublica }) {
+  return (
+    <div className="flex items-stretch gap-2 rounded-3xl bg-surface p-2 shadow-sm transition-shadow hover:shadow-md">
+      <Link
+        href={`/${sucursal.slug}`}
+        className="group flex min-w-0 flex-1 items-center gap-4 rounded-2xl p-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+          <MapPin className="size-5" aria-hidden="true" />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <span className="leading-tight font-semibold">{sucursal.nombre}</span>
+          <span className="flex flex-col gap-0.5 text-xs text-muted">
+            <span className="truncate">{sucursal.direccion}</span>
+            {sucursal.horario && (
+              <span className="inline-flex items-center gap-1">
+                <Clock className="size-3.5 shrink-0" aria-hidden="true" />
+                {sucursal.horario}
+              </span>
+            )}
+          </span>
+          <ChipsEntrega ofreceRetiro={sucursal.ofreceRetiro} ofreceDelivery={sucursal.ofreceDelivery} />
+        </span>
+        <ChevronRight
+          className="size-5 shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent motion-reduce:transition-none"
+          aria-hidden="true"
+        />
+      </Link>
+      {sucursal.whatsapp && (
+        <a
+          href={linkWhatsapp(sucursal.whatsapp)}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Escribirle por WhatsApp a ${sucursal.nombre}`}
+          className="flex w-12 shrink-0 items-center justify-center self-center rounded-2xl bg-bg py-3 text-success transition-colors hover:bg-success hover:text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success"
+        >
+          <IconoWhatsapp className="size-6" />
+        </a>
+      )}
+    </div>
+  )
 }

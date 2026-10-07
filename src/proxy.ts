@@ -25,6 +25,23 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
+  // Usuarios y Configuración son solo para admin; las APIs también lo validan. Se compara
+  // por segmento completo: un startsWith('/configuracion') también atraparía
+  // '/configuracion-inicial', que tiene su propia lógica para no-admin.
+  const pathname = request.nextUrl.pathname
+  const soloAdmin = ['/usuarios', '/configuracion'].some((ruta) => pathname === ruta || pathname.startsWith(ruta + '/'))
+  if (soloAdmin && token.rol !== 'admin') {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
+  // Caja y Cocina son para quien opera la sucursal: el admin solo ve los pedidos, para
+  // que no cargue ni mueva uno por error (por ejemplo, con otra sucursal activa). La API
+  // de pedidos también lo valida.
+  const esPantallaOperativa = ['/pantallas/caja', '/pantallas/cocina'].some((ruta) => pathname === ruta || pathname.startsWith(ruta + '/'))
+  if (esPantallaOperativa && token.rol === 'admin') {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
   return NextResponse.next()
 }
 
@@ -34,8 +51,14 @@ export const config = {
     '/pedidos/:path*',
     '/productos/:path*',
     '/usuarios/:path*',
+    '/sucursales/:path*',
     '/reportes/:path*',
-    '/caja/:path*',
-    '/cocina/:path*',
+    '/perfil/:path*',
+    '/configuracion/:path*',
+    // Pantallas de pestaña aparte. Pedidos Mostrador queda afuera a propósito: es pública.
+    '/pantallas/caja/:path*',
+    '/pantallas/cocina/:path*',
+    // Asistente de primera configuración (fuera de (panel), pero también requiere sesión).
+    '/configuracion-inicial/:path*',
   ],
 }

@@ -1,9 +1,8 @@
-// Valida el token recibido (generado en recuperar-contrasena/route.ts) y, si es válido,
-// actualiza la contraseña del usuario correspondiente.
+// Valida el enlace de recuperación y guarda la nueva contraseña.
 
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcrypt'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/db/prisma'
 import { verificarTokenReset } from '@/app/api/auth/recuperar-contrasena/route'
 
 export async function POST(request: Request) {
@@ -31,6 +30,9 @@ export async function POST(request: Request) {
   await prisma.usuario.update({
     where: { idUsuario },
     data: { passwordHash },
+    // Después de guardar, pedimos solo el identificador: no necesitamos que Prisma
+    // vuelva a leer todos los campos del usuario para confirmar esta operación.
+    select: { idUsuario: true },
   })
 
   return NextResponse.json({ mensaje: 'Contraseña actualizada correctamente' })

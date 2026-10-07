@@ -7,9 +7,9 @@
 
 import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Input } from '@/components/ui/Input'
-import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
+import { CampoAcceso } from '@/components/acceso/CampoAcceso'
+import { AvisoError, claseBotonAcento, TarjetaAcceso } from '@/components/acceso/ElementosAcceso'
+import { ArrowRight, CircleCheck, KeyRound, LockKeyhole } from '@/components/icons'
 
 export function RestablecerContrasenaForm({ token }: { token: string }) {
   const router = useRouter()
@@ -44,36 +44,45 @@ export function RestablecerContrasenaForm({ token }: { token: string }) {
 
   if (exito) {
     return (
-      <Card>
-        <div className="flex flex-col items-center gap-4 text-center">
-          <p className="text-sm text-neutral-700">¡Contraseña actualizada con éxito!</p>
-          <Button onClick={() => router.push('/acceso/login')}>Ingresar nuevamente</Button>
-        </div>
-      </Card>
+      <TarjetaAcceso
+        icono={CircleCheck}
+        tono="exito"
+        titulo="¡Contraseña actualizada!"
+        descripcion="Ya podés ingresar con tu nueva contraseña."
+      >
+        <button type="button" onClick={() => router.push('/acceso/login')} className={claseBotonAcento}>
+          Ingresar nuevamente
+          <ArrowRight className="size-4" />
+        </button>
+      </TarjetaAcceso>
     )
   }
 
   return (
-    <Card>
-      <form onSubmit={manejarSubmit} className="flex flex-col gap-4">
-        <h2 className="text-xl font-semibold">Nueva contraseña</h2>
-
-        <Input
+    <TarjetaAcceso
+      icono={KeyRound}
+      titulo="Creá una nueva contraseña"
+      descripcion="Elegí una contraseña de al menos 6 caracteres."
+    >
+      <form onSubmit={manejarSubmit} className="flex flex-col gap-5">
+        <CampoAcceso
           id="password"
           label="Nueva contraseña"
           type="password"
+          icono={LockKeyhole}
+          autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           minLength={6}
           required
         />
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <AvisoError>{error}</AvisoError>}
 
-        <Button type="submit" disabled={cargando}>
+        <button type="submit" disabled={cargando} className={claseBotonAcento}>
           {cargando ? 'Guardando...' : 'Guardar contraseña'}
-        </Button>
+        </button>
       </form>
-    </Card>
+    </TarjetaAcceso>
   )
 }
