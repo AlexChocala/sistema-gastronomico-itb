@@ -41,6 +41,15 @@ export async function obtenerSucursalPublica(slug: string): Promise<SucursalPubl
   return { ...aPublica(resto), localidadesDelivery: localidadesDelivery.map((zona) => zona.localidad) }
 }
 
+// Si el slug es un link viejo de una sucursal activa, devuelve su link actual (para redirigir).
+export async function obtenerSlugActual(slugAnterior: string): Promise<string | null> {
+  const anterior = await prisma.slugAnterior.findUnique({
+    where: { slug: slugAnterior },
+    select: { sucursal: { select: { slug: true, activa: true } } },
+  })
+  return anterior?.sucursal.activa ? anterior.sucursal.slug : null
+}
+
 export async function listarSucursalesPublicas(): Promise<SucursalPublica[]> {
   const sucursales = await prisma.sucursal.findMany({
     where: { activa: true },

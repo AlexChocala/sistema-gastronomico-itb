@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { Globe, MapPin, Pencil, Plus, Power, Search, Store, X } from '@/components/icons'
-import { MAX_SUCURSALES } from '@/lib/sucursales/sucursales-validacion'
+import { MAX_SUCURSALES, generarSlug } from '@/lib/sucursales/sucursales-validacion'
 import { CamposSucursal, localidadNuevaVacia, valoresSucursalVacios } from '@/components/sucursal/CamposSucursal'
 
 interface Localidad {
@@ -46,6 +46,14 @@ export default function SucursalesPage() {
   const [form, setForm] = useState(formVacio)
   const [localidadNueva, setLocalidadNueva] = useState(localidadNuevaVacia)
 
+  // Link de la carta (solo al editar). Mientras el admin no lo toque a mano, sigue al nombre.
+  // El link anterior queda redirigiendo al nuevo (ver cambiarSlug en el servidor).
+  const [slug, setSlug] = useState('')
+  const [slugOriginal, setSlugOriginal] = useState('')
+  const [slugTocado, setSlugTocado] = useState(false)
+  const slugNormalizado = generarSlug(slug)
+  const slugCambio = editandoId !== null && slugNormalizado !== slugOriginal
+
   async function cargarDatos() {
     setLoading(true)
     const res = await fetch('/api/sucursales')
@@ -76,11 +84,18 @@ export default function SucursalesPage() {
     }
   }, [])
 
+  function reiniciarSlug(valor = '') {
+    setSlug(valor)
+    setSlugOriginal(valor)
+    setSlugTocado(false)
+  }
+
   function abrirNuevo() {
     setEditandoId(null)
     setForm(formVacio)
     setLocalidadNueva(localidadNuevaVacia)
     setUsarLocalidadNueva(false)
+    reiniciarSlug()
     setError('')
     setMostrarForm(true)
   }
@@ -98,6 +113,7 @@ export default function SucursalesPage() {
     })
     setLocalidadNueva(localidadNuevaVacia)
     setUsarLocalidadNueva(false)
+    reiniciarSlug(s.slug)
     setError('')
     setMostrarForm(true)
   }
@@ -108,7 +124,16 @@ export default function SucursalesPage() {
     setForm(formVacio)
     setLocalidadNueva(localidadNuevaVacia)
     setUsarLocalidadNueva(false)
+    reiniciarSlug()
     setError('')
+  }
+
+  function cambiarCampo(campo: string, valor: unknown) {
+    setForm({ ...form, [campo]: valor })
+    // Al renombrar, el link sigue al nombre nuevo, salvo que el admin ya lo haya editado a mano.
+    if (campo === 'nombre' && editandoId !== null && !slugTocado && typeof valor === 'string') {
+      setSlug(generarSlug(valor))
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -133,6 +158,9 @@ export default function SucursalesPage() {
     } else {
       body.idLocalidad = Number(form.idLocalidad)
     }
+
+    // El link solo se manda si cambió (en el alta lo genera el servidor).
+    if (slugCambio) body.slug = slug
 
     const res = await fetch(url, {
       method,
@@ -199,10 +227,36 @@ export default function SucursalesPage() {
                 localidadNueva={localidadNueva}
                 usarLocalidadNueva={usarLocalidadNueva}
                 localidades={localidades}
-                onCambiar={(campo, valor) => setForm({ ...form, [campo]: valor })}
+                onCambiar={cambiarCampo}
                 onCambiarLocalidadNueva={(campo, valor) => setLocalidadNueva({ ...localidadNueva, [campo]: valor })}
                 onUsarLocalidadNueva={setUsarLocalidadNueva}
               />
+
+              {editandoId !== null && (
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium">Link de la carta</span>
+                  <span className="flex items-center gap-0.5 rounded-full border border-border bg-surface px-4 py-2.5 text-sm focus-within:border-accent">
+                    <span className="text-muted">/</span>
+                    <input
+                      type="text"
+                      value={slug}
+                      onChange={(e) => {
+                        setSlug(e.target.value)
+                        setSlugTocado(true)
+                      }}
+                      onBlur={() => setSlug(slugNormalizado)}
+                      maxLength={80}
+                      aria-label="Link de la carta"
+                      className="w-full bg-transparent outline-none"
+                    />
+                  </span>
+                  <span className="text-xs text-muted">
+                    {slugCambio
+                      ? `El link anterior (/${slugOriginal}) va a seguir funcionando: lleva a la carta nueva.`
+                      : 'Es la dirección de la carta online de esta sucursal.'}
+                  </span>
+                </label>
+              )}
 
               {error && <p className="text-sm text-danger">{error}</p>}
 
@@ -261,7 +315,7 @@ export default function SucursalesPage() {
                   {s.whatsapp && <p>{s.whatsapp}</p>}
                   {s.horario && <p>{s.horario}</p>}
                   <p>{[s.ofreceRetiro && 'Retiro en el local', s.ofreceDelivery && 'Delivery'].filter(Boolean).join(' · ')}</p>
-                  {/* URL pública del menú: no cambia si se renombra la sucursal (ver slugLibre). */}
+                  {/* URL pública del menú. Se edita desde el formulario; los links viejos redirigen a este. */}
                   <a
                     href={`/${s.slug}`} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 break-all text-accent hover:underline"
