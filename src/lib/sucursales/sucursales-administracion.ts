@@ -81,14 +81,38 @@ export async function crearSucursalEnTransaccion(tx: Prisma.TransactionClient, c
   return tx.sucursal.create({ data: { ...datos, slug: await slugLibre(tx, datos.nombre) }, select: camposSucursal })
 }
 
-// Slug de la URL pública. Se busca dentro de la misma transacción serializable, así dos
-// altas simultáneas con el mismo nombre no eligen el mismo (y si pasara, el índice único
-// lo frena). Solo se genera en el alta: al renombrar la sucursal el slug NO cambia, para
-// que los QR impresos con la URL sigan funcionando.
+// Slug de la URL pública para un alta. Se busca dentro de la misma transacción serializable,
+// así dos altas simultáneas con el mismo nombre no eligen el mismo (y si pasara, el índice
+// único lo frena). Tampoco puede tomar un link viejo de otra sucursal: ese sigue redirigiendo.
 async function slugLibre(tx: Prisma.TransactionClient, nombre: string) {
   const base = generarSlug(nombre) || 'sucursal'
-  const parecidos = await tx.sucursal.findMany({ where: { slug: { startsWith: base } }, select: { slug: true } })
-  return elegirSlug(base, new Set(parecidos.map((s) => s.slug)))
+  const actuales = await tx.sucursal.findMany({ where: { slug: { startsWith: base } }, select: { slug: true } })
+  const anteriores = await tx.slugAnterior.findMany({ where: { slug: { startsWith: base } }, select: { slug: true } })
+  return elegirSlug(base, new Set([...actuales, ...anteriores].map((s) => s.slug)))
+}
+
+// Cambio del link de la carta. El link actual queda guardado en SlugAnterior y redirige al
+// nuevo, así los QR impresos y los links compartidos siguen funcionando.
+async function cambiarSlug(
+  tx: Prisma.TransactionClient,
+  idSucursal: number,
+  slugActual: string,
+  slugNuevo: string,
+) {
+  const otraSucursal = await tx.sucursal.findFirst({
+    where: { slug: slugNuevo, idSucursal: { not: idSucursal } },
+    select: { idSucursal: true },
+  })
+  if (otraSucursal) throw new ErrorSucursal(409, `El link "/${slugNuevo}" ya lo usa otra sucursal.`)
+
+  const anterior = await tx.slugAnterior.findUnique({ where: { slug: slugNuevo } })
+  if (anterior && anterior.idSucursal !== idSucursal) {
+    throw new ErrorSucursal(409, `El link "/${slugNuevo}" lo usó otra sucursal y todavía lleva a su carta. Elegí otro.`)
+  }
+  // Si vuelve a un link que ya había tenido, deja de ser "anterior".
+  if (anterior) await tx.slugAnterior.delete({ where: { slug: slugNuevo } })
+
+  await tx.slugAnterior.create({ data: { slug: slugActual, idSucursal } })
 }
 
 export function crearControladorSucursales(db: PrismaClient, leerSesion: () => Promise<Sesion>) {
@@ -156,7 +180,13 @@ export function crearControladorSucursales(db: PrismaClient, leerSesion: () => P
         const retiro = datos.ofreceRetiro ?? actual.ofreceRetiro
         const delivery = datos.ofreceDelivery ?? actual.ofreceDelivery
         if (!retiro && !delivery) throw new ErrorSucursal(400, MENSAJE_SIN_ENTREGA)
-        return tx.sucursal.update({ where: { idSucursal }, data: datos, select: camposSucursal })
+
+        const { slug, ...cambios } = datos
+        if (slug !== undefined && slug !== actual.slug) {
+          await cambiarSlug(tx, idSucursal, actual.slug, slug)
+          return tx.sucursal.update({ where: { idSucursal }, data: { ...cambios, slug }, select: camposSucursal })
+        }
+        return tx.sucursal.update({ where: { idSucursal }, data: cambios, select: camposSucursal })
       }, { isolationLevel: 'Serializable' })
       return responder({ sucursal })
     }),

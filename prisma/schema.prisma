@@ -55,8 +55,9 @@ model Negocio {
 model Sucursal {
   idSucursal Int     @id @default(autoincrement())
   nombre     String
-  // Segmento de la URL pública (/{slug}). Se genera al crear la sucursal y no cambia al
-  // renombrarla: los QR impresos con la URL tienen que seguir funcionando.
+  // Segmento de la URL pública (/{slug}). Se genera al crear la sucursal y el admin lo puede
+  // cambiar. Los links viejos quedan en SlugAnterior y redirigen al actual, así los QR
+  // impresos con la URL anterior siguen funcionando.
   slug       String  @unique
   whatsapp   String?
   direccion  String
@@ -73,6 +74,7 @@ model Sucursal {
   productos          SucursalProducto[]
   pedidos            Pedido[]
   localidadesDelivery SucursalLocalidad[]
+  slugsAnteriores     SlugAnterior[]
 }
 
 model SucursalLocalidad {
@@ -297,4 +299,16 @@ model HistorialPrecioProducto {
   producto   Producto @relation(fields: [idProducto], references: [idProducto])
 
 
+}
+
+// Links viejos de la carta de cada sucursal. Cuando se cambia el slug, el anterior queda
+// acá y redirige al actual, así los QR impresos y los links compartidos siguen funcionando.
+model SlugAnterior {
+  slug       String   @id
+  idSucursal Int
+  creadoEn   DateTime @default(now())
+
+  sucursal Sucursal @relation(fields: [idSucursal], references: [idSucursal])
+
+  @@index([idSucursal])
 }
