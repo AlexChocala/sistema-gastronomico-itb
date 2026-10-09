@@ -8,10 +8,11 @@ import {
 } from './productos-validacion'
 import { validarCategoria } from './categorias-validacion'
 import { validarExtra } from './extras-validacion'
+import { ErrorImagen, subirImagen, quitarImagen, urlImagenPublica } from '@/lib/storage/imagenes'
 
 type Sesion = { user: { idUsuario: number } } | null
 const camposProducto = {
-  idProducto: true, nombre: true, descripcion: true, precio: true, activo: true,
+  idProducto: true, nombre: true, descripcion: true, precio: true, activo: true, imagenPath: true,
   idCategoria: true, categoria: { select: { idCategoria: true, nombre: true, activa: true } },
   sucursales: {
     where: { disponible: true, sucursal: { activa: true } },
@@ -54,7 +55,7 @@ function responder(datos: unknown, estado = 200) {
 }
 
 function responderError(error: unknown) {
-  if (error instanceof ErrorProducto) return responder({ error: error.message }, error.estado)
+  if (error instanceof ErrorProducto || error instanceof ErrorImagen) return responder({ error: error.message }, error.estado)
   const codigo = typeof error === 'object' && error !== null && 'code' in error ? error.code : null
   if (codigo === 'P2025') return responder({ error: 'No se encontró el registro solicitado.' }, 404)
   if (codigo === 'P2002') return responder({ error: 'Ya existe una categoría con ese nombre.' }, 409)
@@ -213,7 +214,31 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
     }
   }
 
+  async function gestionarImagen(request: Request, id: string, borrar: boolean) {
+    const idProducto = leerId(id)
+    const actual = await db.producto.findUnique({ where: { idProducto }, select: { imagenPath: true } })
+    if (!actual) throw new ErrorProducto(404, 'No se encontró el producto solicitado.')
+    const guardar = async (esperada: string | null, nueva: string | null) => {
+      const resultado = await db.producto.updateMany({
+        where: { idProducto, imagenPath: esperada }, data: { imagenPath: nueva },
+      })
+      return resultado.count === 1
+    }
+    if (borrar) await quitarImagen('productos', actual.imagenPath, guardar)
+    else await subirImagen(request, 'productos', idProducto, actual.imagenPath, guardar)
+    const producto = await db.producto.findUniqueOrThrow({ where: { idProducto }, select: camposProducto })
+    return responder({
+      mensaje: borrar ? 'Imagen del producto eliminada.' : 'Imagen del producto guardada.',
+      imagen: { ruta: producto.imagenPath, url: urlImagenPublica(producto.imagenPath) },
+      producto,
+    })
+  }
+
   return {
+    subirImagen: (request: Request, id: string) => proteger(request, true, () => gestionarImagen(request, id, false)),
+
+    quitarImagen: (request: Request, id: string) => proteger(request, true, () => gestionarImagen(request, id, true)),
+
     importar: (request: Request) => proteger(request, true, async () => {
       try {
         const archivo = await leerImportacion(request, 'productos')

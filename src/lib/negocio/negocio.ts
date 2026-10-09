@@ -3,13 +3,11 @@
 
 import { prisma } from '@/lib/db/prisma'
 import { formatearCuit } from '@/lib/negocio/negocio-validacion'
+import { urlImagenPublica } from '@/lib/storage/imagenes'
 
-// URL mostrable del logo a partir de su ruta en el bucket. Igual que con la foto de
-// perfil, Supabase Storage todavía no está conectado: hasta entonces siempre es null y
-// las pantallas muestran las iniciales. Al conectarlo, este es el único lugar a cambiar.
+// URL pública del logo; la base conserva únicamente su ruta dentro del bucket.
 export function urlLogoNegocio(logoPath: string | null): string | null {
-  void logoPath
-  return null
+  return urlImagenPublica(logoPath)
 }
 
 // `cuit` ya viene con guiones (20-12345678-9), listo para mostrar.
