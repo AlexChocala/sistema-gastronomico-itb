@@ -72,6 +72,7 @@ export function leerId(valor: string): number {
 
 type DatosSucursal = {
   nombre?: string
+  slug?: string
   direccion?: string
   whatsapp?: string | null
   horario?: string | null
@@ -99,10 +100,11 @@ export function validarSucursal(cuerpo: unknown, parcial: boolean): DatosSucursa
     throw new ErrorSucursal(400, 'Enviá un objeto JSON con los datos de la sucursal.')
   }
   const datos = cuerpo as Record<string, unknown>
-  // El slug no está: lo genera el servidor al crear la sucursal y no se edita.
+  // En el alta el slug no viene: lo genera el servidor a partir del nombre. En la edición
+  // el admin lo puede cambiar (el anterior queda redirigiendo, ver cambiarSlug).
   const permitidos = [
     'nombre', 'direccion', 'whatsapp', 'horario', 'idLocalidad', 'ofreceRetiro', 'ofreceDelivery',
-    ...(parcial ? ['activa'] : []),
+    ...(parcial ? ['activa', 'slug'] : []),
   ]
   if (Object.keys(datos).length === 0 || Object.keys(datos).some((c) => !permitidos.includes(c))) {
     throw new ErrorSucursal(400, 'Enviá al menos un campo válido de la sucursal.')
@@ -113,6 +115,16 @@ export function validarSucursal(cuerpo: unknown, parcial: boolean): DatosSucursa
       throw new ErrorSucursal(400, 'El nombre debe tener entre 1 y 100 caracteres.')
     }
     salida.nombre = datos.nombre.trim()
+  }
+  if ('slug' in datos) {
+    if (typeof datos.slug !== 'string') throw new ErrorSucursal(400, 'El link de la carta debe ser texto.')
+    // Se normaliza igual que al crearlo: "Palermo Soho" → "palermo-soho".
+    const slug = generarSlug(datos.slug)
+    if (!slug) throw new ErrorSucursal(400, 'El link de la carta tiene que tener al menos una letra o un número.')
+    if (SLUGS_RESERVADOS.includes(slug)) {
+      throw new ErrorSucursal(400, `"/${slug}" lo usa el sistema. Elegí otro link para la carta.`)
+    }
+    salida.slug = slug
   }
   if (!parcial || 'direccion' in datos) {
     if (typeof datos.direccion !== 'string' || !datos.direccion.trim() || datos.direccion.trim().length > 200) {

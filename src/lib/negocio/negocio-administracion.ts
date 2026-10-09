@@ -2,6 +2,7 @@ import type { PrismaClient, Prisma } from '@prisma/client'
 import { ErrorConfiguracion, validarNegocio } from './negocio-validacion'
 import { ErrorSucursal, idValido, leerCuerpo } from '@/lib/sucursales/sucursales-validacion'
 import { urlLogoNegocio } from './negocio'
+import { ErrorImagen, subirImagen, quitarImagen } from '@/lib/storage/imagenes'
 
 type Sesion = { user: { idUsuario: number } } | null
 
@@ -12,7 +13,7 @@ const camposNegocio = {
 
 type FilaNegocio = Prisma.NegocioGetPayload<{ select: typeof camposNegocio }>
 
-// La ruta del bucket no sale del servidor: el cliente recibe la URL mostrable y si hay logo.
+// En los datos generales del negocio se devuelve la URL mostrable y si hay logo.
 function aRespuesta({ logoPath, ...resto }: FilaNegocio) {
   return { ...resto, logoUrl: urlLogoNegocio(logoPath), tieneLogo: logoPath !== null }
 }
@@ -23,7 +24,7 @@ function responder(datos: unknown, estado = 200) {
 
 function responderError(error: unknown) {
   // ErrorSucursal llega desde leerCuerpo (compartido con la API de Sucursales).
-  if (error instanceof ErrorConfiguracion || error instanceof ErrorSucursal) {
+  if (error instanceof ErrorConfiguracion || error instanceof ErrorSucursal || error instanceof ErrorImagen) {
     return responder({ error: error.message }, error.estado)
   }
   const codigo = typeof error === 'object' && error !== null && 'code' in error ? error.code : null
@@ -64,6 +65,25 @@ export function crearControladorNegocio(db: PrismaClient, leerSesion: () => Prom
     }
   }
 
+  async function gestionarLogo(request: Request, borrar: boolean) {
+    const actual = await db.negocio.findUnique({ where: { idNegocio: 1 }, select: { logoPath: true } })
+    if (!actual) throw new ErrorConfiguracion(404, 'Todavía no se completó la configuración inicial.')
+    const guardar = async (esperada: string | null, nueva: string | null) => {
+      const resultado = await db.negocio.updateMany({
+        where: { idNegocio: 1, logoPath: esperada }, data: { logoPath: nueva },
+      })
+      return resultado.count === 1
+    }
+    if (borrar) await quitarImagen('logo', actual.logoPath, guardar)
+    else await subirImagen(request, 'logo', 1, actual.logoPath, guardar)
+    const negocio = await db.negocio.findUniqueOrThrow({ where: { idNegocio: 1 }, select: camposNegocio })
+    return responder({
+      mensaje: borrar ? 'Logo eliminado.' : 'Logo guardado.',
+      imagen: { ruta: negocio.logoPath, url: urlLogoNegocio(negocio.logoPath) },
+      negocio: aRespuesta(negocio),
+    })
+  }
+
   return {
     obtener: (request: Request) => proteger(request, false, async () => {
       const negocio = await db.negocio.findUnique({ where: { idNegocio: 1 }, select: camposNegocio })
@@ -77,11 +97,8 @@ export function crearControladorNegocio(db: PrismaClient, leerSesion: () => Prom
       return responder({ mensaje: 'Cambios guardados.', negocio: aRespuesta(negocio) })
     }),
 
-    quitarLogo: (request: Request) => proteger(request, true, async () => {
-      // Igual que la foto de perfil: por ahora solo se borra la ruta. Borrar el archivo
-      // del bucket se agrega cuando se conecte Supabase Storage.
-      const negocio = await db.negocio.update({ where: { idNegocio: 1 }, data: { logoPath: null }, select: camposNegocio })
-      return responder({ mensaje: 'Logo eliminado.', negocio: aRespuesta(negocio) })
-    }),
+    subirLogo: (request: Request) => proteger(request, true, () => gestionarLogo(request, false)),
+
+    quitarLogo: (request: Request) => proteger(request, true, () => gestionarLogo(request, true)),
   }
 }

@@ -6,9 +6,13 @@
 // validación que la API, solo para avisar antes; la que decide es la API.
 
 import { useRouter } from 'next/navigation'
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { AvisoError } from '@/components/acceso/ElementosAcceso'
 import { CircleCheck, ImagePlus, Trash2 } from '@/components/icons'
+import { AvisoFlotante } from '@/components/ui/AvisoFlotante'
+import {
+  TEXTO_FORMATOS_IMAGEN, TIPOS_IMAGEN, quitarImagen, subirImagen, validarImagen,
+} from '@/lib/storage/imagenes-cliente'
 import {
   MAX_DESCRIPCION_NEGOCIO,
   MAX_LINK_RED_SOCIAL,
@@ -32,6 +36,9 @@ type NegocioApi = {
   logoUrl: string | null
   tieneLogo: boolean
 } & Record<RedSocial | CampoTransferencia, string | null>
+
+// Respuesta de POST y DELETE /api/negocio/logo.
+type RespuestaLogo = { mensaje: string; negocio: NegocioApi }
 
 const redes = Object.keys(REDES_SOCIALES) as RedSocial[]
 
@@ -108,6 +115,14 @@ export function ConfiguracionNegocioForm({ inicial, logoUrl: logoUrlInicial, tie
   const [exito, setExito] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [quitandoLogo, setQuitandoLogo] = useState(false)
+  const [subiendoLogo, setSubiendoLogo] = useState(false)
+  // Vista previa local mientras se sube: se ve el logo nuevo al instante, atenuado.
+  const [previaLogo, setPreviaLogo] = useState<string | null>(null)
+  const inputLogo = useRef<HTMLInputElement>(null)
+  const ocupadoConLogo = subiendoLogo || quitandoLogo
+  // Los avisos del logo van en su sección (los del formulario quedan al final, lejos).
+  const [errorLogo, setErrorLogo] = useState('')
+  const [avisoLogo, setAvisoLogo] = useState('')
 
   function cambiar(campo: keyof ValoresNegocio, valor: string) {
     setExito('')
@@ -150,20 +165,43 @@ export function ConfiguracionNegocioForm({ inicial, logoUrl: logoUrlInicial, tie
     }
   }
 
+  async function subirLogo(archivo?: File) {
+    if (inputLogo.current) inputLogo.current.value = ''
+    if (!archivo) return
+    setErrorLogo('')
+    setAvisoLogo('')
+    const invalida = validarImagen(archivo)
+    if (invalida) {
+      setErrorLogo(invalida)
+      return
+    }
+    const previa = URL.createObjectURL(archivo)
+    setPreviaLogo(previa)
+    setSubiendoLogo(true)
+    try {
+      const data = await subirImagen<RespuestaLogo>('/api/negocio/logo', archivo)
+      setLogo({ logoUrl: data.negocio.logoUrl, tieneLogo: data.negocio.tieneLogo })
+      setAvisoLogo('Logo guardado.')
+    } catch (e) {
+      // Si falla, queda el logo anterior (el servidor no lo tocó).
+      setErrorLogo(e instanceof Error ? e.message : 'No se pudo guardar el logo.')
+    } finally {
+      setPreviaLogo(null)
+      URL.revokeObjectURL(previa)
+      setSubiendoLogo(false)
+    }
+  }
+
   async function quitarLogo() {
-    setError('')
-    setExito('')
+    setErrorLogo('')
+    setAvisoLogo('')
     setQuitandoLogo(true)
     try {
-      const res = await fetch('/api/negocio/logo', { method: 'DELETE' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError(data.error || 'No se pudo quitar el logo. Intentá nuevamente.')
-        return
-      }
+      const data = await quitarImagen<RespuestaLogo>('/api/negocio/logo')
       setLogo({ logoUrl: data.negocio.logoUrl, tieneLogo: data.negocio.tieneLogo })
-    } catch {
-      setError('No se pudo conectar con el sistema. Intentá nuevamente más tarde.')
+      setAvisoLogo('Logo quitado.')
+    } catch (e) {
+      setErrorLogo(e instanceof Error ? e.message : 'No se pudo quitar el logo.')
     } finally {
       setQuitandoLogo(false)
     }
@@ -204,10 +242,14 @@ export function ConfiguracionNegocioForm({ inicial, logoUrl: logoUrlInicial, tie
 
       <Seccion id="seccion-logo" titulo="Logo" descripcion="Solo se muestra en el menú digital para tus clientes.">
         <div className="flex flex-wrap items-center gap-4">
-          {logo.logoUrl ? (
-            // URL externa del bucket: no pasa por next/image (no hay remotePatterns configurados).
+          {previaLogo || logo.logoUrl ? (
+            // URL del bucket o vista previa local: no pasan por next/image.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo.logoUrl} alt="Logo actual del restaurante" className="size-20 shrink-0 rounded-full object-cover" />
+            <img
+              src={previaLogo ?? logo.logoUrl ?? undefined}
+              alt={previaLogo ? 'Logo nuevo, subiendo' : 'Logo actual del restaurante'}
+              className={`size-20 shrink-0 rounded-full object-cover transition-opacity ${previaLogo ? 'opacity-50' : ''}`}
+            />
           ) : (
             <span
               aria-label="Sin logo: se muestran las iniciales del restaurante"
@@ -219,14 +261,20 @@ export function ConfiguracionNegocioForm({ inicial, logoUrl: logoUrlInicial, tie
           )}
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap gap-2">
-              {/* La subida se habilita cuando se conecte Supabase Storage (igual que la foto de perfil). */}
-              <button type="button" disabled aria-describedby="logo-ayuda" className={claseBotonSecundario}>
+              <input
+                ref={inputLogo} type="file" accept={TIPOS_IMAGEN.join(',')} className="sr-only" tabIndex={-1}
+                aria-label="Elegir imagen del logo" onChange={(e) => void subirLogo(e.currentTarget.files?.[0])}
+              />
+              <button
+                type="button" onClick={() => inputLogo.current?.click()} disabled={ocupadoConLogo || guardando}
+                aria-describedby="logo-ayuda" className={claseBotonSecundario}
+              >
                 <ImagePlus className="size-4" />
-                Subir logo
+                {subiendoLogo ? 'Subiendo...' : logo.tieneLogo ? 'Cambiar logo' : 'Subir logo'}
               </button>
               {logo.tieneLogo && (
                 <button
-                  type="button" onClick={quitarLogo} disabled={quitandoLogo || guardando}
+                  type="button" onClick={quitarLogo} disabled={ocupadoConLogo || guardando}
                   className={`${claseBotonSecundario} text-danger hover:bg-danger/10`}
                 >
                   <Trash2 className="size-4" />
@@ -235,8 +283,10 @@ export function ConfiguracionNegocioForm({ inicial, logoUrl: logoUrlInicial, tie
               )}
             </div>
             <p id="logo-ayuda" className="text-xs text-muted">
-              Pronto vas a poder subir el logo desde acá. Mientras tanto se muestran las iniciales.
+              {TEXTO_FORMATOS_IMAGEN}. Se ve redondo: usá una imagen cuadrada.
+              {!logo.tieneLogo && ' Sin logo se muestran las iniciales.'}
             </p>
+            {errorLogo && <p role="alert" className="text-xs text-danger">{errorLogo}</p>}
           </div>
         </div>
       </Seccion>
@@ -301,6 +351,7 @@ export function ConfiguracionNegocioForm({ inicial, logoUrl: logoUrlInicial, tie
         </p>
       </Seccion>
 
+      {avisoLogo && <AvisoFlotante mensaje={avisoLogo} onCerrar={() => setAvisoLogo('')} />}
       {error && <AvisoError>{error}</AvisoError>}
       {exito && (
         <p role="status" className="inline-flex items-center gap-2 rounded-2xl bg-success/10 px-4 py-3 text-sm text-success">

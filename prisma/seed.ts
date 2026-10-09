@@ -3,17 +3,47 @@ import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import bcrypt from 'bcrypt'
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
-const prisma = new PrismaClient({ adapter })
-
 // Seed mínimo: deja el sistema como lo recibe un cliente nuevo. Solo roles, tipos de
 // entrega y un admin, sin negocio ni sucursales, para que el primer ingreso pase por la pre-configuración.
+//
+// El email y la contraseña del admin inicial se leen de SEED_ADMIN_EMAIL y SEED_ADMIN_PASSWORD
+// (nunca escritos en el código). La conexión usa DIRECT_URL (Session pooler de Supabase, puerto 5432);
+// si no existe, usa DATABASE_URL (base local).
+
+const esCheck = process.argv.includes('--check')
+
+const adminEmail = process.env.SEED_ADMIN_EMAIL?.trim() ?? ''
+const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? ''
+const urlConexion = process.env.DIRECT_URL ?? process.env.DATABASE_URL
+
+// Antes de conectarse: si falta algo, se corta sin crear nada.
+const faltantes: string[] = []
+if (!urlConexion) faltantes.push('DIRECT_URL (o DATABASE_URL)')
+if (!adminEmail) faltantes.push('SEED_ADMIN_EMAIL')
+if (!adminPassword) faltantes.push('SEED_ADMIN_PASSWORD')
+
+if (faltantes.length > 0) {
+  console.error(`No se puede ejecutar el seed: faltan variables en el .env: ${faltantes.join(', ')}.`)
+  console.error('No se creó ni modificó nada.')
+  process.exit(1)
+}
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
+  console.error('No se puede ejecutar el seed: SEED_ADMIN_EMAIL no es un email válido. No se creó nada.')
+  process.exit(1)
+}
+if (adminPassword.length < 6) {
+  console.error('No se puede ejecutar el seed: SEED_ADMIN_PASSWORD debe tener al menos 6 caracteres. No se creó nada.')
+  process.exit(1)
+}
+
+const adapter = new PrismaPg({ connectionString: urlConexion })
+const prisma = new PrismaClient({ adapter })
 
 async function main() {
   // Comprueba la estructura y los datos necesarios sin escribir en la base.
-  if (process.argv.includes('--check')) {
+  if (esCheck) {
     const usuario = await prisma.usuario.findUnique({
-      where: { email: 'admin@burguer.com' },
+      where: { email: adminEmail },
       include: { rol: true },
     })
     await prisma.rol.count()
@@ -49,14 +79,15 @@ async function main() {
     }
 
     // Usuario admin inicial: debe cambiar la contraseña en el primer ingreso.
-    const passwordHash = await bcrypt.hash('asd123', 10)
+    // Si ya existe, no se toca (ni su contraseña).
+    const passwordHash = await bcrypt.hash(adminPassword, 10)
     await tx.usuario.upsert({
-      where: { email: 'admin@burguer.com' },
+      where: { email: adminEmail },
       update: {},
       create: {
         nombre: 'Alex',
         apellido: 'Chocala',
-        email: 'admin@burguer.com',
+        email: adminEmail,
         passwordHash,
         idRol: admin.idRol,
         debeCambiarContrasena: true,

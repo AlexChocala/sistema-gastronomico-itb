@@ -8,6 +8,7 @@ import {
 import { IconoCategoria } from '@/components/icons/IconoCategoria'
 import { CampoVariaciones } from '@/components/productos/CampoVariaciones'
 import { CrearCategoriaRapida } from '@/components/productos/CrearCategoriaRapida'
+import { CampoFotoProducto } from '@/components/productos/CampoFotoProducto'
 import { CrearExtraRapido } from '@/components/productos/CrearExtraRapido'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import { Aviso } from '@/components/ui/Aviso'
@@ -22,6 +23,7 @@ import {
 } from '@/lib/productos/variaciones-formulario'
 import { ordenarVariaciones, variacionPrincipal } from '@/lib/productos/variacion-principal'
 import { hoyEnArgentina } from '@/lib/reportes/fechas'
+import { quitarImagen, subirImagen, validarImagen } from '@/lib/storage/imagenes-cliente'
 import type { DatosExportables } from '@/lib/utils/exportar'
 import type { RolNombre } from '@/types'
 
@@ -33,6 +35,8 @@ type Producto = {
   activo: boolean
   idCategoria: number
   categoria: { nombre: string }
+  // URL pública de la foto (Supabase Storage); null si no tiene.
+  imagenUrl?: string | null
   sucursales: {
     idSucursal: number
     disponible: boolean
@@ -123,6 +127,11 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
   // Panel "Nueva categoría" abierto en el formulario: bloquea el resto hasta crearla.
   const [creandoCategoria, setCreandoCategoria] = useState(false)
   const bloqueadoPorCategoria = creandoCategoria || categorias.length === 0
+  // Foto del producto: se sube o se quita recién al guardar (ver guardar()).
+  const [fotoActual, setFotoActual] = useState<string | null>(null)
+  const [fotoNueva, setFotoNueva] = useState<File | null>(null)
+  const [quitarFoto, setQuitarFoto] = useState(false)
+  const [errorFoto, setErrorFoto] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [busquedaAplicada, setBusquedaAplicada] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos')
@@ -195,6 +204,7 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
       setFormulario(formularioVacio)
       setIdEdicion(null)
       setCreandoCategoria(false)
+      reiniciarFoto(null)
       setMostrarFormulario(false)
     }
     window.addEventListener('keydown', alPresionarTecla)
@@ -263,10 +273,34 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
     }))
   }
 
+  function reiniciarFoto(actual: string | null) {
+    setFotoActual(actual)
+    setFotoNueva(null)
+    setQuitarFoto(false)
+    setErrorFoto('')
+  }
+
+  // Se valida al elegir (tipo y tamaño) para avisar al toque; el servidor vuelve a validar.
+  function elegirFoto(archivo: File) {
+    const invalida = validarImagen(archivo)
+    setErrorFoto(invalida ?? '')
+    if (invalida) return
+    setFotoNueva(archivo)
+    setQuitarFoto(false)
+  }
+
+  // Quitar una foto recién elegida vuelve a la guardada; quitar la guardada la marca para borrar.
+  function quitarFotoElegida() {
+    setErrorFoto('')
+    if (fotoNueva) setFotoNueva(null)
+    else setQuitarFoto(true)
+  }
+
   function cerrarFormulario() {
     setFormulario(formularioVacio)
     setIdEdicion(null)
     setCreandoCategoria(false)
+    reiniciarFoto(null)
     setMostrarFormulario(false)
   }
 
@@ -278,6 +312,7 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
     setMensaje('')
     setError('')
     setCreandoCategoria(false)
+    reiniciarFoto(null)
     setMostrarFormulario(true)
   }
 
@@ -298,6 +333,7 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
     setMensaje('')
     setError('')
     setCreandoCategoria(false)
+    reiniciarFoto(producto.imagenUrl ?? null)
     setMostrarFormulario(true)
   }
 
@@ -334,9 +370,26 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
           }),
         },
       )
-      const datos = await respuesta.json() as RespuestaError
+      const datos = await respuesta.json() as RespuestaError & { producto?: { idProducto: number } }
       if (!respuesta.ok) throw new Error(datos.error || 'No se pudo guardar el producto.')
+
+      // La foto va después: necesita el id (en un producto nuevo recién existe ahora). Si
+      // falla, el producto ya quedó guardado y se avisa para reintentar desde Editar.
+      const idProducto = idEdicion ?? datos.producto?.idProducto
+      let avisoFoto = ''
+      if (idProducto && (fotoNueva || (quitarFoto && fotoActual))) {
+        const endpoint = `/api/productos/gestion/${idProducto}/imagen`
+        try {
+          if (fotoNueva) await subirImagen(endpoint, fotoNueva)
+          else await quitarImagen(endpoint)
+        } catch (errorFotoDesconocido) {
+          const detalle = errorFotoDesconocido instanceof Error ? errorFotoDesconocido.message : ''
+          avisoFoto = `El producto se guardó, pero no la foto. ${detalle} Probá de nuevo desde Editar.`
+        }
+      }
+
       setMensaje(idEdicion === null ? 'Producto creado.' : 'Producto actualizado.')
+      if (avisoFoto) setError(avisoFoto)
       cerrarFormulario()
       setRecarga((actual) => actual + 1)
     } catch (errorDesconocido) {
@@ -558,9 +611,16 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
-                    <IconoCategoria categoria={producto.categoria.nombre} className="size-7" strokeWidth={1.5} />
-                  </span>
+                  {producto.imagenUrl ? (
+                    // URL del bucket: no pasa por next/image.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={producto.imagenUrl} alt="" loading="lazy" decoding="async"
+                      className="size-14 shrink-0 object-contain" />
+                  ) : (
+                    <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+                      <IconoCategoria categoria={producto.categoria.nombre} className="size-7" strokeWidth={1.5} />
+                    </span>
+                  )}
                   <div className="min-w-0">
                     <h3 className="leading-tight">{producto.nombre}</h3>
                     <p className="mt-0.5 line-clamp-2 text-xs text-muted">
@@ -735,6 +795,17 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
                 <input id="descripcion" value={formulario.descripcion} className={claseCampo}
                   onChange={(evento) => cambiarCampo('descripcion', evento.target.value)} disabled={cargando} />
               </div>
+
+              <CampoFotoProducto
+                urlActual={fotoActual}
+                archivo={fotoNueva}
+                quitar={quitarFoto}
+                categoria={categoriaElegida?.nombre ?? ''}
+                onElegir={elegirFoto}
+                onQuitar={quitarFotoElegida}
+                error={errorFoto}
+                deshabilitado={cargando}
+              />
 
               {!categoriaElegida || creandoCategoria ? (
                 <p className="rounded-2xl bg-bg p-4 text-center text-sm text-muted">
