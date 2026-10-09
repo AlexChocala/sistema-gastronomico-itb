@@ -22,7 +22,9 @@ export class ErrorPedido extends Error {
   }
 }
 
-export const MAX_NOMBRE_CLIENTE = 60
+export const MIN_NOMBRE_CLIENTE = 2
+export const MAX_NOMBRE_CLIENTE = 40
+export const DIGITOS_TELEFONO = 10
 export const MIN_DIRECCION = 5
 export const MAX_DIRECCION = 200
 export const MAX_CANTIDAD_ITEM = 20
@@ -32,11 +34,33 @@ export const MAX_REFERENCIAS = 200
 export const MAX_ACLARACION = 200
 
 export const MENSAJE_SUCURSAL_NO_DISPONIBLE = 'Esta sucursal no existe o no está disponible.'
-export const MENSAJE_TELEFONO = 'Ingresá tu celular con código de área, sin 0 ni 15 (10 dígitos). Ej: 1123493023.'
+export const MENSAJE_TELEFONO =
+  'Ingresá tu celular con código de área, sin 0 ni 15 (10 números). Ej: 1123493023 o 3777412142.'
 // Las mismas reglas, redactadas para el personal (Caja y Pedidos).
 export const MENSAJE_TELEFONO_CLIENTE =
-  'Ingresá el celular del cliente con código de área, sin 0 ni 15 (10 dígitos). Ej: 1123493023.'
+  'Ingresá el celular del cliente con código de área, sin 0 ni 15 (10 números). Ej: 1123493023 o 3777412142.'
+export const MENSAJE_NOMBRE =
+  `Ingresá tu nombre: solo letras, entre ${MIN_NOMBRE_CLIENTE} y ${MAX_NOMBRE_CLIENTE} caracteres.`
 export const MENSAJE_NOMBRE_CLIENTE = `El nombre del cliente debe tener entre 1 y ${MAX_NOMBRE_CLIENTE} caracteres.`
+
+// Nombre del cliente en la carta online: letras (con tildes y ñ), espacios, apóstrofo y
+// guion, para nombres como "D'Angelo" o "María-José". Empieza con una letra.
+const PATRON_NOMBRE = /^\p{L}[\p{L} '’-]*$/u
+
+export function nombreClienteValido(nombre: string) {
+  const limpio = nombre.trim()
+  return limpio.length >= MIN_NOMBRE_CLIENTE && limpio.length <= MAX_NOMBRE_CLIENTE && PATRON_NOMBRE.test(limpio)
+}
+
+// Mientras se escribe, los formularios descartan lo que no puede ir: así no se llega
+// a escribir un número en el nombre ni una letra en el celular.
+export function filtrarNombreEscrito(texto: string) {
+  return texto.replace(/[^\p{L} '’-]/gu, '').slice(0, MAX_NOMBRE_CLIENTE)
+}
+
+export function filtrarTelefonoEscrito(texto: string) {
+  return texto.replace(/\D/g, '').slice(0, DIGITOS_TELEFONO)
+}
 export const MENSAJE_DIRECCION = `Indicá la dirección de entrega (entre ${MIN_DIRECCION} y ${MAX_DIRECCION} caracteres).`
 export const MENSAJE_LOCALIDAD = 'Elegí la localidad de entrega.'
 export const MENSAJE_REFERENCIAS = `Las indicaciones para el repartidor pueden tener hasta ${MAX_REFERENCIAS} caracteres.`
@@ -157,8 +181,8 @@ function soloCampos(datos: Record<string, unknown>, permitidos: string[], mensaj
 function validarCliente(valor: unknown) {
   const cliente = objeto(valor, 'Completá tus datos de contacto.')
   soloCampos(cliente, ['nombre', 'telefono'], 'Los datos de contacto tienen campos que no se reconocen.')
-  if (typeof cliente.nombre !== 'string' || !cliente.nombre.trim() || cliente.nombre.trim().length > MAX_NOMBRE_CLIENTE) {
-    throw new ErrorPedido(400, `Tu nombre debe tener entre 1 y ${MAX_NOMBRE_CLIENTE} caracteres.`)
+  if (typeof cliente.nombre !== 'string' || !nombreClienteValido(cliente.nombre)) {
+    throw new ErrorPedido(400, MENSAJE_NOMBRE)
   }
   if (typeof cliente.telefono !== 'string') throw new ErrorPedido(400, MENSAJE_TELEFONO)
   // Misma regla que el WhatsApp de las sucursales: se guardan solo los dígitos.
@@ -298,6 +322,7 @@ export function validarPedidoCaja(cuerpo: unknown): PedidoCajaValidado {
 
   const cliente = objeto(datos.cliente, 'Completá los datos del cliente.')
   soloCampos(cliente, ['nombre', 'telefono'], 'Los datos del cliente tienen campos que no se reconocen.')
+  // En Caja no se exige "solo letras": el cajero puede anotar "Mesa 4" o "Juan 2".
   if (typeof cliente.nombre !== 'string' || !cliente.nombre.trim() || cliente.nombre.trim().length > MAX_NOMBRE_CLIENTE) {
     throw new ErrorPedido(400, MENSAJE_NOMBRE_CLIENTE)
   }

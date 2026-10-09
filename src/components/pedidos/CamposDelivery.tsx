@@ -7,7 +7,9 @@
 // no retar mientras se escribe.
 
 import { useState } from 'react'
-import { MAX_DIRECCION, MAX_REFERENCIAS, type CampoDelivery } from '@/lib/pedidos/pedidos-validacion'
+import {
+  DIGITOS_TELEFONO, MAX_DIRECCION, MAX_REFERENCIAS, filtrarTelefonoEscrito, type CampoDelivery,
+} from '@/lib/pedidos/pedidos-validacion'
 import type { ZonaDelivery } from '@/lib/pedidos/pedidos-pantallas'
 
 export type ValoresDelivery = { telefono: string; direccion: string; idLocalidad: string; referencias: string }
@@ -58,9 +60,9 @@ export function CamposDelivery({
           inputMode="numeric"
           autoComplete="off"
           placeholder="Ej: 1123493023"
-          maxLength={20}
+          maxLength={DIGITOS_TELEFONO}
           value={valores.telefono}
-          onChange={(e) => onCambiar('telefono', e.target.value)}
+          onChange={(e) => onCambiar('telefono', filtrarTelefonoEscrito(e.target.value))}
         />
         {mensaje('telefono')}
       </div>
