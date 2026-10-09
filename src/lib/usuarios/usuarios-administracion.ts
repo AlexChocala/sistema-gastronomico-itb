@@ -6,6 +6,7 @@ import type { PrismaClient, Prisma } from '@prisma/client'
 import bcrypt from 'bcrypt'
 import { ErrorUsuario, idValido, leerId, leerCuerpo, validarUsuario } from './usuarios-validacion'
 import { rolSinSucursal, etiquetaRol } from './roles'
+import { ErrorImagen, subirImagen, quitarImagen, urlImagenPublica } from '@/lib/storage/imagenes'
 
 type Sesion = { user: { idUsuario: number } } | null
 
@@ -29,7 +30,7 @@ function responder(datos: unknown, estado = 200) {
 }
 
 function responderError(error: unknown) {
-  if (error instanceof ErrorUsuario) return responder({ error: error.message }, error.estado)
+  if (error instanceof ErrorUsuario || error instanceof ErrorImagen) return responder({ error: error.message }, error.estado)
   const codigo = typeof error === 'object' && error !== null && 'code' in error ? error.code : null
   if (codigo === 'P2025') return responder({ error: 'No se encontró el registro solicitado.' }, 404)
   if (codigo === 'P2002') return responder({ error: 'El email ya está en uso.' }, 409)
@@ -100,6 +101,26 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
     } catch (error) {
       return responderError(error)
     }
+  }
+
+  async function gestionarFoto(request: Request, id: string, borrar: boolean) {
+    const idUsuario = leerId(id)
+    const actual = await db.usuario.findUnique({ where: { idUsuario }, select: { fotoPerfilPath: true } })
+    if (!actual) throw new ErrorUsuario(404, 'No se encontró el usuario solicitado.')
+    const guardar = async (esperada: string | null, nueva: string | null) => {
+      const resultado = await db.usuario.updateMany({
+        where: { idUsuario, fotoPerfilPath: esperada }, data: { fotoPerfilPath: nueva },
+      })
+      return resultado.count === 1
+    }
+    if (borrar) await quitarImagen('avatares', actual.fotoPerfilPath, guardar)
+    else await subirImagen(request, 'avatares', idUsuario, actual.fotoPerfilPath, guardar)
+    const usuario = await db.usuario.findUniqueOrThrow({ where: { idUsuario }, select: camposUsuario })
+    return responder({
+      mensaje: borrar ? 'Foto de perfil eliminada.' : 'Foto de perfil guardada.',
+      imagen: { ruta: usuario.fotoPerfilPath, url: urlImagenPublica(usuario.fotoPerfilPath) },
+      usuario,
+    })
   }
 
   return {
@@ -299,14 +320,9 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
       return responder({ mensaje: 'Contraseña restablecida.', usuario, passwordGenerada })
     }),
 
-    // Quitar la foto de perfil de un usuario: solo admin.
-    quitarFotoPerfil: (request: Request, id: string) => proteger(request, ['admin'], true, async () => {
-      // Por ahora solo se borra la ruta. Borrar el archivo del bucket se agrega
-      // cuando se conecte Supabase Storage.
-      const usuario = await db.usuario.update({
-        where: { idUsuario: leerId(id) }, data: { fotoPerfilPath: null }, select: camposUsuario,
-      })
-      return responder({ mensaje: 'Foto de perfil eliminada.', usuario })
-    }),
+    // Administrar la foto de perfil de cualquier usuario: solo admin.
+    subirFotoPerfil: (request: Request, id: string) => proteger(request, ['admin'], true, () => gestionarFoto(request, id, false)),
+
+    quitarFotoPerfil: (request: Request, id: string) => proteger(request, ['admin'], true, () => gestionarFoto(request, id, true)),
   }
 }
