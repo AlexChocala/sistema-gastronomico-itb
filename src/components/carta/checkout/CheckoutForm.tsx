@@ -13,8 +13,9 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { detalleLinea, useCarrito, useHidratado, type ItemCarrito, type ProductoCarrito } from '@/lib/pedidos/carrito'
 import {
-  ErrorPedido, MAX_DIRECCION, MAX_NOMBRE_CLIENTE, MAX_REFERENCIAS, MENSAJE_DIRECCION, MENSAJE_LOCALIDAD,
-  MENSAJE_REFERENCIAS, MENSAJE_TELEFONO, MIN_DIRECCION, limpiarReferencias, validarPedidoOnline,
+  DIGITOS_TELEFONO, ErrorPedido, MAX_DIRECCION, MAX_NOMBRE_CLIENTE, MAX_REFERENCIAS, MENSAJE_DIRECCION,
+  MENSAJE_LOCALIDAD, MENSAJE_NOMBRE, MENSAJE_REFERENCIAS, MENSAJE_TELEFONO, MIN_DIRECCION,
+  filtrarNombreEscrito, filtrarTelefonoEscrito, limpiarReferencias, nombreClienteValido, validarPedidoOnline,
   type MetodoPagoOnline, type TipoEntregaOnline,
 } from '@/lib/pedidos/pedidos-validacion'
 import { formatearPrecio } from '@/lib/utils/precio'
@@ -120,10 +121,7 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
   // Mismas reglas y mensajes que validarPedidoOnline, pero campo por campo.
   function validar(): Errores {
     const encontrados: Errores = {}
-    const nombreLimpio = nombre.trim()
-    if (!nombreLimpio || nombreLimpio.length > MAX_NOMBRE_CLIENTE) {
-      encontrados.nombre = `Tu nombre debe tener entre 1 y ${MAX_NOMBRE_CLIENTE} caracteres.`
-    }
+    if (!nombreClienteValido(nombre)) encontrados.nombre = MENSAJE_NOMBRE
     if (!whatsappValido(soloDigitos(telefono))) encontrados.telefono = MENSAJE_TELEFONO
     if (!tipoEntrega) encontrados.tipoEntrega = 'Elegí si retirás en el local o pedís delivery.'
     if (tipoEntrega === 'delivery') {
@@ -241,9 +239,10 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
             data-campo="nombre"
             label="Nombre"
             autoComplete="name"
+            placeholder="Ej: María López"
             maxLength={MAX_NOMBRE_CLIENTE}
             value={nombre}
-            onChange={(evento) => { setNombre(evento.target.value); limpiarError('nombre') }}
+            onChange={(evento) => { setNombre(filtrarNombreEscrito(evento.target.value)); limpiarError('nombre') }}
             error={errores.nombre}
             className="min-h-12 rounded-xl"
           />
@@ -255,14 +254,17 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
             inputMode="numeric"
             autoComplete="tel-national"
             placeholder="Ej: 1123493023"
-            maxLength={20}
+            maxLength={DIGITOS_TELEFONO}
             value={telefono}
-            onChange={(evento) => { setTelefono(evento.target.value); limpiarError('telefono') }}
+            onChange={(evento) => { setTelefono(filtrarTelefonoEscrito(evento.target.value)); limpiarError('telefono') }}
             error={errores.telefono}
             className="min-h-12 rounded-xl"
           />
           {!errores.telefono && (
-            <p className="-mt-2 text-xs font-normal text-muted">Con código de área, sin 0 ni 15. Lo usamos solo por tu pedido.</p>
+            <p className="-mt-2 text-xs font-normal text-muted">
+              10 números, con código de área, sin 0 ni 15. Ej: 1123493023 (Buenos Aires) o 3777412142 (Corrientes).
+              Lo usamos solo por tu pedido.
+            </p>
           )}
         </Seccion>
 
