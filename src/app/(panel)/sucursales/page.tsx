@@ -2,9 +2,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Globe, MapPin, Pencil, Plus, Power, Search, Store, X } from '@/components/icons'
-import { MAX_SUCURSALES, generarSlug } from '@/lib/sucursales/sucursales-validacion'
-import { CamposSucursal, localidadNuevaVacia, valoresSucursalVacios } from '@/components/sucursal/CamposSucursal'
+import { useRouter } from 'next/navigation'
+import { ExternalLink, Globe, MapPin, Pencil, Plus, Power, Search, Store, X } from '@/components/icons'
+import { MAX_SUCURSALES, generarSlug, linkGoogleMaps } from '@/lib/sucursales/sucursales-validacion'
+import { CamposSucursal, SeccionFormulario, localidadNuevaVacia, valoresSucursalVacios } from '@/components/sucursal/CamposSucursal'
 
 interface Localidad {
   idLocalidad: number
@@ -19,6 +20,7 @@ interface Sucursal {
   direccion: string
   whatsapp: string | null
   horario: string | null
+  linkMaps: string | null
   activa: boolean
   ofreceRetiro: boolean
   ofreceDelivery: boolean
@@ -33,6 +35,7 @@ function limpiarNombre(nombre: string) {
 }
 
 export default function SucursalesPage() {
+  const router = useRouter()
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
   const [localidades, setLocalidades] = useState<Localidad[]>([])
   const [loading, setLoading] = useState(true)
@@ -61,6 +64,8 @@ export default function SucursalesPage() {
     setSucursales(data.sucursales ?? [])
     setLocalidades(data.localidades ?? [])
     setLoading(false)
+    // El selector de la barra superior sale del layout (servidor): hay que volver a pedirlo.
+    router.refresh()
   }
 
   // Carga inicial: `loading` ya arranca en true, así que el efecto solo setea estado
@@ -107,6 +112,7 @@ export default function SucursalesPage() {
       direccion: s.direccion,
       whatsapp: s.whatsapp ?? '',
       horario: s.horario ?? '',
+      linkMaps: s.linkMaps ?? '',
       idLocalidad: String(s.idLocalidad),
       ofreceRetiro: s.ofreceRetiro,
       ofreceDelivery: s.ofreceDelivery,
@@ -140,6 +146,11 @@ export default function SucursalesPage() {
     e.preventDefault()
     setError('')
 
+    if (!usarLocalidadNueva && !form.idLocalidad) {
+      setError('Elegí la localidad de las sugerencias, o cargala a mano.')
+      return
+    }
+
     const esEdicion = editandoId !== null
     const url = esEdicion ? `/api/sucursales/${editandoId}` : '/api/sucursales'
     const method = esEdicion ? 'PUT' : 'POST'
@@ -149,6 +160,7 @@ export default function SucursalesPage() {
       direccion: form.direccion,
       whatsapp: form.whatsapp || null,
       horario: form.horario || null,
+      linkMaps: form.linkMaps || null,
       ofreceRetiro: form.ofreceRetiro,
       ofreceDelivery: form.ofreceDelivery,
     }
@@ -220,21 +232,24 @@ export default function SucursalesPage() {
         </header>
 
         {mostrarForm && (
-          <div className="rounded-3xl bg-surface p-6 shadow-sm">
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="w-full max-w-3xl rounded-3xl bg-surface p-6 shadow-sm">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+              <h2 className="text-xl font-semibold">{editandoId !== null ? 'Editar sucursal' : 'Nueva sucursal'}</h2>
+
               <CamposSucursal
                 valores={form}
                 localidadNueva={localidadNueva}
                 usarLocalidadNueva={usarLocalidadNueva}
                 localidades={localidades}
                 onCambiar={cambiarCampo}
-                onCambiarLocalidadNueva={(campo, valor) => setLocalidadNueva({ ...localidadNueva, [campo]: valor })}
+                onCambiarLocalidadNueva={(campo, valor) => setLocalidadNueva((actual) => ({ ...actual, [campo]: valor }))}
                 onUsarLocalidadNueva={setUsarLocalidadNueva}
               />
 
               {editandoId !== null && (
+                <SeccionFormulario icono={Globe} titulo="Link de la carta">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium">Link de la carta</span>
+                  <span className="sr-only">Link de la carta</span>
                   <span className="flex items-center gap-0.5 rounded-full border border-border bg-surface px-4 py-2.5 text-sm focus-within:border-accent">
                     <span className="text-muted">/</span>
                     <input
@@ -250,22 +265,32 @@ export default function SucursalesPage() {
                       className="w-full bg-transparent outline-none"
                     />
                   </span>
-                  <span className="text-xs text-muted">
-                    {slugCambio
-                      ? `El link anterior (/${slugOriginal}) va a seguir funcionando: lleva a la carta nueva.`
-                      : 'Es la dirección de la carta online de esta sucursal.'}
-                  </span>
+                  {slugCambio && (
+                    <span className="text-xs text-muted">
+                      {`El link anterior (/${slugOriginal}) va a seguir funcionando: lleva a la carta nueva.`}
+                    </span>
+                  )}
                 </label>
+                </SeccionFormulario>
               )}
 
-              {error && <p className="text-sm text-danger">{error}</p>}
+              {error && <p role="alert" className="rounded-2xl bg-danger-surface px-4 py-3 text-sm text-danger">{error}</p>}
 
-              <button
-                type="submit"
-                className="inline-flex cursor-pointer items-center justify-center gap-2 self-start rounded-full bg-accent px-6 py-2.5 text-sm text-on-accent transition-colors hover:bg-accent-hover"
-              >
-                {editandoId !== null ? 'Guardar cambios' : 'Crear sucursal'}
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="submit"
+                  className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-accent px-6 py-2.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
+                >
+                  {editandoId !== null ? 'Guardar cambios' : 'Crear sucursal'}
+                </button>
+                <button
+                  type="button"
+                  onClick={cerrarForm}
+                  className="cursor-pointer rounded-full px-5 py-2.5 text-sm text-muted transition-colors hover:bg-bg hover:text-text"
+                >
+                  Cancelar
+                </button>
+              </div>
             </form>
           </div>
         )}
@@ -312,6 +337,14 @@ export default function SucursalesPage() {
                     <MapPin className="mt-0.5 size-3.5 shrink-0" />
                     {s.direccion} — {s.localidad.nombre}, {s.localidad.provincia.nombre}
                   </p>
+                  <a
+                    href={linkGoogleMaps(s.direccion, s.localidad.nombre, s.localidad.provincia.nombre, s.linkMaps)}
+                    target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-accent hover:underline"
+                  >
+                    <ExternalLink className="size-3.5 shrink-0" />
+                    Ver en Google Maps
+                  </a>
                   {s.whatsapp && <p>{s.whatsapp}</p>}
                   {s.horario && <p>{s.horario}</p>}
                   <p>{[s.ofreceRetiro && 'Retiro en el local', s.ofreceDelivery && 'Delivery'].filter(Boolean).join(' · ')}</p>

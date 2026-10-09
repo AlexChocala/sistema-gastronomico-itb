@@ -25,6 +25,7 @@ interface Usuario {
   email: string
   activo: boolean
   fotoPerfilPath: string | null
+  fotoPerfilUrl: string | null
   idRol: number
   rol: { idRol: number; nombre: string }
   idSucursal: number | null
@@ -180,6 +181,8 @@ export default function UsuariosPage() {
       return
     }
     aplicarDatos(data)
+    // La barra superior y el resto del panel salen del layout (servidor): se vuelven a pedir.
+    router.refresh()
   }
 
   useEffect(() => {
@@ -327,7 +330,11 @@ export default function UsuariosPage() {
       setError(data.error || 'No se pudo quitar la foto de perfil')
       return
     }
-    cargarDatos()
+    // Se actualiza la lista sin pasar por "Cargando...", para que el modal siga abierto.
+    const actualizados = await pedirUsuarios()
+    if (actualizados) aplicarDatos(actualizados)
+    // Si era la foto del propio admin, la barra superior también tiene que cambiar.
+    router.refresh()
   }
 
   // PATCH sin cuerpo: reactiva la cuenta (la misma API que usaba la pantalla de archivados).
@@ -565,11 +572,21 @@ export default function UsuariosPage() {
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <span
-                          className={`flex size-10 shrink-0 items-center justify-center rounded-full text-sm ${u.activo ? 'bg-accent-soft text-accent' : 'bg-bg text-muted'}`}
-                        >
-                          {iniciales(u)}
-                        </span>
+                        {u.fotoPerfilUrl ? (
+                          // URL del bucket: no pasa por next/image.
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={u.fotoPerfilUrl}
+                            alt=""
+                            className={`size-10 shrink-0 rounded-full object-cover ${u.activo ? '' : 'opacity-60'}`}
+                          />
+                        ) : (
+                          <span
+                            className={`flex size-10 shrink-0 items-center justify-center rounded-full text-sm ${u.activo ? 'bg-accent-soft text-accent' : 'bg-bg text-muted'}`}
+                          >
+                            {iniciales(u)}
+                          </span>
+                        )}
                         <div className="min-w-0">
                           <p className="truncate">{u.nombre} {u.apellido}</p>
                           <p className="truncate text-xs text-muted">{u.email}</p>
@@ -724,14 +741,21 @@ export default function UsuariosPage() {
 
             {usuarioEditado?.fotoPerfilPath && (
               <div className="flex items-center justify-between gap-3 rounded-2xl bg-bg px-4 py-3">
-                <p className="text-sm text-muted">El usuario tiene una foto de perfil cargada.</p>
+                <div className="flex min-w-0 items-center gap-3">
+                  {usuarioEditado.fotoPerfilUrl && (
+                    // URL del bucket: no pasa por next/image.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={usuarioEditado.fotoPerfilUrl} alt="Foto de perfil actual" className="size-12 shrink-0 rounded-full object-cover" />
+                  )}
+                  <p className="text-sm text-muted">Foto de perfil cargada por el usuario.</p>
+                </div>
                 <button
                   type="button"
                   onClick={() => quitarFotoPerfil(usuarioEditado)}
-                  className={`${claseBotonSecundario} text-danger hover:bg-danger/10`}
+                  className={`${claseBotonSecundario} shrink-0 whitespace-nowrap text-danger hover:bg-danger/10`}
                 >
                   <Trash2 className="size-4" />
-                  Quitar foto de perfil
+                  Quitar foto
                 </button>
               </div>
             )}

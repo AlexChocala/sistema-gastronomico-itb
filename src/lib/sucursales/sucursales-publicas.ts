@@ -7,7 +7,7 @@ import { ordenarVariaciones } from '@/lib/productos/variacion-principal'
 import { urlImagenPublica } from '@/lib/storage/imagenes'
 
 const camposSucursalPublica = {
-  idSucursal: true, nombre: true, slug: true, direccion: true, horario: true, whatsapp: true,
+  idSucursal: true, nombre: true, slug: true, direccion: true, horario: true, whatsapp: true, linkMaps: true,
   ofreceRetiro: true, ofreceDelivery: true,
   localidad: { select: { nombre: true, provincia: { select: { nombre: true } } } },
 } satisfies Prisma.SucursalSelect

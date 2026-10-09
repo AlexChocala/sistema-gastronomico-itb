@@ -4,10 +4,15 @@
 // cambia su estado; ese mismo estado es el que lee la pantalla de Pedidos Mostrador.
 // Un solo botón por pedido con la próxima acción: recibido → en preparación → listo.
 // Así todo pedido pasa por "En preparación" en el mostrador antes de "Para retirar".
+// Al empezar un pedido (de Caja u online) se imprime su comanda para pegarla en la bolsa:
+// Cocina no depende del papel de Caja.
+// Se distingue de lejos: pendiente = tarjeta blanca y botón claro; en preparación =
+// tarjeta naranja suave y botón sólido.
 
-import { useState } from 'react'
-import { Bike, CircleUserRound, ShoppingBag } from '@/components/icons'
+import { useEffect, useState } from 'react'
+import { Bike, CircleUserRound, Printer, ShoppingBag } from '@/components/icons'
 import { EstadoConexion } from '@/components/pedidos/EstadoConexion'
+import { ComandaCocina } from '@/components/pantallas/TicketsPedido'
 import { PastillaSucursal, useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import { puedeIrACocina, usePedidosPantalla, type PedidoPantalla } from '@/lib/pedidos/pedidos-pantallas'
 import { textoOpciones } from '@/lib/pedidos/pedidos-estados'
@@ -27,10 +32,12 @@ function TarjetaPedido({
   pedido,
   onEmpezar,
   onListo,
+  onImprimir,
 }: {
   pedido: PedidoPantalla
-  onEmpezar: () => Promise<unknown>
-  onListo: () => Promise<unknown>
+  onEmpezar: () => Promise<{ ok: boolean }>
+  onListo: () => Promise<{ ok: boolean }>
+  onImprimir: () => void
 }) {
   const entrega = etiquetaEntrega[pedido.tipoEntrega]
   const IconoEntrega = entrega.icono
@@ -43,14 +50,20 @@ function TarjetaPedido({
   async function avanzar() {
     setEnviando(true)
     try {
-      await (enPreparacion ? onListo() : onEmpezar())
+      const resultado = await (enPreparacion ? onListo() : onEmpezar())
+      // Primer paso: sale la comanda para pegar en la bolsa.
+      if (resultado.ok && !enPreparacion) onImprimir()
     } finally {
       setEnviando(false)
     }
   }
 
   return (
-    <article className="flex flex-col rounded-3xl bg-surface p-5 shadow-sm">
+    <article
+      className={`flex flex-col rounded-3xl border-2 p-5 shadow-sm ${
+        enPreparacion ? 'border-accent bg-accent-soft' : 'border-transparent bg-surface'
+      }`}
+    >
       <header className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <CircleUserRound className="size-6 shrink-0 text-order-ready" strokeWidth={1.75} />
@@ -96,15 +109,26 @@ function TarjetaPedido({
         </p>
       )}
 
-      {/* Mismo color en los dos pasos: es una acción, no un estado. */}
       <div className="mt-5 border-t border-border pt-4">
         <button
           type="button"
           onClick={() => void avanzar()}
           disabled={enviando}
-          className="w-full cursor-pointer rounded-full bg-accent py-3 font-semibold text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-wait disabled:opacity-60"
+          className={`w-full cursor-pointer rounded-full py-3 font-semibold transition-colors disabled:cursor-wait disabled:opacity-60 ${
+            enPreparacion
+              ? 'bg-accent text-on-accent hover:bg-accent-hover'
+              : 'border-2 border-border bg-surface hover:bg-bg'
+          }`}
         >
-          {enPreparacion ? 'Marcar como listo' : 'Empezar a preparar'}
+          {enPreparacion ? 'Pedido listo' : 'Empezar a preparar'}
+        </button>
+        <button
+          type="button"
+          onClick={onImprimir}
+          className="mt-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-full py-2 text-sm text-muted transition-colors hover:text-text"
+        >
+          <Printer className="size-4" />
+          Imprimir comanda
         </button>
       </div>
     </article>
@@ -113,17 +137,25 @@ function TarjetaPedido({
 
 export default function CocinaPage() {
   const { sucursal } = useSucursalActiva()
+  // Pedido cuya comanda se imprime: se renderiza oculto y recién ahí se abre el diálogo.
+  const [paraImprimir, setParaImprimir] = useState<{ pedido: PedidoPantalla } | null>(null)
+  useEffect(() => {
+    if (paraImprimir) window.print()
+  }, [paraImprimir])
   const {
     pedidos, cargando, error, recargar, errorAccion, limpiarErrorAccion, marcarEnPreparacion, marcarListo,
   } = usePedidosPantalla(sucursal?.idSucursal ?? null)
 
   // Cocina solo ve lo que tiene que preparar (recibido / en preparación): las
   // transferencias sin confirmar no llegan, y enviado y entregado ya son de Pedidos.
+  // Primero los pendientes (los más viejos arriba), después los que ya están en preparación.
   const pedidosActivos = pedidos.filter(puedeIrACocina)
+    .sort((a, b) => Number(a.estado === 'en_preparacion') - Number(b.estado === 'en_preparacion'))
   const pedidosListos = pedidos.filter((pedido) => pedido.estado === 'listo')
 
   return (
-    <main className="grid min-h-screen gap-6 bg-bg p-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+    <>
+    <main className="grid min-h-screen gap-6 bg-bg p-6 print:hidden lg:grid-cols-[minmax(0,1fr)_18rem]">
       <section className="flex flex-col gap-6">
         <header className="flex items-end justify-between gap-4">
           <div>
@@ -156,6 +188,7 @@ export default function CocinaPage() {
                 pedido={pedido}
                 onEmpezar={() => marcarEnPreparacion(pedido.idPedido)}
                 onListo={() => marcarListo(pedido.idPedido)}
+                onImprimir={() => setParaImprimir({ pedido })}
               />
             ))}
           </div>
@@ -179,5 +212,7 @@ export default function CocinaPage() {
         )}
       </aside>
     </main>
+    {paraImprimir && <ComandaCocina pedido={paraImprimir.pedido} />}
+    </>
   )
 }

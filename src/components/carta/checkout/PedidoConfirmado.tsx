@@ -67,6 +67,13 @@ export function PedidoConfirmado({ pedido, slug, refTitulo }: {
           Tu pedido es el <span className="font-bold text-accent">#{pedido.idPedido}</span>
         </p>
         {!transferencia && <p className="max-w-sm text-sm font-normal text-muted">{proximosPasos(pedido)}</p>}
+        {/* Si cierra la página no puede volver a verla: la captura es su comprobante al retirar. */}
+        {pedido.tipoEntrega === 'retiro' && (
+          <p className="max-w-sm rounded-2xl bg-bg px-4 py-3 text-sm font-normal">
+            Sacale una captura a esta pantalla: mostrala al retirar tu pedido
+            {pedido.metodoPago === 'efectivo' ? ' y pagá ahí.' : '.'}
+          </p>
+        )}
       </div>
 
       {transferencia && (

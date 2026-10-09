@@ -18,7 +18,7 @@ function iniciales(nombre: string) {
 
 const claseOpcion = 'flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-muted transition-colors hover:bg-surface-muted'
 
-export function MenuUsuario({ nombre, rol }: { nombre: string; rol: string }) {
+export function MenuUsuario({ nombre, rol, fotoUrl }: { nombre: string; rol: string; fotoUrl: string | null }) {
   const [abierto, setAbierto] = useState(false)
   const contenedor = useRef<HTMLDivElement>(null)
   const boton = useRef<HTMLButtonElement>(null)
@@ -35,7 +35,13 @@ export function MenuUsuario({ nombre, rol }: { nombre: string; rol: string }) {
         aria-expanded={abierto}
         className="flex size-10 cursor-pointer items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent"
       >
-        {iniciales(nombre)}
+        {fotoUrl ? (
+          // URL del bucket: no pasa por next/image.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={fotoUrl} alt="" className="size-10 rounded-full object-cover" />
+        ) : (
+          iniciales(nombre)
+        )}
       </button>
 
       {abierto && (
