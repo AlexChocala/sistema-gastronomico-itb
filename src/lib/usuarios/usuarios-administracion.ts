@@ -16,6 +16,11 @@ const camposUsuario = {
   idSucursal: true, sucursal: { select: { idSucursal: true, nombre: true } },
 } satisfies Prisma.UsuarioSelect
 
+// El usuario con la URL pública de su foto (null si no tiene).
+function conFotoUrl<T extends { fotoPerfilPath: string | null }>(usuario: T) {
+  return { ...usuario, fotoPerfilUrl: urlImagenPublica(usuario.fotoPerfilPath) }
+}
+
 function generarPasswordAleatoria(): string {
   const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
   let password = ''
@@ -73,7 +78,7 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
     request: Request,
     rolesPermitidos: string[],
     escritura: boolean,
-    accion: (idUsuarioSesion: number) => Promise<Response>
+    accion: (idUsuarioSesion: number, rolSesion: string) => Promise<Response>
   ) {
     try {
       // La sesión identifica al usuario; los permisos se vuelven a leer de la base.
@@ -97,14 +102,24 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
           throw new ErrorUsuario(403, 'La solicitud debe realizarse desde esta aplicación.')
         }
       }
-      return await accion(sesion.user.idUsuario)
+      return await accion(sesion.user.idUsuario, usuario.rol.nombre)
     } catch (error) {
       return responderError(error)
     }
   }
 
-  async function gestionarFoto(request: Request, id: string, borrar: boolean) {
+  // Subir la foto es solo del dueño de la cuenta; quitarla, del dueño o de un admin
+  // (por ejemplo, ante una imagen inapropiada).
+  async function gestionarFoto(
+    request: Request, id: string, borrar: boolean, idUsuarioSesion: number, rolSesion: string,
+  ) {
     const idUsuario = leerId(id)
+    const esPropia = idUsuario === idUsuarioSesion
+    if (!esPropia && !(borrar && rolSesion === 'admin')) {
+      throw new ErrorUsuario(403, borrar
+        ? 'No tenés permiso para quitar la foto de este usuario.'
+        : 'Solo podés cambiar tu propia foto de perfil.')
+    }
     const actual = await db.usuario.findUnique({ where: { idUsuario }, select: { fotoPerfilPath: true } })
     if (!actual) throw new ErrorUsuario(404, 'No se encontró el usuario solicitado.')
     const guardar = async (esperada: string | null, nueva: string | null) => {
@@ -119,7 +134,7 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
     return responder({
       mensaje: borrar ? 'Foto de perfil eliminada.' : 'Foto de perfil guardada.',
       imagen: { ruta: usuario.fotoPerfilPath, url: urlImagenPublica(usuario.fotoPerfilPath) },
-      usuario,
+      usuario: conFotoUrl(usuario),
     })
   }
 
@@ -233,7 +248,7 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
         }),
       ])
       return responder({
-        usuarios, roles, sucursales,
+        usuarios: usuarios.map(conFotoUrl), roles, sucursales,
         esAdmin: sesionCompleta?.rol.nombre === 'admin',
         idUsuarioSesion,
       })
@@ -320,9 +335,12 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
       return responder({ mensaje: 'Contraseña restablecida.', usuario, passwordGenerada })
     }),
 
-    // Administrar la foto de perfil de cualquier usuario: solo admin.
-    subirFotoPerfil: (request: Request, id: string) => proteger(request, ['admin'], true, () => gestionarFoto(request, id, false)),
+    // Foto de perfil: la sube solo su dueño (cualquier rol) y la quita su dueño o un admin.
+    // El control por usuario está en gestionarFoto.
+    subirFotoPerfil: (request: Request, id: string) => proteger(request, ['admin', 'supervisor', 'empleado'], true,
+      (idUsuarioSesion, rolSesion) => gestionarFoto(request, id, false, idUsuarioSesion, rolSesion)),
 
-    quitarFotoPerfil: (request: Request, id: string) => proteger(request, ['admin'], true, () => gestionarFoto(request, id, true)),
+    quitarFotoPerfil: (request: Request, id: string) => proteger(request, ['admin', 'supervisor', 'empleado'], true,
+      (idUsuarioSesion, rolSesion) => gestionarFoto(request, id, true, idUsuarioSesion, rolSesion)),
   }
 }

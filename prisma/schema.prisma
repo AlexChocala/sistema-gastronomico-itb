@@ -62,6 +62,9 @@ model Sucursal {
   whatsapp   String?
   direccion  String
   horario    String?
+  // Link de la ficha del local en Google Maps (opcional). Solo se aceptan links de Maps
+  // (ver linkMapsValido). Si falta, la carta busca por dirección.
+  linkMaps   String?
   activa     Boolean @default(true)
   // Formas de entrega que ofrece en el menú digital (siempre al menos una).
   ofreceRetiro   Boolean @default(true)

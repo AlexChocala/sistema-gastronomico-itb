@@ -7,7 +7,7 @@ export type { LucideIcon } from 'lucide-react'
 // Sidebar navigation
 export {
   LayoutDashboard, ClipboardList, MonitorPlay, Wallet, ChefHat, Monitor,
-  Package, BookOpen, ChartColumn, Users, Settings, User, LogOut, UtensilsCrossed,
+  Package, PackageCheck, BookOpen, ChartColumn, Users, Settings, User, LogOut, UtensilsCrossed,
 } from 'lucide-react'
 
 // Pantallas (cocina / mostrador)

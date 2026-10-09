@@ -8,6 +8,7 @@ import { SucursalActivaProvider } from '@/components/sucursal/SucursalActiva'
 import { obtenerSucursalActiva } from '@/lib/sucursales/sucursal-activa'
 import { exigirSistemaListo } from '@/lib/negocio/configuracion-inicial'
 import { prisma } from '@/lib/db/prisma'
+import { urlImagenPublica } from '@/lib/storage/imagenes'
 
 export default async function PanelLayout({ children }: { children: ReactNode }) {
   const sesion = await getServerSession(authOptions)
@@ -22,13 +23,21 @@ export default async function PanelLayout({ children }: { children: ReactNode })
   const sucursalActiva = await obtenerSucursalActiva(sesion)
   // exigirSistemaListo ya garantizó que el negocio existe.
   const negocio = await prisma.negocio.findUnique({ where: { idNegocio: 1 }, select: { nombre: true } })
+  // La foto no va en la sesión: se lee acá para que cambiarla se vea sin volver a iniciar sesión.
+  const perfil = await prisma.usuario.findUnique({
+    where: { idUsuario: sesion.user.idUsuario }, select: { fotoPerfilPath: true },
+  })
 
   return (
     <SucursalActivaProvider valor={sucursalActiva}>
       <div className="min-h-screen bg-surface md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
         <PanelSidebar rol={sesion.user.rol} nombreNegocio={negocio?.nombre ?? 'Mise'} />
         <div className="min-w-0 px-3 md:pl-0">
-          <BarraSuperior nombre={sesion.user.name ?? 'Usuario'} rol={sesion.user.rol} />
+          <BarraSuperior
+            nombre={sesion.user.name ?? 'Usuario'}
+            rol={sesion.user.rol}
+            fotoUrl={urlImagenPublica(perfil?.fotoPerfilPath ?? null)}
+          />
           {/* Alto de pantalla menos la barra (5rem) y el margen inferior (0.75rem). */}
           <div className="mb-3 min-h-[calc(100vh-5.75rem)] rounded-3xl bg-bg">
             {children}

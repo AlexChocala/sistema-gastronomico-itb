@@ -7,7 +7,7 @@ import { LogoMise } from '@/components/acceso/ElementosAcceso'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import {
   ChartColumn, ChefHat, ChevronDown, ClipboardList, ExternalLink, LayoutDashboard, Layers, List,
-  Monitor, MonitorPlay, Package, Settings, Store, Tags, Users, Wallet,
+  Monitor, MonitorPlay, Package, PackageCheck, Settings, Store, Tags, Users, Wallet,
   type LucideIcon,
 } from '@/components/icons'
 
@@ -68,6 +68,7 @@ const secciones: Seccion[] = [
 const pantallas = [
   { href: '/pantallas/caja', texto: 'Caja', icono: Wallet },
   { href: '/pantallas/cocina', texto: 'Cocina', icono: ChefHat },
+  { href: '/pantallas/entregas', texto: 'Entregas', icono: PackageCheck },
   { href: '/pantallas/pedidos-mostrador', texto: 'Pedidos Mostrador', icono: Monitor },
 ]
 

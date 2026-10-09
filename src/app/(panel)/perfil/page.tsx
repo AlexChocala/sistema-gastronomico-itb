@@ -3,7 +3,9 @@ import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { Mail, ShieldCheck, Store, User, type LucideIcon } from '@/components/icons'
 import { authOptions } from '@/lib/auth/auth'
+import { CampoFotoPerfil } from '@/components/perfil/CampoFotoPerfil'
 import { prisma } from '@/lib/db/prisma'
+import { urlImagenPublica } from '@/lib/storage/imagenes'
 
 function iniciales(nombre: string, apellido: string) {
   return `${nombre[0] ?? ''}${apellido[0] ?? ''}`.toUpperCase()
@@ -52,16 +54,16 @@ export default async function PerfilPage() {
       </header>
 
       <section className="flex max-w-2xl flex-col gap-6 rounded-3xl bg-surface p-6 shadow-sm">
-        <div className="flex items-center gap-4">
-          {/* Cuando se conecte Supabase Storage, si hay fotoPerfilPath se arma la URL
-              pública desde esa ruta y se muestra la imagen. Por ahora, siempre las iniciales. */}
-          <span className="flex size-20 shrink-0 items-center justify-center rounded-full bg-accent-soft text-2xl font-semibold text-accent">
-            {iniciales(usuario.nombre, usuario.apellido) || <User className="size-8" />}
-          </span>
+        <div className="flex flex-col gap-3">
           <div className="min-w-0">
             <p className="truncate text-lg">{usuario.nombre} {usuario.apellido}</p>
             <p className="text-sm capitalize text-muted">{usuario.rol.nombre}</p>
           </div>
+          <CampoFotoPerfil
+            idUsuario={sesion.user.idUsuario}
+            iniciales={iniciales(usuario.nombre, usuario.apellido)}
+            fotoUrl={urlImagenPublica(usuario.fotoPerfilPath)}
+          />
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">

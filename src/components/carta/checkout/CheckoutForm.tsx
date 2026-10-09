@@ -8,8 +8,9 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { Banknote, Bike, Info, Landmark, ShoppingBag } from '@/components/icons'
+import { Banknote, Bike, Info, Landmark, MapPin, ShoppingBag } from '@/components/icons'
 import { Button } from '@/components/ui/Button'
+import { Desplegable } from '@/components/ui/Desplegable'
 import { Input } from '@/components/ui/Input'
 import { detalleLinea, useCarrito, useHidratado, type ItemCarrito, type ProductoCarrito } from '@/lib/pedidos/carrito'
 import {
@@ -145,7 +146,10 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
     setErrores(encontrados)
     const primero = (Object.keys(encontrados) as Campo[])[0]
     if (primero) {
-      document.querySelector<HTMLElement>(`[data-campo="${primero}"]`)?.focus()
+      // Si el campo es un desplegable, data-campo está en su contenedor: se enfoca su botón.
+      const campo = document.querySelector<HTMLElement>(`[data-campo="${primero}"]`)
+      const enfocable = campo?.matches('input, select, textarea, button') ? campo : campo?.querySelector<HTMLElement>('button')
+      enfocable?.focus()
       return
     }
 
@@ -317,21 +321,20 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
               />
               {hayZonas && (
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="checkout-localidad" className="text-sm font-medium text-text">Localidad</label>
-                  <select
-                    id="checkout-localidad"
-                    data-campo="idLocalidad"
-                    value={idLocalidad}
-                    onChange={(evento) => { setIdLocalidad(evento.target.value); limpiarError('idLocalidad') }}
-                    aria-invalid={errores.idLocalidad ? true : undefined}
-                    aria-describedby={errores.idLocalidad ? 'checkout-localidad-error' : undefined}
-                    className="min-h-12 rounded-xl border border-border bg-surface px-3 py-2 text-text outline-none focus:border-primary"
-                  >
-                    <option value="">Elegí tu localidad</option>
-                    {sucursal.localidadesDelivery.map((localidad) => (
-                      <option key={localidad.idLocalidad} value={localidad.idLocalidad}>{localidad.nombre}</option>
-                    ))}
-                  </select>
+                  <span className="text-sm font-medium text-text">Localidad</span>
+                  {/* data-campo en el contenedor: el foco del error va al botón del desplegable. */}
+                  <div data-campo="idLocalidad">
+                    <Desplegable
+                      etiqueta="Localidad de entrega"
+                      icono={MapPin}
+                      opciones={sucursal.localidadesDelivery.map((localidad) => ({
+                        valor: String(localidad.idLocalidad), texto: localidad.nombre,
+                      }))}
+                      valor={idLocalidad || null}
+                      onElegir={(valor) => { setIdLocalidad(valor); limpiarError('idLocalidad') }}
+                      textoVacio="Elegí tu localidad"
+                    />
+                  </div>
                   {errores.idLocalidad ? (
                     <span id="checkout-localidad-error" className="text-sm text-danger">{errores.idLocalidad}</span>
                   ) : (

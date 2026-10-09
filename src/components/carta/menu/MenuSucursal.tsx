@@ -115,20 +115,22 @@ export function MenuSucursal({ slug, categorias }: { slug: string; categorias: C
                 // La primera variación es la principal (la que más se pide): su precio final.
                 const [principal, ...otras] = producto.variaciones
                 return (
-                  // Toda la tarjeta abre el modal: el botón "Agregar" se estira sobre ella.
+                  // Toda la tarjeta abre el modal: el botón "+" se estira sobre ella.
                   <li key={producto.idProducto} className="relative flex items-center gap-3 py-4">
                     <FotoProducto nombre={producto.nombre} categoria={categoria.nombre} imagenUrl={producto.imagenUrl} className="size-20 shrink-0" />
                     <div className="flex min-w-0 flex-1 flex-col gap-1">
-                      <h3 className="leading-snug font-semibold">{producto.nombre}</h3>
+                      {/* Nombre y descripción con tope de líneas: todas las tarjetas miden parecido
+                          y el texto completo se lee en el modal al tocar la tarjeta. */}
+                      <h3 className="line-clamp-2 leading-snug font-semibold">{producto.nombre}</h3>
                       {producto.descripcion && (
-                        <p className="line-clamp-3 text-sm font-normal text-muted">{producto.descripcion}</p>
+                        <p className="line-clamp-2 text-sm font-normal text-muted">{producto.descripcion}</p>
                       )}
                       <p className="font-semibold text-accent tabular-nums">
                         {formatearPrecio(producto.precio + (principal?.precioAdicional ?? 0))}
                         {principal && <span className="ml-1.5 text-sm font-normal text-muted">{principal.nombre}</span>}
                       </p>
                       {otras.length > 0 && (
-                        <p className="text-xs font-normal text-muted tabular-nums">
+                        <p className="line-clamp-1 text-xs font-normal text-muted tabular-nums">
                           También:{' '}
                           {otras.map((opcion) => `${opcion.nombre} ${formatearPrecio(producto.precio + opcion.precioAdicional)}`).join(' · ')}
                         </p>
@@ -144,10 +146,9 @@ export function MenuSucursal({ slug, categorias }: { slug: string; categorias: C
                       onClick={() => setElegido({ producto, categoria: categoria.nombre })}
                       aria-haspopup="dialog"
                       aria-label={`Agregar ${producto.nombre}${enCarrito > 0 ? ` (${enCarrito} en tu carrito)` : ''}`}
-                      className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-accent-soft px-4 text-sm font-semibold text-accent transition-colors after:absolute after:inset-0 after:content-[''] hover:bg-accent hover:text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent cursor-pointer"
+                      className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent transition-colors after:absolute after:inset-0 after:content-[''] hover:bg-accent hover:text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent cursor-pointer"
                     >
-                      <Plus className="size-4" aria-hidden="true" />
-                      Agregar
+                      <Plus className="size-5" aria-hidden="true" />
                     </button>
                   </li>
                 )

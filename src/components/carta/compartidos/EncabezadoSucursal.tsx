@@ -3,10 +3,10 @@
 //   EncabezadoPaso:     barra compacta con "volver" para carrito y checkout.
 
 import Link from 'next/link'
-import { ArrowLeft, ChevronLeft, Clock, IconoWhatsapp, MapPin } from '@/components/icons'
+import { ArrowLeft, ChevronLeft, Clock, ExternalLink, IconoWhatsapp, MapPin } from '@/components/icons'
 import type { NegocioPublico } from '@/lib/negocio/negocio'
 import type { SucursalPublica } from '@/lib/sucursales/sucursales-publicas'
-import { linkWhatsapp } from '@/lib/sucursales/sucursales-validacion'
+import { linkGoogleMaps, linkWhatsapp } from '@/lib/sucursales/sucursales-validacion'
 import { AvatarNegocio, ChipsEntrega, RedesNegocio } from './IdentidadNegocio'
 
 const claseFoco = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -49,6 +49,18 @@ export function EncabezadoSucursal({ negocio, sucursal, variasSucursales }: {
               {sucursal.direccion}, {sucursal.localidad}
             </span>
           </li>
+          <li>
+            <a
+              href={linkGoogleMaps(sucursal.direccion, sucursal.localidad, sucursal.provincia, sucursal.linkMaps)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`inline-flex items-center gap-2 rounded text-accent hover:underline ${claseFoco}`}
+            >
+              <ExternalLink className="size-4 shrink-0" aria-hidden="true" />
+              Ver en Google Maps
+              <span className="sr-only">(se abre en otra pestaña)</span>
+            </a>
+          </li>
           {sucursal.horario && (
             <li className="flex items-start gap-2">
               <Clock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -60,24 +72,24 @@ export function EncabezadoSucursal({ negocio, sucursal, variasSucursales }: {
           )}
         </ul>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <ChipsEntrega ofreceRetiro={sucursal.ofreceRetiro} ofreceDelivery={sucursal.ofreceDelivery} />
-          <div className="flex items-center gap-2">
-            {sucursal.whatsapp && (
-              <a
-                href={linkWhatsapp(sucursal.whatsapp)}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`Escribirle por WhatsApp a ${sucursal.nombre} (se abre en otra pestaña)`}
-                className={`inline-flex min-h-11 items-center gap-2 rounded-full bg-bg px-4 text-sm text-success transition-colors hover:bg-success hover:text-on-accent ${claseFoco}`}
-              >
-                <IconoWhatsapp className="size-5" />
-                WhatsApp
-              </a>
-            )}
-          </div>
+        <ChipsEntrega ofreceRetiro={sucursal.ofreceRetiro} ofreceDelivery={sucursal.ofreceDelivery} />
+
+        {/* Contacto en una sola fila: WhatsApp y redes juntos (en celular se parten si no entran). */}
+        <div className="flex flex-wrap items-center gap-2">
+          {sucursal.whatsapp && (
+            <a
+              href={linkWhatsapp(sucursal.whatsapp)}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Escribirle por WhatsApp a ${sucursal.nombre} (se abre en otra pestaña)`}
+              className={`inline-flex min-h-11 items-center gap-2 rounded-full bg-bg px-4 text-sm text-success transition-colors hover:bg-success hover:text-on-accent ${claseFoco}`}
+            >
+              <IconoWhatsapp className="size-5" />
+              WhatsApp
+            </a>
+          )}
+          <RedesNegocio negocio={negocio} fondo="bg-bg" />
         </div>
-        <RedesNegocio negocio={negocio} />
       </div>
     </header>
   )

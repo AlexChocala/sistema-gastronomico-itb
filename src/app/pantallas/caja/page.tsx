@@ -5,7 +5,7 @@
 //      dirección, localidad si la sucursal tiene zonas e indicaciones opcionales) → "Cobrar".
 //   2. Elegir método de pago (efectivo calcula el vuelto) → "Confirmar pago".
 //   3. POST /api/pedidos/caja: el pedido entra PAGADO a Cocina como "recibido", con el
-//      número que le da la base, y se imprimen comanda + ticket.
+//      número que le da la base, y se imprime el ticket del cliente.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -506,7 +506,7 @@ function PanelCobro({
           {enviando ? 'Registrando…' : 'Confirmar pago'}
         </button>
       </div>
-      <p className="-mt-3 text-center text-xs text-muted">Se envía a cocina y se imprimen los tickets.</p>
+      <p className="-mt-3 text-center text-xs text-muted">Se envía a cocina e imprime el ticket del cliente.</p>
     </div>
   )
 }
@@ -544,9 +544,9 @@ export default function CajaPage() {
   const [errorCobro, setErrorCobro] = useState<string | null>(null)
   // Aviso sobre el carrito (por ejemplo, productos que se quedaron sin stock al cobrar).
   const [avisoCarrito, setAvisoCarrito] = useState<string | null>(null)
-  // Último pedido cobrado: sus tickets quedan listos para reimprimir.
+  // Último pedido cobrado: su ticket queda listo para reimprimir.
   const [ultimoCobrado, setUltimoCobrado] = useState<Cobrado | null>(null)
-  // Cada incremento dispara una impresión (después de que los tickets se renderizan).
+  // Cada incremento dispara una impresión (después de que el ticket se renderiza).
   const [ordenImpresion, setOrdenImpresion] = useState(0)
 
   useEffect(() => {
@@ -859,7 +859,7 @@ export default function CajaPage() {
                         className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border px-4 py-2 hover:bg-surface"
                       >
                         <Printer className="size-4" />
-                        Reimprimir tickets
+                        Reimprimir ticket
                       </button>
                     </li>
                   ) : (

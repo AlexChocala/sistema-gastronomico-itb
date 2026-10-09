@@ -21,6 +21,37 @@ export function linkWhatsapp(numero: string) {
   return `https://wa.me/549${numero}`
 }
 
+// Link a Google Maps. Si la sucursal cargó el de su ficha, se usa ese; si no, una búsqueda
+// por dirección. Es una URL pública: no usa la API de Google ni necesita clave.
+export function linkGoogleMaps(direccion: string, localidad: string, provincia: string, linkMaps?: string | null) {
+  if (linkMaps) return linkMaps
+  const consulta = new URLSearchParams({ api: '1', query: `${direccion}, ${localidad}, ${provincia}` })
+  return `https://www.google.com/maps/search/?${consulta}`
+}
+
+export const MENSAJE_LINK_MAPS = 'El link tiene que ser de Google Maps (ej: https://maps.app.goo.gl/...).'
+const MAXIMO_LINK_MAPS = 500
+
+// Ese link se muestra en la carta pública, así que solo se aceptan dominios de Google Maps
+// y siempre con https: nada de sitios cualquiera ni de links con usuario y contraseña.
+export function linkMapsValido(texto: string) {
+  if (texto.length > MAXIMO_LINK_MAPS) return false
+  let url: URL
+  try {
+    url = new URL(texto)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'https:' || url.username || url.password) return false
+  const host = url.hostname.toLowerCase()
+  // Link corto de "Compartir" (maps.app.goo.gl) y el viejo goo.gl/maps.
+  if (host === 'maps.app.goo.gl') return true
+  if (host === 'goo.gl') return url.pathname.startsWith('/maps')
+  // maps.google.com y google.com/maps, también la versión argentina (google.com.ar).
+  if (/^maps\.google\.(com|com\.ar)$/.test(host)) return true
+  return /^(www\.)?google\.(com|com\.ar)$/.test(host) && /^\/maps(\/|$)/.test(url.pathname)
+}
+
 // Segmentos que ya usa la aplicación en la raíz de la URL: una sucursal no puede tomar
 // ninguno como slug, porque su menú público vive en /{slug}. Son las carpetas reales de
 // primer nivel de src/app; (panel) es un route group, así que sus páginas (dashboard,
@@ -76,6 +107,7 @@ type DatosSucursal = {
   direccion?: string
   whatsapp?: string | null
   horario?: string | null
+  linkMaps?: string | null
   idLocalidad?: number
   activa?: boolean
   ofreceRetiro?: boolean
@@ -103,7 +135,7 @@ export function validarSucursal(cuerpo: unknown, parcial: boolean): DatosSucursa
   // En el alta el slug no viene: lo genera el servidor a partir del nombre. En la edición
   // el admin lo puede cambiar (el anterior queda redirigiendo, ver cambiarSlug).
   const permitidos = [
-    'nombre', 'direccion', 'whatsapp', 'horario', 'idLocalidad', 'ofreceRetiro', 'ofreceDelivery',
+    'nombre', 'direccion', 'whatsapp', 'horario', 'linkMaps', 'idLocalidad', 'ofreceRetiro', 'ofreceDelivery',
     ...(parcial ? ['activa', 'slug'] : []),
   ]
   if (Object.keys(datos).length === 0 || Object.keys(datos).some((c) => !permitidos.includes(c))) {
@@ -153,6 +185,14 @@ export function validarSucursal(cuerpo: unknown, parcial: boolean): DatosSucursa
       throw new ErrorSucursal(400, 'El horario debe incluir al menos un número (ej: "9 a 22hs").')
     }
     salida.horario = horarioLimpio || null
+  }
+  if ('linkMaps' in datos) {
+    if (datos.linkMaps !== null && typeof datos.linkMaps !== 'string') {
+      throw new ErrorSucursal(400, 'El link de Google Maps debe ser texto o null.')
+    }
+    const link = typeof datos.linkMaps === 'string' ? datos.linkMaps.trim() : ''
+    if (link && !linkMapsValido(link)) throw new ErrorSucursal(400, MENSAJE_LINK_MAPS)
+    salida.linkMaps = link || null
   }
   if (!parcial || 'idLocalidad' in datos) {
     if (!idValido(datos.idLocalidad)) throw new ErrorSucursal(400, 'Indicá una localidad válida.')

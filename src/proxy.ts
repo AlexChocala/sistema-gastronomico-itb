@@ -37,7 +37,7 @@ export async function proxy(request: NextRequest) {
   // Caja y Cocina son para quien opera la sucursal: el admin solo ve los pedidos, para
   // que no cargue ni mueva uno por error (por ejemplo, con otra sucursal activa). La API
   // de pedidos también lo valida.
-  const esPantallaOperativa = ['/pantallas/caja', '/pantallas/cocina'].some((ruta) => pathname === ruta || pathname.startsWith(ruta + '/'))
+  const esPantallaOperativa = ['/pantallas/caja', '/pantallas/cocina', '/pantallas/entregas'].some((ruta) => pathname === ruta || pathname.startsWith(ruta + '/'))
   if (esPantallaOperativa && token.rol === 'admin') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
@@ -58,6 +58,7 @@ export const config = {
     // Pantallas de pestaña aparte. Pedidos Mostrador queda afuera a propósito: es pública.
     '/pantallas/caja/:path*',
     '/pantallas/cocina/:path*',
+    '/pantallas/entregas/:path*',
     // Asistente de primera configuración (fuera de (panel), pero también requiere sesión).
     '/configuracion-inicial/:path*',
   ],

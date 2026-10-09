@@ -38,12 +38,13 @@ function bloqueVacio(clave: number): BloqueSucursal {
 
 // Cuerpo de una sucursal tal como lo acepta la API de Sucursales.
 function cuerpoSucursal(bloque: BloqueSucursal) {
-  const { nombre, direccion, whatsapp, horario, idLocalidad, ofreceRetiro, ofreceDelivery } = bloque.valores
+  const { nombre, direccion, whatsapp, horario, linkMaps, idLocalidad, ofreceRetiro, ofreceDelivery } = bloque.valores
   return {
     nombre,
     direccion,
     whatsapp: whatsapp || null,
     horario: horario || null,
+    linkMaps: linkMaps || null,
     ofreceRetiro,
     ofreceDelivery,
     ...(bloque.usarLocalidadNueva
@@ -60,10 +61,10 @@ function mensajeDe(error: unknown) {
 function errorDeSucursal(bloque: BloqueSucursal): string | null {
   try {
     if (bloque.usarLocalidadNueva) validarLocalidadNueva(bloque.localidadNueva)
-    const { nombre, direccion, whatsapp, horario, ofreceRetiro, ofreceDelivery } = cuerpoSucursal(bloque)
+    const { nombre, direccion, whatsapp, horario, linkMaps, ofreceRetiro, ofreceDelivery } = cuerpoSucursal(bloque)
     // Con localidad nueva el id lo genera la API; acá el 1 solo sirve para validar el resto.
     const idLocalidad = bloque.usarLocalidadNueva ? 1 : Number(bloque.valores.idLocalidad)
-    validarSucursal({ nombre, direccion, whatsapp, horario, idLocalidad, ofreceRetiro, ofreceDelivery }, false)
+    validarSucursal({ nombre, direccion, whatsapp, horario, linkMaps, idLocalidad, ofreceRetiro, ofreceDelivery }, false)
     return null
   } catch (error) {
     return mensajeDe(error)

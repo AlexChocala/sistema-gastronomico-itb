@@ -28,7 +28,7 @@ El bucket público permite leer imágenes sin sesión; las escrituras pasan por 
 | Endpoint | Métodos | Permisos existentes | Campo en la base |
 | --- | --- | --- | --- |
 | `/api/negocio/logo` | POST, DELETE | admin activo | `Negocio.logoPath`, negocio 1 |
-| `/api/usuarios/[id]/foto-perfil` | POST, DELETE | admin activo | `Usuario.fotoPerfilPath` |
+| `/api/usuarios/[id]/foto-perfil` | POST, DELETE | POST: solo el dueño de la cuenta. DELETE: el dueño o un admin (usuario activo) | `Usuario.fotoPerfilPath` |
 | `/api/productos/gestion/[id]/imagen` | POST, DELETE | admin o supervisor activo | `Producto.imagenPath` |
 
 Requieren la cookie de sesión de la aplicación. No aceptan una clave de Supabase enviada por el cliente. El usuario debe haber cambiado su contraseña temporal. Se mantienen los permisos actuales de administración de productos; esta tarea no agrega restricciones por sucursal. Las escrituras con origen externo se rechazan.
@@ -59,7 +59,7 @@ Respuesta **200**, tanto al subir por primera vez como al reemplazar:
 
 El ejemplo abrevia `producto`: la respuesta contiene los demás campos de administración existentes. En logo se devuelve `negocio` con sus campos actuales, `logoUrl` y `tieneLogo`; en avatar se devuelve `usuario` con sus campos actuales, incluido `fotoPerfilPath`, sin contraseña ni hash. Los mensajes correspondientes son `Logo guardado.` y `Foto de perfil guardada.`.
 
-Para mostrar inmediatamente la foto, usar `imagen.url`. La URL del logo también se devuelve al consultar los datos generales del negocio. El listado y detalle de administración de productos incluyen `imagenPath`. Los lectores de otras pantallas pueden convertir las rutas en sus módulos del servidor con `urlImagenPublica()`; esta tarea no cambia sus interfaces ni conecta la visualización de fotos en Caja, carta o perfil.
+Para mostrar inmediatamente la foto, usar `imagen.url`. La URL del logo también se devuelve al consultar los datos generales del negocio. El listado y detalle de administración de productos incluyen `imagenPath`. Los lectores de otras pantallas pueden convertir las rutas en sus módulos del servidor con `urlImagenPublica()`; esta tarea no cambia sus interfaces ni conecta la visualización de fotos en Caja o carta. La foto de perfil ya se muestra en Perfil, en el menú de usuario y en la tabla de Usuarios (`fotoPerfilUrl`).
 
 ### DELETE: quitar
 
@@ -149,7 +149,7 @@ console.log(respuestaBorrado.status, await respuestaBorrado.json());
 Confirmar 200, `imagen.ruta: null`, campo de la base `null` y ausencia del archivo en Storage. Repetir DELETE debe seguir devolviendo 200.
 
 7. Probar archivo vacío (400), TXT/SVG o un texto renombrado PNG (415), más de 2 MB (413), ID inexistente (404). No deben cambiar la ruta anterior ni crear objetos.
-8. Probar sin sesión (401), empleado (403), supervisor en logo/avatar (403) y supervisor en foto de producto (200).
+8. Probar sin sesión (401), empleado o supervisor en logo (403), supervisor en foto de producto (200), subir el avatar de otro usuario, admin incluido (403), y quitar el avatar propio o, como admin, el de otro (200).
 
 ## Archivos de la implementación
 

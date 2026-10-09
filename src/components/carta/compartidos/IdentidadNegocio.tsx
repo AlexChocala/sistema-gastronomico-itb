@@ -53,7 +53,11 @@ export function AvatarNegocio({ nombre, logoUrl, tamano = 'grande' }: {
 type Red = { nombre: string; href: string; Icono: ComponentType<SVGProps<SVGSVGElement>> }
 
 // Solo las redes que el negocio cargó. Si no hay ninguna, no se muestra nada.
-export function RedesNegocio({ negocio }: { negocio: Pick<NegocioPublico, 'nombre' | 'instagram' | 'tiktok' | 'facebook'> }) {
+export function RedesNegocio({ negocio, fondo = 'bg-surface shadow-sm' }: {
+  negocio: Pick<NegocioPublico, 'nombre' | 'instagram' | 'tiktok' | 'facebook'>
+  // Fondo de cada botón: sobre una superficie blanca conviene un fondo gris, sin sombra.
+  fondo?: string
+}) {
   const redes: Red[] = [
     { nombre: 'Instagram', href: negocio.instagram, Icono: IconoInstagram },
     { nombre: 'TikTok', href: negocio.tiktok, Icono: IconoTikTok },
@@ -62,7 +66,7 @@ export function RedesNegocio({ negocio }: { negocio: Pick<NegocioPublico, 'nombr
   if (redes.length === 0) return null
 
   return (
-    <ul className="flex items-center gap-3" aria-label="Redes sociales">
+    <ul className="flex items-center gap-2" aria-label="Redes sociales">
       {redes.map(({ nombre, href, Icono }) => (
         <li key={nombre}>
           <a
@@ -70,7 +74,7 @@ export function RedesNegocio({ negocio }: { negocio: Pick<NegocioPublico, 'nombr
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`${nombre} de ${negocio.nombre} (se abre en otra pestaña)`}
-            className="flex size-11 items-center justify-center rounded-full bg-surface text-text shadow-sm transition-colors hover:bg-accent hover:text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className={`flex size-11 items-center justify-center rounded-full ${fondo} text-text transition-colors hover:bg-accent hover:text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
           >
             <Icono className="size-5" />
           </a>

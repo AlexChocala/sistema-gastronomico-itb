@@ -1,7 +1,9 @@
-// Tickets que se imprimen al confirmar el pago en Caja (impresora térmica de 80 mm):
-//   1. Comanda para cocina: sin precios.
-//   2. Ticket del cliente: número de pedido grande (el que busca en el monitor) y detalle del pago.
-// En pantalla no se ve: solo aparece al imprimir (`hidden print:block`).
+// Tickets (impresora térmica de 80 mm). En pantalla no se ven: solo aparecen al imprimir
+// (`hidden print:block`).
+//   - Caja, al confirmar el pago: ticket del cliente (TicketsPedido).
+//   - Cocina, al empezar a preparar cualquier pedido: comanda (ComandaCocina). Va pegada a
+//     la bolsa, por eso lleva si está pagado o cuánto hay que cobrar y, en delivery, a dónde
+//     llevarlo. Es el único ticket de Cocina y de Entregas: no dependen del papel de Caja.
 
 import type { PedidoPantalla } from '@/lib/pedidos/pedidos-pantallas'
 import { textoOpciones } from '@/lib/pedidos/pedidos-estados'
@@ -29,47 +31,93 @@ function Separador() {
   return <hr className="my-2 border-t border-dashed border-black" />
 }
 
+// Hoja de impresión: el tamaño de página solo aplica mientras está en pantalla.
+function Hoja({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="hidden text-[12px] leading-snug text-black print:block">
+      <style>{'@page { size: 80mm auto; margin: 4mm; }'}</style>
+      {children}
+    </div>
+  )
+}
+
+// Efectivo que todavía no se cobró (online): se cobra al entregar.
+function cobraAlEntregar(pedido: PedidoPantalla) {
+  return pedido.estadoPago !== 'pagado' && pedido.metodoPago === 'efectivo'
+}
+
+function MarcaPago({ pedido }: { pedido: PedidoPantalla }) {
+  return (
+    <p className="my-1 border-2 border-black py-1 text-center text-[16px] font-bold">
+      {cobraAlEntregar(pedido) ? `COBRAR ${formatoPrecio.format(pedido.total)}` : 'PAGADO'}
+    </p>
+  )
+}
+
+function SeccionComanda({ pedido }: { pedido: PedidoPantalla }) {
+  const { hora } = fechaYHora(pedido.fecha)
+  return (
+    <section>
+      <p className="text-center font-bold">COMANDA — COCINA</p>
+      <Separador />
+      <p className="text-center text-[28px] font-bold leading-none">#{pedido.idPedido}</p>
+      <p className="mt-1 text-center text-[16px] font-bold">{pedido.cliente}</p>
+      <p className="text-center">
+        {textoEntrega[pedido.tipoEntrega]} · {hora}
+      </p>
+      {/* El cadete se guía por la bolsa: dirección, indicaciones y celular van en la comanda. */}
+      {pedido.tipoEntrega === 'delivery' && pedido.direccion && (
+        <div className="mt-1 text-center">
+          <p className="text-[14px] font-bold break-words">
+            {pedido.direccion}
+            {pedido.localidad && `, ${pedido.localidad}`}
+          </p>
+          {pedido.referencias && <p className="break-words">{pedido.referencias}</p>}
+          {pedido.telefono && <p className="font-bold">Cel: {pedido.telefono}</p>}
+        </div>
+      )}
+      <Separador />
+      <ul>
+        {/* Key por posición: el mismo producto puede venir con otras opciones. */}
+        {pedido.items.map((item, indice) => {
+          const opciones = textoOpciones(item.variacion, item.extras)
+          return (
+            <li key={indice} className="text-[14px]">
+              <strong>{item.cantidad}x</strong> {item.producto}
+              {opciones && <p className="pl-4 font-bold">{opciones}</p>}
+            </li>
+          )
+        })}
+      </ul>
+      {/* La comanda es para cocinar: la aclaración va al final, bien visible. */}
+      {pedido.aclaracion && (
+        <>
+          <Separador />
+          <p className="text-[14px] font-bold break-words">ACLARACIÓN: {pedido.aclaracion}</p>
+        </>
+      )}
+    </section>
+  )
+}
+
+// Comanda de cualquier pedido: la cocina la pega en la bolsa y Entregas ve de un vistazo
+// si está pagado o hay que cobrar.
+export function ComandaCocina({ pedido }: { pedido: PedidoPantalla }) {
+  return (
+    <Hoja>
+      <SeccionComanda pedido={pedido} />
+      <Separador />
+      <MarcaPago pedido={pedido} />
+    </Hoja>
+  )
+}
+
 export function TicketsPedido({ pedido, pagaCon }: { pedido: PedidoPantalla; pagaCon: number | null }) {
   const { fecha, hora } = fechaYHora(pedido.fecha)
   const vuelto = pagaCon !== null ? pagaCon - pedido.total : null
 
   return (
-    <div className="hidden text-[12px] leading-snug text-black print:block">
-      {/* El tamaño de página solo aplica mientras este componente está en pantalla (Caja). */}
-      <style>{'@page { size: 80mm auto; margin: 4mm; }'}</style>
-
-      {/* 1. Comanda para cocina */}
-      <section className="break-after-page">
-        <p className="text-center font-bold">COMANDA — COCINA</p>
-        <Separador />
-        <p className="text-center text-[28px] font-bold leading-none">#{pedido.idPedido}</p>
-        <p className="mt-1 text-center text-[16px] font-bold">{pedido.cliente}</p>
-        <p className="text-center">
-          {textoEntrega[pedido.tipoEntrega]} · {hora}
-        </p>
-        <Separador />
-        <ul>
-          {/* Key por posición: el mismo producto puede venir con otras opciones. */}
-          {pedido.items.map((item, indice) => {
-            const opciones = textoOpciones(item.variacion, item.extras)
-            return (
-              <li key={indice} className="text-[14px]">
-                <strong>{item.cantidad}x</strong> {item.producto}
-                {opciones && <p className="pl-4 font-bold">{opciones}</p>}
-              </li>
-            )
-          })}
-        </ul>
-        {/* La comanda es para cocinar: la aclaración va al final, bien visible. */}
-        {pedido.aclaracion && (
-          <>
-            <Separador />
-            <p className="text-[14px] font-bold break-words">ACLARACIÓN: {pedido.aclaracion}</p>
-          </>
-        )}
-      </section>
-
-      {/* 2. Ticket del cliente */}
+    <Hoja>
       <section>
         <p className="text-center text-[16px] font-bold">{NOMBRE_LOCAL}</p>
         <p className="text-center">
@@ -135,6 +183,6 @@ export function TicketsPedido({ pedido, pagaCon }: { pedido: PedidoPantalla; pag
         <p className="text-center">¡Gracias!</p>
         <p className="mt-1 text-center text-[10px]">No válido como factura</p>
       </section>
-    </div>
+    </Hoja>
   )
 }

@@ -8,7 +8,7 @@ import { validarLocalidadNueva } from './localidades-validacion'
 type Sesion = { user: { idUsuario: number } } | null
 
 const camposSucursal = {
-  idSucursal: true, nombre: true, slug: true, direccion: true, whatsapp: true, horario: true, activa: true,
+  idSucursal: true, nombre: true, slug: true, direccion: true, whatsapp: true, horario: true, linkMaps: true, activa: true,
   ofreceRetiro: true, ofreceDelivery: true, idLocalidad: true,
   localidad: { select: { idLocalidad: true, nombre: true, provincia: { select: { idProvincia: true, nombre: true } } } },
 } satisfies Prisma.SucursalSelect
@@ -51,34 +51,38 @@ async function exigirOtraSucursalActiva(tx: Prisma.TransactionClient, idSucursal
 // Sucursales y la configuración inicial). No controla el tope: eso lo hace cada llamador
 // con verificarTopeSucursales, porque uno crea una sola y el otro varias juntas.
 export async function crearSucursalEnTransaccion(tx: Prisma.TransactionClient, cuerpo: unknown) {
+  const { campos, localidadNueva } = separarLocalidadNueva(cuerpo)
+  let idLocalidad = campos.idLocalidad
+  if (!idLocalidad && localidadNueva) idLocalidad = await crearLocalidad(tx, localidadNueva)
+  const datos = validarSucursal({ ...campos, idLocalidad }, false)
+  return tx.sucursal.create({ data: { ...datos, slug: await slugLibre(tx, datos.nombre) }, select: camposSucursal })
+}
+
+// El formulario puede mandar "localidadNueva" (nombre + provincia) en vez de idLocalidad,
+// tanto en el alta como en la edición. Se separa del resto porque validarSucursal rechaza
+// campos que no conoce.
+function separarLocalidadNueva(cuerpo: unknown) {
   if (typeof cuerpo !== 'object' || cuerpo === null || Array.isArray(cuerpo)) {
     throw new ErrorSucursal(400, 'Enviá un objeto JSON con los datos de la sucursal.')
   }
-  const datosCuerpo = cuerpo as Record<string, unknown>
-  let idLocalidad = datosCuerpo.idLocalidad
+  const { localidadNueva, ...campos } = cuerpo as Record<string, unknown>
+  return { campos, localidadNueva }
+}
 
-  // Si viene "localidadNueva" en vez de idLocalidad, se crea la localidad (y provincia si hace falta) primero.
-  if (!idLocalidad && datosCuerpo.localidadNueva) {
-    const datosLoc = validarLocalidadNueva(datosCuerpo.localidadNueva)
-    const provincia = await tx.provincia.upsert({
-      where: { nombre: datosLoc.nombreProvincia },
-      update: {},
-      create: { nombre: datosLoc.nombreProvincia },
-    })
-    const localidad = await tx.localidad.upsert({
-      where: { nombre_idProvincia: { nombre: datosLoc.nombre, idProvincia: provincia.idProvincia } },
-      update: {},
-      create: { nombre: datosLoc.nombre, idProvincia: provincia.idProvincia },
-    })
-    idLocalidad = localidad.idLocalidad
-  }
-
-  // "localidadNueva" ya se procesó arriba; validarSucursal rechaza campos que no conoce.
-  const camposSucursalBody = Object.fromEntries(
-    Object.entries(datosCuerpo).filter(([campo]) => campo !== 'localidadNueva'),
-  )
-  const datos = validarSucursal({ ...camposSucursalBody, idLocalidad }, false)
-  return tx.sucursal.create({ data: { ...datos, slug: await slugLibre(tx, datos.nombre) }, select: camposSucursal })
+// Crea la localidad (y su provincia, si hace falta) o reutiliza la que ya existe.
+async function crearLocalidad(tx: Prisma.TransactionClient, localidadNueva: unknown) {
+  const datosLoc = validarLocalidadNueva(localidadNueva)
+  const provincia = await tx.provincia.upsert({
+    where: { nombre: datosLoc.nombreProvincia },
+    update: {},
+    create: { nombre: datosLoc.nombreProvincia },
+  })
+  const localidad = await tx.localidad.upsert({
+    where: { nombre_idProvincia: { nombre: datosLoc.nombre, idProvincia: provincia.idProvincia } },
+    update: {},
+    create: { nombre: datosLoc.nombre, idProvincia: provincia.idProvincia },
+  })
+  return localidad.idLocalidad
 }
 
 // Slug de la URL pública para un alta. Se busca dentro de la misma transacción serializable,
@@ -171,10 +175,15 @@ export function crearControladorSucursales(db: PrismaClient, leerSesion: () => P
 
     editar: (request: Request, id: string) => proteger(request, true, async () => {
       const idSucursal = leerId(id)
-      const datos = validarSucursal(await leerCuerpo(request), true)
+      // Igual que en el alta: al editar también se puede cargar una localidad nueva.
+      const { campos, localidadNueva } = separarLocalidadNueva(await leerCuerpo(request))
+      const datosValidados = validarSucursal(campos, true)
       const sucursal = await db.$transaction(async (tx) => {
         const actual = await tx.sucursal.findUnique({ where: { idSucursal } })
         if (!actual) throw new ErrorSucursal(404, 'Sucursal no encontrada.')
+        const datos = !datosValidados.idLocalidad && localidadNueva
+          ? { ...datosValidados, idLocalidad: await crearLocalidad(tx, localidadNueva) }
+          : datosValidados
         if (datos.activa === false && actual.activa) await exigirOtraSucursalActiva(tx, idSucursal)
         // Si viene una sola forma de entrega, la regla se revisa junto con la que ya tiene.
         const retiro = datos.ofreceRetiro ?? actual.ofreceRetiro

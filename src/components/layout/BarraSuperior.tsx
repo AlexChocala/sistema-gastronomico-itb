@@ -6,7 +6,7 @@ import { SelectorSucursal } from '@/components/sucursal/SucursalActiva'
 // desplazar la página. A la izquierda el contexto (sucursal activa, alineada con el
 // título de cada página); a la derecha lo del usuario. La campanita (confirmar
 // transferencias) es de quien opera Pedidos: el admin solo los ve, así que no la tiene.
-export function BarraSuperior({ nombre, rol }: { nombre: string; rol: string }) {
+export function BarraSuperior({ nombre, rol, fotoUrl }: { nombre: string; rol: string; fotoUrl: string | null }) {
   return (
     <div className="sticky top-0 z-30 flex h-20 items-center justify-between gap-3 bg-surface px-6">
       <div className="w-60">
@@ -14,7 +14,7 @@ export function BarraSuperior({ nombre, rol }: { nombre: string; rol: string }) 
       </div>
       <div className="flex items-center gap-3">
         {rol !== 'admin' && <Campanita />}
-        <MenuUsuario nombre={nombre} rol={rol} />
+        <MenuUsuario nombre={nombre} rol={rol} fotoUrl={fotoUrl} />
       </div>
     </div>
   )

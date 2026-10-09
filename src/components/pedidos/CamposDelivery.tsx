@@ -7,6 +7,8 @@
 // no retar mientras se escribe.
 
 import { useState } from 'react'
+import { MapPin } from '@/components/icons'
+import { Desplegable } from '@/components/ui/Desplegable'
 import {
   DIGITOS_TELEFONO, MAX_DIRECCION, MAX_REFERENCIAS, filtrarTelefonoEscrito, type CampoDelivery,
 } from '@/lib/pedidos/pedidos-validacion'
@@ -82,18 +84,15 @@ export function CamposDelivery({
 
       {zonas.length > 0 && (
         <div className="flex flex-col gap-1">
-          <label htmlFor={`${id}-idLocalidad`} className="text-sm">Localidad</label>
-          <select
-            {...atributos('idLocalidad')}
-            value={valores.idLocalidad}
-            onChange={(e) => { onCambiar('idLocalidad', e.target.value); tocar('idLocalidad') }}
-            className={`${claseCampo} cursor-pointer`}
-          >
-            <option value="">Elegí la localidad</option>
-            {zonas.map((zona) => (
-              <option key={zona.idLocalidad} value={zona.idLocalidad}>{zona.nombre}</option>
-            ))}
-          </select>
+          <span className="text-sm">Localidad</span>
+          <Desplegable
+            etiqueta="Localidad de entrega"
+            icono={MapPin}
+            opciones={zonas.map((zona) => ({ valor: String(zona.idLocalidad), texto: zona.nombre }))}
+            valor={valores.idLocalidad || null}
+            onElegir={(valor) => { onCambiar('idLocalidad', valor); tocar('idLocalidad') }}
+            textoVacio="Elegí la localidad"
+          />
           {mensaje('idLocalidad')}
         </div>
       )}
