@@ -19,18 +19,20 @@ export function EncabezadoSucursal({ negocio, sucursal, variasSucursales }: {
   return (
     <header className="bg-surface shadow-sm">
       <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pt-4 pb-6">
-        {variasSucursales && (
-          <Link
-            href="/"
-            className={`-ml-2 inline-flex min-h-11 items-center gap-1 self-start rounded-full px-2 text-sm text-muted hover:text-accent ${claseFoco}`}
-          >
-            <ChevronLeft className="size-4" aria-hidden="true" />
-            Cambiar de local
-          </Link>
-        )}
+        {/* Siempre hay un "volver" a la portada del negocio, tenga una sucursal o varias. */}
+        <Link
+          href="/"
+          className={`-ml-2 inline-flex min-h-11 items-center gap-1 self-start rounded-full px-2 text-sm text-muted hover:text-accent ${claseFoco}`}
+        >
+          <ChevronLeft className="size-4" aria-hidden="true" />
+          {variasSucursales ? 'Cambiar de local' : 'Inicio'}
+        </Link>
 
         <div className="flex items-center gap-4">
-          <AvatarNegocio nombre={negocio.nombre} logoUrl={negocio.logoUrl} tamano="chico" />
+          {/* El logo también lleva a la portada, como en la mayoría de los sitios. */}
+          <Link href="/" aria-label={`Inicio de ${negocio.nombre}`} className={`shrink-0 rounded-full ${claseFoco}`}>
+            <AvatarNegocio nombre={negocio.nombre} logoUrl={negocio.logoUrl} tamano="chico" />
+          </Link>
           <div className="flex min-w-0 flex-col">
             <h1 className="text-xl leading-tight font-semibold">{negocio.nombre}</h1>
             <p className="font-medium text-accent">{sucursal.nombre}</p>

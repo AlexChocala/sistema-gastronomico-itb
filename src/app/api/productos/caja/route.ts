@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { authOptions } from '@/lib/auth/auth'
 import { prisma } from '@/lib/db/prisma'
 import { ordenarVariaciones } from '@/lib/productos/variacion-principal'
+import { urlImagenPublica } from '@/lib/storage/imagenes'
 import { obtenerSucursalActiva } from '@/lib/sucursales/sucursal-activa'
 
 export async function GET() {
@@ -53,6 +54,7 @@ export async function GET() {
                 idProducto: true,
                 nombre: true,
                 precio: true,
+                imagenPath: true,
                 categoria: { select: { nombre: true, nombresVariaciones: true } },
                 // Si tiene, Caja pide elegir una (igual que la carta): la API de pedidos la exige.
                 variaciones: {
@@ -83,6 +85,7 @@ export async function GET() {
         nombre: producto.nombre,
         categoria: producto.categoria.nombre,
         precio: producto.precio,
+        imagenUrl: urlImagenPublica(producto.imagenPath),
         // En el orden de su categoría: la primera es la principal.
         variaciones: ordenarVariaciones(producto.variaciones, producto.categoria.nombresVariaciones),
         extras: producto.extras.map(({ extra }) => extra),

@@ -1,13 +1,12 @@
-// Home pública (a donde llega el QR): identidad del negocio y selector de sucursal.
+// Home pública: identidad del negocio y sus locales. Es siempre la portada, tenga una
+// sucursal o varias (el QR de cada local apunta directo a su menú, /{slug}).
 //   Sin negocio configurado → aviso neutro.
 //   Sin sucursales activas  → aviso amable.
-//   Una sola sucursal       → directo a su menú (/{slug}).
-//   Varias                  → tarjetas para elegir.
+//   Con sucursales          → tarjetas (una sola: "Nuestro local").
 // No requiere sesión: "/" no está en el matcher de src/proxy.ts.
 
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
 import { connection } from 'next/server'
 import { ChevronRight, Clock, IconoWhatsapp, MapPin, UtensilsCrossed } from '@/components/icons'
 import { Card } from '@/components/ui/Card'
@@ -45,8 +44,6 @@ export default async function Home() {
   }
 
   const sucursales = await listarSucursalesPublicas()
-  // Con una sola sucursal no hay nada que elegir.
-  if (sucursales.length === 1) redirect(`/${sucursales[0].slug}`)
 
   return (
     <div className="flex flex-1 justify-center bg-bg px-4 py-12 text-text">
@@ -69,7 +66,7 @@ export default async function Home() {
           ) : (
             <>
               <h2 id="titulo-sucursales" className="section-label text-center">
-                Elegí tu local más cercano
+                {sucursales.length === 1 ? 'Nuestro local' : 'Elegí tu local más cercano'}
               </h2>
               <ul className="flex flex-col gap-3">
                 {sucursales.map((sucursal) => (

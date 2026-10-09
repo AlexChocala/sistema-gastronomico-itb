@@ -114,7 +114,7 @@ export function ModalProducto({ producto, categoria, onAgregar, onCerrar }: {
         {/* En celular se desplaza todo junto; en pantallas anchas, solo la columna de opciones. */}
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain sm:grid sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:overflow-hidden">
           <div className="p-4 pb-0 sm:p-5 sm:pr-0">
-            <FotoProducto nombre={producto.nombre} categoria={categoria} className="aspect-16/10 w-full sm:aspect-square" />
+            <FotoProducto nombre={producto.nombre} categoria={categoria} imagenUrl={producto.imagenUrl} className="aspect-16/10 w-full sm:aspect-square" />
           </div>
 
           <div className="flex min-h-0 flex-col gap-5 px-5 pt-4 pb-5 sm:overflow-y-auto sm:overscroll-contain sm:pt-5">

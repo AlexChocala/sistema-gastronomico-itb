@@ -117,7 +117,7 @@ export function MenuSucursal({ slug, categorias }: { slug: string; categorias: C
                 return (
                   // Toda la tarjeta abre el modal: el botón "Agregar" se estira sobre ella.
                   <li key={producto.idProducto} className="relative flex items-center gap-3 py-4">
-                    <FotoProducto nombre={producto.nombre} categoria={categoria.nombre} className="size-20 shrink-0" />
+                    <FotoProducto nombre={producto.nombre} categoria={categoria.nombre} imagenUrl={producto.imagenUrl} className="size-20 shrink-0" />
                     <div className="flex min-w-0 flex-1 flex-col gap-1">
                       <h3 className="leading-snug font-semibold">{producto.nombre}</h3>
                       {producto.descripcion && (

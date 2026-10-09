@@ -33,6 +33,11 @@ const camposProducto = {
   },
 } satisfies Prisma.ProductoSelect
 
+// La pantalla muestra la foto con su URL pública; en la base solo se guarda la ruta.
+function conImagenUrl<T extends { imagenPath: string | null }>(producto: T) {
+  return { ...producto, imagenUrl: urlImagenPublica(producto.imagenPath) }
+}
+
 const camposCategoria = {
   idCategoria: true, nombre: true, descripcion: true, orden: true, activa: true, nombresVariaciones: true,
   _count: { select: { productos: true, extras: true } },
@@ -385,13 +390,13 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
         }),
         total: await tx.producto.count({ where }),
       }), { isolationLevel: 'RepeatableRead' })
-      return responder({ ...resultado, pagina, limite })
+      return responder({ ...resultado, productos: resultado.productos.map(conImagenUrl), pagina, limite })
     }),
 
     obtener: (request: Request, id: string) => proteger(request, false, async () => {
       const producto = await db.producto.findUnique({ where: { idProducto: leerId(id) }, select: camposProducto })
       if (!producto) throw new ErrorProducto(404, 'Producto no encontrado.')
-      return responder({ producto })
+      return responder({ producto: conImagenUrl(producto) })
     }),
 
     crear: (request: Request) => proteger(request, true, async () => {

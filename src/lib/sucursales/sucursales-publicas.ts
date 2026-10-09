@@ -4,6 +4,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { ordenarVariaciones } from '@/lib/productos/variacion-principal'
+import { urlImagenPublica } from '@/lib/storage/imagenes'
 
 const camposSucursalPublica = {
   idSucursal: true, nombre: true, slug: true, direccion: true, horario: true, whatsapp: true,
@@ -70,6 +71,8 @@ export type ProductoMenu = {
   descripcion: string | null
   // Precio de la variación más barata (o el único, si no tiene variaciones).
   precio: number
+  // URL pública de la foto en Supabase Storage; null si no tiene.
+  imagenUrl: string | null
   // Solo las disponibles, en el orden de su categoría: LA PRIMERA ES LA PRINCIPAL (la que
   // la tarjeta muestra y el modal deja elegida). Ver lib/productos/variacion-principal.ts.
   variaciones: VariacionMenu[]
@@ -104,7 +107,7 @@ export async function obtenerMenuSucursal(idSucursal: number): Promise<Categoria
         where: productoVisible,
         orderBy: [{ nombre: 'asc' }, { idProducto: 'asc' }],
         select: {
-          idProducto: true, nombre: true, descripcion: true, precio: true,
+          idProducto: true, nombre: true, descripcion: true, precio: true, imagenPath: true,
           variaciones: {
             where: { disponible: true },
             orderBy: [{ precioAdicional: 'asc' }, { nombre: 'asc' }],
@@ -121,8 +124,9 @@ export async function obtenerMenuSucursal(idSucursal: number): Promise<Categoria
   })
   return categorias.map(({ nombresVariaciones, ...categoria }) => ({
     ...categoria,
-    productos: categoria.productos.map(({ extras, variaciones, ...producto }) => ({
+    productos: categoria.productos.map(({ extras, variaciones, imagenPath, ...producto }) => ({
       ...producto,
+      imagenUrl: urlImagenPublica(imagenPath),
       variaciones: ordenarVariaciones(variaciones, nombresVariaciones),
       extras: extras.map(({ extra }) => extra),
     })),

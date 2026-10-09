@@ -48,6 +48,8 @@ type ProductoCaja = {
   idProducto: number
   nombre: string
   categoria: string
+  // URL pública de la foto (Supabase Storage); null si no tiene.
+  imagenUrl: string | null
   // Precio de la variación más barata (o el único, si no tiene variaciones).
   precio: number
   // En el orden de su categoría: la primera es la principal.
@@ -113,9 +115,15 @@ function TarjetaProducto({
         <span className={`size-1.5 rounded-full ${producto.disponible ? 'bg-success' : 'bg-danger'}`} />
         {producto.disponible ? 'Disponible' : 'Sin stock'}
       </span>
-      <span className="flex size-20 items-center justify-center rounded-full bg-accent-soft text-accent">
-        <IconoCategoria categoria={producto.categoria} className="size-9" strokeWidth={1.5} />
-      </span>
+      {producto.imagenUrl ? (
+        // Entera (contain): con PNG/WebP de fondo transparente el plato queda "flotando".
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={producto.imagenUrl} alt="" loading="lazy" decoding="async" className="size-24 object-contain" />
+      ) : (
+        <span className="flex size-20 items-center justify-center rounded-full bg-accent-soft text-accent">
+          <IconoCategoria categoria={producto.categoria} className="size-9" strokeWidth={1.5} />
+        </span>
+      )}
       <span className="flex flex-col gap-0.5">
         <span className="leading-tight">{producto.nombre}</span>
         <span className="text-xs text-muted">{producto.categoria}</span>
@@ -186,9 +194,14 @@ function ModalProductoCaja({
       <div className="flex max-h-[85dvh] flex-col">
         <div className="flex items-start justify-between gap-3 p-5 pb-3">
           <div className="flex items-center gap-3">
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
-              <IconoCategoria categoria={producto.categoria} className="size-6" strokeWidth={1.5} />
-            </span>
+            {producto.imagenUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={producto.imagenUrl} alt="" className="size-14 shrink-0 object-contain" />
+            ) : (
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+                <IconoCategoria categoria={producto.categoria} className="size-6" strokeWidth={1.5} />
+              </span>
+            )}
             <div>
               <h2 id="titulo-producto-caja" className="text-lg leading-tight font-semibold">{producto.nombre}</h2>
               <p className="text-sm text-muted">
