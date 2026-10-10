@@ -2,7 +2,9 @@
 
 Sistema web para negocios gastronómicos con una o varias sucursales. Reúne la carta online, la toma de pedidos, la caja, la cocina, la administración del negocio y los reportes de ventas.
 
-🔗 **Demo online:** *Proximamente en 2 días*
+🚀 Demos online
+🛒 Lado del cliente: https://mise-gastronomico.vercel.app
+⚙️ Panel interno: https://mise-gastronomico.vercel.app/acceso
 
 > Proyecto final del ITB (2026). Equipo de 4 personas.
 
