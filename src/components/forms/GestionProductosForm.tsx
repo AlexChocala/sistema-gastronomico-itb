@@ -60,9 +60,8 @@ type RespuestaListado = {
   limite: number
 }
 type RespuestaError = { error?: string }
-type FiltroEstado = 'todos' | 'activos' | 'inactivos'
+type FiltroEstado = 'activos' | 'inactivos'
 const OPCIONES_ESTADO: { valor: FiltroEstado; texto: string }[] = [
-  { valor: 'todos', texto: 'Todos los estados' },
   { valor: 'activos', texto: 'Solo activos' },
   { valor: 'inactivos', texto: 'Solo inactivos' },
 ]
@@ -134,7 +133,7 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
   const [errorFoto, setErrorFoto] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [busquedaAplicada, setBusquedaAplicada] = useState('')
-  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos')
+  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('activos')
   const [filtroCategoria, setFiltroCategoria] = useState<number | null>(null)
   const [pagina, setPagina] = useState(1)
   const [limite, setLimite] = useState(20)
@@ -525,7 +524,7 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
                 opciones={OPCIONES_ESTADO}
                 valor={filtroEstado}
                 onElegir={cambiarFiltroEstado}
-                textoVacio="Todos los estados"
+                textoVacio="Seleccionar estado"
               />
             </div>
           </div>
