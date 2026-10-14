@@ -2,7 +2,7 @@
 // Reportes funcione antes de que exista GET /api/reportes. Cuando el backend esté listo,
 // reportes-api.ts deja de usar este archivo y se puede borrar.
 //
-// Genera pedidos entregados y calcula cada reporte a partir de ellos, así los números
+// Genera pedidos pagados y calcula cada reporte a partir de ellos, así los números
 // son coherentes entre sí. La semilla es por día y sucursal: los mismos filtros siempre
 // dan los mismos datos.
 
@@ -127,7 +127,10 @@ function generarPedidosDelDia(dia: string, sucursal: { idSucursal: number; nombr
       fecha: `${dia}T${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`,
       sucursal: sucursal.nombre,
       cliente: elegir(azar, CLIENTES),
+      registradoPor: origen === 'mostrador' ? 'Empleado de ejemplo' : null,
       origen,
+      estadoPago: 'pagado',
+      vendido: true,
       tipoEntrega: origen === 'online' && azar() < 0.5 ? 'delivery' : 'retiro',
       metodoPago: origen === 'online' && azar() < 0.6 ? 'transferencia' : 'efectivo',
       cantidadProductos: lineas.reduce((suma, linea) => suma + linea.cantidad, 0),
@@ -231,6 +234,7 @@ export function generarDatosDeEjemplo(filtros: FiltrosReportes): DatosReportes {
     pedidos: pedidos
       .map((p): PedidoReporte => ({
         idPedido: p.idPedido, fecha: p.fecha, sucursal: p.sucursal, cliente: p.cliente, origen: p.origen,
+        registradoPor: p.registradoPor, estadoPago: p.estadoPago, vendido: p.vendido,
         tipoEntrega: p.tipoEntrega, metodoPago: p.metodoPago, cantidadProductos: p.cantidadProductos,
         subtotal: p.subtotal, total: p.total,
       }))

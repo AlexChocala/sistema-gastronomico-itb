@@ -26,10 +26,10 @@ export async function exportarExcel({ negocio, datos, agrupacion, periodo, sucur
   const resumen = XLSX.utils.aoa_to_sheet([
     ['Negocio', negocio.nombre],
     ['Sucursal', sucursal],
-    ['Período', `${periodo} · Pedidos entregados`],
+    ['Período', `${periodo} · Ventas de pedidos pagados`],
     ['Generado', momentoEnArgentina()],
     ['Total vendido', totalVendido],
-    ['Pedidos entregados', cantidadPedidos],
+    ['Pedidos pagados', cantidadPedidos],
     ['Ticket promedio', ticketPromedio],
   ])
   resumen.B5.z = FORMATO_PESOS

@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import { Aviso } from '@/components/ui/Aviso'
+import { EVENTO_PEDIDOS_ACTUALIZADOS, INTERVALO_ACTUALIZACION_MS } from '@/lib/pedidos/pedidos-pantallas'
 import { fechasDelAtajo } from '@/lib/reportes/fechas'
 import type { NegocioReporte } from '@/lib/reportes/exportar-pdf'
 import { PESTANAS, formatear, type IdPestana } from '@/lib/reportes/pestanas'
@@ -75,13 +76,45 @@ function ContenidoReportes({ negocio, sucursalInicial, sucursalFija, opciones }:
   useEffect(() => {
     if (!rangoValido) return
     let vigente = true
-    obtenerReportes({ desde, hasta, sucursal, agrupacion }).then(
-      (resultado) => vigente && setEstado({ clave, resultado, error: null }),
-      (error: unknown) =>
-        vigente && setEstado({ clave, resultado: null, error: error instanceof Error ? error.message : MENSAJES.panel.errorGenerico }),
-    )
+    let enCurso = false
+    let repetir = false
+    const consultar = async () => {
+      if (!vigente || document.hidden) return
+      if (enCurso) {
+        repetir = true
+        return
+      }
+      enCurso = true
+      try {
+        const resultado = await obtenerReportes({ desde, hasta, sucursal, agrupacion })
+        if (vigente) setEstado({ clave, resultado, error: null })
+      } catch (error: unknown) {
+        if (vigente) {
+          setEstado((previo) => ({
+            clave, resultado: previo.clave === clave ? previo.resultado : null,
+            error: error instanceof Error ? error.message : MENSAJES.panel.errorGenerico,
+          }))
+        }
+      } finally {
+        enCurso = false
+        if (repetir && vigente) {
+          repetir = false
+          void consultar()
+        }
+      }
+    }
+    const actualizar = () => void consultar()
+    void consultar()
+    const temporizador = setInterval(actualizar, INTERVALO_ACTUALIZACION_MS)
+    document.addEventListener('visibilitychange', actualizar)
+    window.addEventListener('focus', actualizar)
+    window.addEventListener(EVENTO_PEDIDOS_ACTUALIZADOS, actualizar)
     return () => {
       vigente = false
+      clearInterval(temporizador)
+      document.removeEventListener('visibilitychange', actualizar)
+      window.removeEventListener('focus', actualizar)
+      window.removeEventListener(EVENTO_PEDIDOS_ACTUALIZADOS, actualizar)
     }
   }, [clave, rangoValido, desde, hasta, sucursal, agrupacion])
 
@@ -101,7 +134,7 @@ function ContenidoReportes({ negocio, sucursalInicial, sucursalFija, opciones }:
     <div className="flex flex-col gap-6">
       <header>
         <h1 className="text-2xl font-semibold text-text">Reportes</h1>
-        <p className="text-sm text-muted">Ventas de los pedidos entregados.</p>
+        <p className="text-sm text-muted">Ventas de los pedidos pagados, independientemente de su entrega.</p>
       </header>
 
       <FiltrosReportes filtros={filtros} onCambiar={setFiltros} sucursalFija={sucursalFija} opciones={opciones} />
@@ -139,7 +172,7 @@ function Resumen({ datos }: { datos: DatosReportes }) {
   const { totalVendido, cantidadPedidos, ticketPromedio } = datos.resumen
   const tarjetas = [
     { titulo: 'Total vendido', valor: formatear(totalVendido, 'precio') },
-    { titulo: 'Pedidos entregados', valor: formatear(cantidadPedidos, 'numero') },
+    { titulo: 'Pedidos pagados', valor: formatear(cantidadPedidos, 'numero') },
     { titulo: 'Ticket promedio', valor: formatear(ticketPromedio, 'precio') },
   ]
 
@@ -171,6 +204,7 @@ function Pestanas({ datos, agrupacion, contexto, descargasHabilitadas }: Pestana
   const actual = visibles.find((pestana) => pestana.id === elegida) ?? visibles[0]
   const filas = actual.filas(datos, agrupacion)
   const grafico = actual.grafico
+  const sinDatos = actual.id === 'pedidos' ? datos.pedidos.length === 0 : datos.resumen.cantidadPedidos === 0
 
   return (
     <section className="flex flex-col gap-5 rounded-3xl bg-surface p-5 shadow-sm">
@@ -204,8 +238,10 @@ function Pestanas({ datos, agrupacion, contexto, descargasHabilitadas }: Pestana
       </div>
 
       <div ref={panel} role="tabpanel" id="panel-reporte" aria-labelledby={`pestana-${actual.id}`} className="flex flex-col gap-5">
-        {datos.resumen.cantidadPedidos === 0 ? (
-          <p className="text-sm text-muted">No hay pedidos entregados en este período.</p>
+        {sinDatos ? (
+          <p className="text-sm text-muted">
+            {actual.id === 'pedidos' ? 'No hay pedidos registrados en este período.' : 'No hay pedidos pagados en este período.'}
+          </p>
         ) : (
           <>
             {grafico?.tipo === 'mapa' && <MapaDemanda demanda={datos.demanda} />}

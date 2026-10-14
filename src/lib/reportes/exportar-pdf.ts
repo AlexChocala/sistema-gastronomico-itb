@@ -58,7 +58,7 @@ export async function exportarPdf({ negocio, pestana, filas, resumen, periodo, s
   doc.setTextColor(...GRIS)
   for (const linea of [
     `Sucursal: ${sucursal}`,
-    `Período: ${periodo} · Pedidos entregados`,
+    `Período: ${periodo} · ${pestana.id === 'pedidos' ? 'Pedidos registrados' : 'Pedidos pagados'}`,
     `Generado el ${momentoEnArgentina()}`,
   ]) {
     y += 5.5
@@ -68,7 +68,7 @@ export async function exportarPdf({ negocio, pestana, filas, resumen, periodo, s
   doc.setTextColor(0, 0, 0)
   doc.text(
     `Total vendido: ${formatear(resumen.totalVendido, 'precio')}    ` +
-      `Pedidos: ${formatear(resumen.cantidadPedidos, 'numero')}    ` +
+      `Pedidos pagados: ${formatear(resumen.cantidadPedidos, 'numero')}    ` +
       `Ticket promedio: ${formatear(resumen.ticketPromedio, 'precio')}`,
     MARGEN,
     y,

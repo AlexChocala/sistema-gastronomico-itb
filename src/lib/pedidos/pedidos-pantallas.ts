@@ -30,6 +30,8 @@ export type TipoEntregaPantalla = TipoEntrega
 export type OrigenPedidoPantalla = OrigenPedido
 
 export const INTERVALO_ACTUALIZACION_MS = 5000
+// Permite refrescar Reportes después de guardar una acción, sin esperar al próximo intervalo.
+export const EVENTO_PEDIDOS_ACTUALIZADOS = 'pedidos-actualizados'
 
 const MENSAJE_SIN_CONEXION = 'No se pudo conectar con el servidor. Revisá la conexión e intentá de nuevo.'
 
@@ -213,6 +215,7 @@ export async function crearPedidoMostrador(datos: NuevoPedidoMostrador): Promise
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cuerpoPedidoCaja(datos)),
     })
+    window.dispatchEvent(new Event(EVENTO_PEDIDOS_ACTUALIZADOS))
     return { ok: true, pedido }
   } catch (error) {
     return fallo(error)
@@ -262,6 +265,7 @@ export function usePedidosPantalla(idSucursal: number | null) {
       })
       invalidar()
       reemplazar(pedido)
+      window.dispatchEvent(new Event(EVENTO_PEDIDOS_ACTUALIZADOS))
       return { ok: true, pedido }
     } catch (error) {
       // Lo optimista se descarta: la lista vuelve a lo que diga el servidor.

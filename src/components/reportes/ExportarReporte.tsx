@@ -36,7 +36,7 @@ function aNombreDeArchivo(texto: string) {
 
 export function ExportarReporte({ datos, pestana, filas, agrupacion, contexto, deshabilitado, obtenerImagenGrafico }: ExportarReporteProps) {
   const { negocio, periodo, sucursal, sufijoArchivo } = contexto
-  const sinDatos = deshabilitado || datos.resumen.cantidadPedidos === 0
+  const sinDatos = deshabilitado || (pestana.id === 'pedidos' ? datos.pedidos.length === 0 : datos.resumen.cantidadPedidos === 0)
 
   const grupos: GrupoExportar[] = [
     {
