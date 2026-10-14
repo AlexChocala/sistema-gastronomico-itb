@@ -80,7 +80,8 @@ function periodoDe(dia: string, agrupacion: Agrupacion) {
 
 const camposPedido = {
   idPedido: true, fecha: true, idSucursal: true, origenPedido: true,
-  metodoPago: true, subtotal: true, total: true,
+  metodoPago: true, estadoPago: true, subtotal: true, total: true,
+  usuario: { select: { nombre: true, apellido: true } },
   cliente: { select: { nombre: true, apellido: true } },
   sucursal: { select: { nombre: true } },
   tipoEntrega: { select: { nombre: true } },
@@ -115,6 +116,7 @@ export function calcularReportes(
   const franjas = new Map<string, { diaSemana: number; hora: number; cantidad: number }>()
   const filas: PedidoReporte[] = []
   let totalVendido = 0
+  let cantidadPedidosPagados = 0
 
   for (const pedido of [...pedidos].sort((a, b) => b.fecha.getTime() - a.fecha.getTime() || b.idPedido - a.idPedido)) {
     const fecha = fechaArgentina(pedido.fecha).slice(0, 16)
@@ -122,12 +124,25 @@ export function calcularReportes(
     const hora = Number(fecha.slice(11, 13))
     const origen = pedido.origenPedido
     const metodoPago = pedido.metodoPago
+    const estadoPago = pedido.estadoPago
     const tipoEntrega = pedido.tipoEntrega.nombre
     if ((origen !== 'mostrador' && origen !== 'online') ||
         (metodoPago !== 'efectivo' && metodoPago !== 'transferencia') ||
+        (estadoPago !== 'pagado' && estadoPago !== 'pendiente' && estadoPago !== 'pendiente_verificacion') ||
         (tipoEntrega !== 'retiro' && tipoEntrega !== 'delivery')) {
       throw new ErrorReporte(500, 'Hay pedidos con datos incompatibles con el reporte. Contactá al administrador.')
     }
+    const vendido = estadoPago === 'pagado'
+    filas.push({
+      idPedido: pedido.idPedido, fecha, sucursal: pedido.sucursal.nombre,
+      cliente: [pedido.cliente.nombre, pedido.cliente.apellido].filter(Boolean).join(' '),
+      registradoPor: pedido.usuario ? [pedido.usuario.nombre, pedido.usuario.apellido].filter(Boolean).join(' ') : null,
+      origen, metodoPago, estadoPago, vendido, tipoEntrega,
+      cantidadProductos: pedido.detalles.reduce((suma, d) => suma + d.cantidad, 0),
+      subtotal: dinero(pedido.subtotal), total: dinero(pedido.total),
+    })
+    // Los pendientes se muestran en el detalle, pero no suman ventas ni productos vendidos.
+    if (!vendido) continue
     const periodo = periodos.get(periodoDe(dia, filtros.agrupacion))
     if (!periodo) throw new Error('Pedido fuera del rango de reportes')
     for (const fila of [
@@ -139,6 +154,7 @@ export function calcularReportes(
       if (fila) { fila.totalVendido += pedido.total; fila.cantidadPedidos++ }
     }
     totalVendido += pedido.total
+    cantidadPedidosPagados++
     for (const detalle of pedido.detalles) {
       const fila = productos.get(detalle.idProducto) ?? {
         idProducto: detalle.idProducto, nombre: detalle.producto.nombre, cantidad: 0, totalVendido: 0,
@@ -152,18 +168,14 @@ export function calcularReportes(
     const franja = franjas.get(clave) ?? { diaSemana, hora, cantidad: 0 }
     franja.cantidad++
     franjas.set(clave, franja)
-    filas.push({
-      idPedido: pedido.idPedido, fecha, sucursal: pedido.sucursal.nombre,
-      cliente: [pedido.cliente.nombre, pedido.cliente.apellido].filter(Boolean).join(' '),
-      origen, metodoPago, tipoEntrega,
-      cantidadProductos: pedido.detalles.reduce((suma, d) => suma + d.cantidad, 0),
-      subtotal: dinero(pedido.subtotal), total: dinero(pedido.total),
-    })
   }
   const redondear = <T extends { totalVendido: number }>(filas: T[]) =>
     filas.map((fila) => ({ ...fila, totalVendido: dinero(fila.totalVendido) }))
   return {
-    resumen: { totalVendido: dinero(totalVendido), cantidadPedidos: pedidos.length, ticketPromedio: pedidos.length ? Math.round(totalVendido / pedidos.length) : 0 },
+    resumen: {
+      totalVendido: dinero(totalVendido), cantidadPedidos: cantidadPedidosPagados,
+      ticketPromedio: cantidadPedidosPagados ? Math.round(totalVendido / cantidadPedidosPagados) : 0,
+    },
     ventasPorPeriodo: redondear([...periodos.values()]),
     ventasPorHora: redondear(ventasPorHora),
     productosMasVendidos: redondear([...productos.values()].sort((a, b) => b.cantidad - a.cantidad || a.idProducto - b.idProducto).slice(0, 10)),
@@ -189,7 +201,6 @@ export async function consultarReportes(filtros: FiltrosReportes): Promise<Datos
   }
   const pedidos = await prisma.pedido.findMany({
     where: {
-      estadoPedido: 'entregado',
       fecha: limitesDelRango(filtros),
       ...(filtros.sucursal === 'todas' ? {} : { idSucursal: filtros.sucursal }),
     },

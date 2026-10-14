@@ -1,10 +1,11 @@
 // Contrato entre la pantalla de Reportes y el backend (GET /api/reportes).
 //
-// - Solo cuentan los pedidos con estado 'entregado'.
+// - Las ventas cuentan solo pedidos con estadoPago 'pagado', independientemente de la entrega.
+// - El detalle incluye todos los pedidos del rango, también los pendientes de pago.
 // - El rango se filtra por Pedido.fecha (cuando se hizo el pedido).
 // - Fechas y horas en hora de Argentina.
 
-import type { MetodoPago, OrigenPedido, TipoEntrega } from '@/lib/pedidos/pedidos-estados'
+import type { EstadoPago, MetodoPago, OrigenPedido, TipoEntrega } from '@/lib/pedidos/pedidos-estados'
 
 export type Agrupacion = 'dia' | 'semana' | 'mes'
 
@@ -40,15 +41,18 @@ export type VentaPorEntrega = Totales & { tipoEntrega: TipoEntrega }
 // Solo las combinaciones con pedidos.
 export type DemandaEsperada = { diaSemana: number; hora: number; promedioPedidos: number }
 
-// Una fila por pedido, del más nuevo al más viejo.
+// Una fila por pedido registrado, del más nuevo al más viejo; vendido depende solo del pago.
 export type PedidoReporte = {
   idPedido: number
   fecha: string // 'AAAA-MM-DDTHH:mm'
   sucursal: string
   cliente: string // nombre y apellido
+  registradoPor: string | null // nombre y apellido del personal; null si no hay usuario asociado
   origen: OrigenPedido
   tipoEntrega: TipoEntrega
   metodoPago: MetodoPago
+  estadoPago: EstadoPago
+  vendido: boolean
   cantidadProductos: number // suma de las cantidades de sus detalles
   subtotal: number
   total: number

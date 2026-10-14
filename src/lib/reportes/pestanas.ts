@@ -2,7 +2,7 @@
 // y el Excel leen de acá, así las columnas no se repiten en tres lugares.
 // Sin React ni imports de servidor.
 
-import type { MetodoPago, OrigenPedido, TipoEntrega } from '@/lib/pedidos/pedidos-estados'
+import type { EstadoPago, MetodoPago, OrigenPedido, TipoEntrega } from '@/lib/pedidos/pedidos-estados'
 import { formatearPrecio } from '@/lib/utils/precio'
 import type { Agrupacion, DatosReportes } from './tipos'
 
@@ -25,6 +25,9 @@ export type Pestana = {
 }
 
 export const NOMBRES_METODO_PAGO: Record<MetodoPago, string> = { efectivo: 'Efectivo', transferencia: 'Transferencia' }
+const NOMBRES_ESTADO_PAGO: Record<EstadoPago, string> = {
+  pagado: 'Pagado', pendiente: 'Pendiente', pendiente_verificacion: 'Pendiente de verificación',
+}
 // "Canal": por dónde entró el pedido (en el local o por el menú online). Se evita
 // "Mostrador" porque se confunde con la entrega (retirar en el mostrador).
 export const NOMBRES_ORIGEN: Record<OrigenPedido, string> = { mostrador: 'Presencial', online: 'Online' }
@@ -126,17 +129,22 @@ export const PESTANAS: Pestana[] = [
       { titulo: 'Fecha', formato: 'texto' },
       { titulo: 'Sucursal', formato: 'texto' },
       { titulo: 'Cliente', formato: 'texto' },
+      { titulo: 'Registrado por', formato: 'texto' },
       { titulo: 'Canal', formato: 'texto' },
       { titulo: 'Entrega', formato: 'texto' },
       { titulo: 'Pago', formato: 'texto' },
+      { titulo: 'Estado de pago', formato: 'texto' },
+      { titulo: 'Vendido', formato: 'texto' },
       { titulo: 'Productos', formato: 'numero' },
       { titulo: 'Subtotal', formato: 'precio' },
       { titulo: 'Total', formato: 'precio' },
     ],
     filas: (datos) =>
       datos.pedidos.map((p) => [
-        p.idPedido, fechaYHora(p.fecha), p.sucursal, p.cliente, NOMBRES_ORIGEN[p.origen],
-        NOMBRES_ENTREGA[p.tipoEntrega], NOMBRES_METODO_PAGO[p.metodoPago], p.cantidadProductos, p.subtotal, p.total,
+        p.idPedido, fechaYHora(p.fecha), p.sucursal, p.cliente,
+        p.registradoPor ?? (p.origen === 'online' ? 'Pedido online' : 'Sin registro'),
+        NOMBRES_ORIGEN[p.origen], NOMBRES_ENTREGA[p.tipoEntrega], NOMBRES_METODO_PAGO[p.metodoPago],
+        NOMBRES_ESTADO_PAGO[p.estadoPago], p.vendido ? 'Sí' : 'No', p.cantidadProductos, p.subtotal, p.total,
       ]),
     grafico: null,
   },
