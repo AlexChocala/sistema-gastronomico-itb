@@ -2,7 +2,7 @@
 // Activas y archivadas comparten pantalla; la URL elige qué lista mostrar.
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ExternalLink, Globe, MapPin, Pencil, Plus, Power, Search, Store, X } from '@/components/icons'
@@ -47,6 +47,7 @@ export default function SucursalesPage() {
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState<number | null>(null)
+  const tituloFormulario = useRef<HTMLHeadingElement>(null)
   const [usarLocalidadNueva, setUsarLocalidadNueva] = useState(false)
   const [error, setError] = useState('')
   const limiteAlcanzado = sucursales.length >= MAX_SUCURSALES
@@ -131,6 +132,16 @@ export default function SucursalesPage() {
     reiniciarSlug(s.slug)
     setError('')
     setMostrarForm(true)
+    // Esperar a que se abra el formulario. También funciona al volver a editar la
+    // misma sucursal cuando el formulario ya estaba abierto fuera de la vista.
+    requestAnimationFrame(() => {
+      const titulo = tituloFormulario.current
+      titulo?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start',
+      })
+      titulo?.focus({ preventScroll: true })
+    })
   }
 
   function cerrarForm() {
@@ -250,7 +261,7 @@ export default function SucursalesPage() {
         {mostrarForm && (
           <div className="w-full max-w-3xl rounded-3xl bg-surface p-6 shadow-sm">
             <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-              <h2 className="text-xl font-semibold">{editandoId !== null ? 'Editar sucursal' : 'Nueva sucursal'}</h2>
+              <h2 ref={tituloFormulario} tabIndex={-1} className="scroll-mt-24 text-xl font-semibold outline-none">{editandoId !== null ? 'Editar sucursal' : 'Nueva sucursal'}</h2>
 
               <CamposSucursal
                 valores={form}
