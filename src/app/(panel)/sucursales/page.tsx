@@ -26,6 +26,9 @@ interface Sucursal {
   activa: boolean
   ofreceRetiro: boolean
   ofreceDelivery: boolean
+  radioDeliveryKm: number | null
+  latitud: number | null
+  longitud: number | null
   idLocalidad: number
   localidad: Localidad
 }
@@ -119,6 +122,9 @@ export default function SucursalesPage() {
       idLocalidad: String(s.idLocalidad),
       ofreceRetiro: s.ofreceRetiro,
       ofreceDelivery: s.ofreceDelivery,
+      radioDeliveryKm: s.radioDeliveryKm === null ? '' : String(s.radioDeliveryKm),
+      latitud: s.latitud === null ? '' : String(s.latitud),
+      longitud: s.longitud === null ? '' : String(s.longitud),
     })
     setLocalidadNueva(localidadNuevaVacia)
     setUsarLocalidadNueva(false)
@@ -138,7 +144,9 @@ export default function SucursalesPage() {
   }
 
   function cambiarCampo(campo: string, valor: unknown) {
-    setForm({ ...form, [campo]: valor })
+    setForm((actual) => ({ ...actual, [campo]: valor,
+      ...((campo === 'direccion' || campo === 'idLocalidad') ? { latitud: '', longitud: '' } : {}),
+    }))
     // Al renombrar, el link sigue al nombre nuevo, salvo que el admin ya lo haya editado a mano.
     if (campo === 'nombre' && editandoId !== null && !slugTocado && typeof valor === 'string') {
       setSlug(generarSlug(valor))
@@ -166,6 +174,9 @@ export default function SucursalesPage() {
       linkMaps: form.linkMaps || null,
       ofreceRetiro: form.ofreceRetiro,
       ofreceDelivery: form.ofreceDelivery,
+      radioDeliveryKm: form.ofreceDelivery && form.radioDeliveryKm.trim() ? Number(form.radioDeliveryKm) : null,
+      latitud: form.ofreceDelivery && form.latitud.trim() ? Number(form.latitud) : null,
+      longitud: form.ofreceDelivery && form.longitud.trim() ? Number(form.longitud) : null,
     }
 
     if (usarLocalidadNueva) {
@@ -247,7 +258,10 @@ export default function SucursalesPage() {
                 usarLocalidadNueva={usarLocalidadNueva}
                 localidades={localidades}
                 onCambiar={cambiarCampo}
-                onCambiarLocalidadNueva={(campo, valor) => setLocalidadNueva((actual) => ({ ...actual, [campo]: valor }))}
+                onCambiarLocalidadNueva={(campo, valor) => {
+                  setLocalidadNueva((actual) => ({ ...actual, [campo]: valor }))
+                  setForm((actual) => ({ ...actual, latitud: '', longitud: '' }))
+                }}
                 onUsarLocalidadNueva={setUsarLocalidadNueva}
               />
 
@@ -374,6 +388,7 @@ export default function SucursalesPage() {
                   {s.whatsapp && <p>{s.whatsapp}</p>}
                   {s.horario && <p>{s.horario}</p>}
                   <p>{[s.ofreceRetiro && 'Retiro en el local', s.ofreceDelivery && 'Delivery'].filter(Boolean).join(' · ')}</p>
+                  {s.ofreceDelivery && <p>{s.radioDeliveryKm === null ? 'Delivery pendiente de configurar el radio' : `Radio de delivery: ${s.radioDeliveryKm.toLocaleString('es-AR')} km`}</p>}
                   {/* URL pública del menú. Se edita desde el formulario; los links viejos redirigen a este. */}
                   <a
                     href={`/${s.slug}`} target="_blank" rel="noopener noreferrer"

@@ -1,3 +1,5 @@
+import { coordenadasValidas, MENSAJE_RADIO_DELIVERY, radioDeliveryValido } from './radio-delivery'
+
 export class ErrorSucursal extends Error {
   constructor(public estado: number, mensaje: string) {
     super(mensaje)
@@ -112,6 +114,9 @@ type DatosSucursal = {
   activa?: boolean
   ofreceRetiro?: boolean
   ofreceDelivery?: boolean
+  radioDeliveryKm?: number | null
+  latitud?: number | null
+  longitud?: number | null
 }
 
 // En un alta (parcial = false) los campos obligatorios siempre vienen validados.
@@ -136,6 +141,7 @@ export function validarSucursal(cuerpo: unknown, parcial: boolean): DatosSucursa
   // el admin lo puede cambiar (el anterior queda redirigiendo, ver cambiarSlug).
   const permitidos = [
     'nombre', 'direccion', 'whatsapp', 'horario', 'linkMaps', 'idLocalidad', 'ofreceRetiro', 'ofreceDelivery',
+    'radioDeliveryKm', 'latitud', 'longitud',
     ...(parcial ? ['activa', 'slug'] : []),
   ]
   if (Object.keys(datos).length === 0 || Object.keys(datos).some((c) => !permitidos.includes(c))) {
@@ -215,6 +221,21 @@ export function validarSucursal(cuerpo: unknown, parcial: boolean): DatosSucursa
   // contra la fila actual (ver editar en sucursales-administracion).
   if (salida.ofreceRetiro === false && salida.ofreceDelivery === false) {
     throw new ErrorSucursal(400, MENSAJE_SIN_ENTREGA)
+  }
+  if ('radioDeliveryKm' in datos) {
+    if (datos.radioDeliveryKm !== null && !radioDeliveryValido(datos.radioDeliveryKm)) throw new ErrorSucursal(400, MENSAJE_RADIO_DELIVERY)
+    salida.radioDeliveryKm = datos.radioDeliveryKm as number | null
+  }
+  if ('latitud' in datos || 'longitud' in datos) {
+    const vacias = datos.latitud === null && datos.longitud === null
+    if (!vacias && !coordenadasValidas(datos.latitud, datos.longitud)) {
+      throw new ErrorSucursal(400, 'Ingresá latitud y longitud válidas, o dejá ambas vacías para ubicar la dirección automáticamente.')
+    }
+    salida.latitud = datos.latitud as number | null
+    salida.longitud = datos.longitud as number | null
+  }
+  if (!parcial && salida.ofreceDelivery && !radioDeliveryValido(salida.radioDeliveryKm)) {
+    throw new ErrorSucursal(400, MENSAJE_RADIO_DELIVERY)
   }
   return salida
 }

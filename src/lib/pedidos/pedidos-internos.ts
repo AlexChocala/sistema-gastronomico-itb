@@ -23,6 +23,7 @@ import {
   type PedidoPantalla, type TipoEntrega,
 } from './pedidos-estados'
 import { buscarTipoEntrega, calcularLineas, detallesDe, verificarLocalidadDelivery } from './pedidos-online'
+import { camposCobertura, prepararCoberturaDelivery, verificarCoberturaActual } from '@/lib/sucursales/cobertura-delivery'
 
 type SesionPersonal = { user: { idUsuario: number } }
 
@@ -167,16 +168,19 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
     // Caja cobra ANTES de crear el pedido: entra pagado y 'recibido' (directo a Cocina).
     crearCaja: (request: Request) => proteger(request, true, async ({ idUsuario, idSucursal }) => {
       const pedido = validarPedidoCaja(await leerCuerpo(request))
+      const cobertura = pedido.tipoEntrega === 'delivery'
+        ? await prepararCoberturaDelivery(db, { idSucursal }, pedido.direccion, pedido.idLocalidad)
+        : null
       const creado = await db.$transaction(async (tx) => {
         const sucursal = await tx.sucursal.findUnique({
           where: { idSucursal },
-          select: { activa: true, localidadesDelivery: { select: { idLocalidad: true } } },
+          select: { ...camposCobertura, localidadesDelivery: { select: { idLocalidad: true } } },
         })
         if (!sucursal?.activa) throw new ErrorPedido(404, 'La sucursal asignada no está disponible.')
-        // ofreceRetiro/ofreceDelivery son del menú digital: en el mostrador se puede cargar
-        // cualquiera de los dos. La regla de zonas sí vale igual que online.
+        // El radio y las zonas se respetan también en los pedidos que carga el personal.
         if (pedido.tipoEntrega === 'delivery') {
           await verificarLocalidadDelivery(tx, sucursal.localidadesDelivery.map((zona) => zona.idLocalidad), pedido.idLocalidad)
+          verificarCoberturaActual(sucursal, cobertura)
         }
         const { lineas, total } = await calcularLineas(tx, idSucursal, pedido.items)
         const idTipoEntrega = await buscarTipoEntrega(tx, pedido.tipoEntrega)
@@ -211,6 +215,9 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
     actualizar: (request: Request, id: string) => proteger(request, true, async ({ idSucursal }) => {
       const idPedido = leerId(id)
       const accion = validarAccionPedido(await leerCuerpo(request))
+      const cobertura = accion.accion === 'cambiarTipoEntrega' && accion.tipoEntrega === 'delivery'
+        ? await prepararCoberturaDelivery(db, { idSucursal }, accion.direccion, accion.idLocalidad)
+        : null
 
       const actualizado = await db.$transaction(async (tx) => {
         const fila = await tx.pedido.findFirst({ where: { idPedido, idSucursal }, select: camposPedido })
@@ -226,6 +233,9 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
             // El celular queda en el cliente: puede servir para avisarle.
             cambios = { idTipoEntrega, direccion: null, referencias: null, idLocalidad: null }
           } else {
+            const sucursal = await tx.sucursal.findUnique({ where: { idSucursal }, select: camposCobertura })
+            if (!sucursal) throw new ErrorPedido(404, 'La sucursal no está disponible.')
+            verificarCoberturaActual(sucursal, cobertura)
             const zonas = await tx.sucursalLocalidad.findMany({ where: { idSucursal }, select: { idLocalidad: true } })
             await verificarLocalidadDelivery(tx, zonas.map((zona) => zona.idLocalidad), accion.idLocalidad)
             cambios = {

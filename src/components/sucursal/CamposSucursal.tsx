@@ -9,6 +9,8 @@
 import { useState } from 'react'
 import { Bike, Check, ExternalLink, MapPin, ShoppingBag, Store, type LucideIcon } from '@/components/icons'
 import { CampoConSugerencias } from '@/components/ui/CampoConSugerencias'
+import { Input } from '@/components/ui/Input'
+import { MAX_RADIO_DELIVERY_KM, MIN_RADIO_DELIVERY_KM } from '@/lib/sucursales/radio-delivery'
 import { buscarDirecciones, buscarLocalidades } from '@/lib/sucursales/georef'
 import { MENSAJE_LINK_MAPS, MENSAJE_WHATSAPP, linkMapsValido } from '@/lib/sucursales/sucursales-validacion'
 
@@ -27,6 +29,9 @@ export interface ValoresSucursal {
   idLocalidad: string
   ofreceRetiro: boolean
   ofreceDelivery: boolean
+  radioDeliveryKm: string
+  latitud: string
+  longitud: string
 }
 
 export interface ValoresLocalidadNueva {
@@ -43,6 +48,9 @@ export const valoresSucursalVacios: ValoresSucursal = {
   idLocalidad: '',
   ofreceRetiro: true,
   ofreceDelivery: true,
+  radioDeliveryKm: '5',
+  latitud: '',
+  longitud: '',
 }
 
 // Formas de entrega que se ofrecen en el menú digital (la API exige al menos una).
@@ -345,6 +353,30 @@ export function CamposSucursal({
             </label>
           ))}
         </fieldset>
+        {valores.ofreceDelivery && (
+          <div className="flex flex-col gap-3">
+            <Input
+              id={id('radioDeliveryKm')} name="radioDeliveryKm" label="Radio de delivery (km)"
+              type="number" min={MIN_RADIO_DELIVERY_KM} max={MAX_RADIO_DELIVERY_KM} step="0.1"
+              value={valores.radioDeliveryKm} onChange={cambiar} required className={claseInput}
+            />
+            <p className={claseAyuda}>Distancia máxima en línea recta desde este local. Solo se aceptan direcciones dentro del radio.</p>
+            <details>
+              <summary className="cursor-pointer text-sm text-muted">Ubicación manual del local (opcional)</summary>
+              <p className={claseAyuda}>Dejá ambos campos vacíos para ubicar la dirección automáticamente. Si no se encuentra, copiá las coordenadas del punto exacto del local en Google Maps. Al cambiar la dirección se vuelve a calcular la ubicación.</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                  id={id('latitud')} name="latitud" label="Latitud" type="number" min="-90" max="90" step="any"
+                  placeholder="Ej: -34.665" value={valores.latitud} onChange={cambiar} className={claseInput}
+                />
+                <Input
+                  id={id('longitud')} name="longitud" label="Longitud" type="number" min="-180" max="180" step="any"
+                  placeholder="Ej: -58.357" value={valores.longitud} onChange={cambiar} className={claseInput}
+                />
+              </div>
+            </details>
+          </div>
+        )}
       </SeccionFormulario>
     </div>
   )

@@ -9,6 +9,7 @@ import { urlImagenPublica } from '@/lib/storage/imagenes'
 const camposSucursalPublica = {
   idSucursal: true, nombre: true, slug: true, direccion: true, horario: true, whatsapp: true, linkMaps: true,
   ofreceRetiro: true, ofreceDelivery: true,
+  radioDeliveryKm: true,
   localidad: { select: { nombre: true, provincia: { select: { nombre: true } } } },
 } satisfies Prisma.SucursalSelect
 

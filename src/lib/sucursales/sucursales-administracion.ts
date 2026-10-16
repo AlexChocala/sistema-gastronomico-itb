@@ -4,12 +4,15 @@ import {
   validarSucursal,
 } from './sucursales-validacion'
 import { validarLocalidadNueva } from './localidades-validacion'
+import { coberturaConfigurada, coordenadasValidas, MENSAJE_RADIO_DELIVERY, radioDeliveryValido } from './radio-delivery'
+import { geocodificarDireccion } from './geocodificacion'
 
 type Sesion = { user: { idUsuario: number } } | null
 
 const camposSucursal = {
   idSucursal: true, nombre: true, slug: true, direccion: true, whatsapp: true, horario: true, linkMaps: true, activa: true,
   ofreceRetiro: true, ofreceDelivery: true, idLocalidad: true,
+  radioDeliveryKm: true, latitud: true, longitud: true,
   localidad: { select: { idLocalidad: true, nombre: true, provincia: { select: { idProvincia: true, nombre: true } } } },
 } satisfies Prisma.SucursalSelect
 
@@ -55,7 +58,48 @@ export async function crearSucursalEnTransaccion(tx: Prisma.TransactionClient, c
   let idLocalidad = campos.idLocalidad
   if (!idLocalidad && localidadNueva) idLocalidad = await crearLocalidad(tx, localidadNueva)
   const datos = validarSucursal({ ...campos, idLocalidad }, false)
+  if (datos.ofreceDelivery && !coberturaConfigurada(datos)) {
+    throw new ErrorSucursal(400, 'Configurá el radio y la ubicación de la sucursal antes de ofrecer delivery.')
+  }
   return tx.sucursal.create({ data: { ...datos, slug: await slugLibre(tx, datos.nombre) }, select: camposSucursal })
+}
+
+type SucursalAnterior = {
+  direccion: string; idLocalidad: number; ofreceDelivery: boolean
+  radioDeliveryKm: number | null; latitud: number | null; longitud: number | null
+}
+
+// Georef se consulta fuera de la transacción. La configuración inicial usa el mismo
+// paso para que tampoco espere a la red mientras guarda el negocio y las sucursales.
+export async function prepararSucursal(db: PrismaClient, cuerpo: unknown, anterior?: SucursalAnterior) {
+  const { campos, localidadNueva } = separarLocalidadNueva(cuerpo)
+  const nuevaLocalidad = localidadNueva ? validarLocalidadNueva(localidadNueva) : null
+  const datos = validarSucursal({ ...campos, ...(!anterior && nuevaLocalidad ? { idLocalidad: 1 } : {}) }, !!anterior)
+  const ofreceDelivery = datos.ofreceDelivery ?? anterior?.ofreceDelivery ?? true
+  if (!ofreceDelivery) return { ...campos, ...(nuevaLocalidad ? { localidadNueva } : {}), radioDeliveryKm: null, latitud: null, longitud: null }
+  const radioDeliveryKm = datos.radioDeliveryKm === undefined ? anterior?.radioDeliveryKm : datos.radioDeliveryKm
+  if (!radioDeliveryValido(radioDeliveryKm)) throw new ErrorSucursal(400, MENSAJE_RADIO_DELIVERY)
+  const direccion = datos.direccion ?? anterior?.direccion
+  const idLocalidad = datos.idLocalidad ?? anterior?.idLocalidad
+  if (!direccion) throw new ErrorSucursal(400, 'Indicá la dirección de la sucursal.')
+  let latitud = datos.latitud
+  let longitud = datos.longitud
+  if (latitud === undefined && longitud === undefined && anterior && !nuevaLocalidad
+    && direccion === anterior.direccion && idLocalidad === anterior.idLocalidad) {
+    latitud = anterior.latitud
+    longitud = anterior.longitud
+  }
+  if (!coordenadasValidas(latitud, longitud)) {
+    const localidad = nuevaLocalidad ?? await db.localidad.findUnique({
+      where: { idLocalidad: idLocalidad ?? 0 }, select: { nombre: true, provincia: { select: { nombre: true } } },
+    })
+    if (!localidad) throw new ErrorSucursal(400, 'La localidad de la sucursal no existe.')
+    const provincia = 'nombreProvincia' in localidad ? localidad.nombreProvincia : localidad.provincia.nombre
+    const punto = await geocodificarDireccion(direccion, { localidad: localidad.nombre, provincia })
+    latitud = punto.latitud
+    longitud = punto.longitud
+  }
+  return { ...campos, ...(nuevaLocalidad ? { localidadNueva } : {}), radioDeliveryKm, latitud, longitud }
 }
 
 // El formulario puede mandar "localidadNueva" (nombre + provincia) en vez de idLocalidad,
@@ -161,7 +205,7 @@ export function crearControladorSucursales(db: PrismaClient, leerSesion: () => P
     }),
 
     crear: (request: Request) => proteger(request, true, async () => {
-      const cuerpo = await leerCuerpo(request)
+      const cuerpo = await prepararSucursal(db, await leerCuerpo(request))
 
       const sucursal = await db.$transaction(async (tx) => {
         // Se cuenta dentro de la transacción serializable: dos altas simultáneas no pueden
@@ -175,12 +219,19 @@ export function crearControladorSucursales(db: PrismaClient, leerSesion: () => P
 
     editar: (request: Request, id: string) => proteger(request, true, async () => {
       const idSucursal = leerId(id)
+      const anterior = await db.sucursal.findUnique({ where: { idSucursal } })
+      if (!anterior) throw new ErrorSucursal(404, 'Sucursal no encontrada.')
       // Igual que en el alta: al editar también se puede cargar una localidad nueva.
-      const { campos, localidadNueva } = separarLocalidadNueva(await leerCuerpo(request))
+      const preparado = await prepararSucursal(db, await leerCuerpo(request), anterior)
+      const { campos, localidadNueva } = separarLocalidadNueva(preparado)
       const datosValidados = validarSucursal(campos, true)
       const sucursal = await db.$transaction(async (tx) => {
         const actual = await tx.sucursal.findUnique({ where: { idSucursal } })
         if (!actual) throw new ErrorSucursal(404, 'Sucursal no encontrada.')
+        if ((['direccion', 'idLocalidad', 'ofreceDelivery', 'radioDeliveryKm', 'latitud', 'longitud'] as const)
+          .some(campo => actual[campo] !== anterior[campo])) {
+          throw new ErrorSucursal(409, 'La ubicación o la cobertura cambió. Actualizá la sucursal e intentá nuevamente.')
+        }
         const datos = !datosValidados.idLocalidad && localidadNueva
           ? { ...datosValidados, idLocalidad: await crearLocalidad(tx, localidadNueva) }
           : datosValidados

@@ -69,6 +69,11 @@ model Sucursal {
   // Formas de entrega que ofrece en el menú digital (siempre al menos una).
   ofreceRetiro   Boolean @default(true)
   ofreceDelivery Boolean @default(true)
+  // Radio en línea recta y centro del local. Null = pendiente de configuración;
+  // los pedidos de delivery no se aceptan hasta guardar los tres valores.
+  radioDeliveryKm Float?
+  latitud         Float?
+  longitud        Float?
 
   idLocalidad Int
   localidad   Localidad @relation(fields: [idLocalidad], references: [idLocalidad])

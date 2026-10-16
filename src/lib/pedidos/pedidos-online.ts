@@ -14,6 +14,7 @@ import {
   type ItemPedidoOnline, type PedidoOnlineValidado, type TipoEntregaOnline,
 } from './pedidos-validacion'
 import { datosTransferencia } from '@/lib/negocio/negocio'
+import { camposCobertura, prepararCoberturaDelivery, verificarCoberturaActual, type CoberturaVerificada } from '@/lib/sucursales/cobertura-delivery'
 
 // Límite de pedidos por IP. Vive en la memoria del proceso: si la aplicación corre en
 // varias instancias (o serverless), cada una lleva su propia cuenta. Al desplegar hay que
@@ -219,11 +220,12 @@ function itemRespuesta(linea: LineaPedido) {
   }
 }
 
-async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineValidado) {
+async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineValidado, cobertura: CoberturaVerificada | null) {
   return db.$transaction(async (tx) => {
     const sucursal = await tx.sucursal.findUnique({
       where: { slug: pedido.slugSucursal },
       select: {
+        ...camposCobertura,
         idSucursal: true, nombre: true, whatsapp: true, activa: true, ofreceRetiro: true, ofreceDelivery: true,
         localidadesDelivery: { select: { idLocalidad: true } },
       },
@@ -236,6 +238,7 @@ async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineVali
     if (pedido.tipoEntrega === 'delivery') {
       if (!sucursal.ofreceDelivery) throw new ErrorPedido(400, 'Esta sucursal no hace delivery.')
       await verificarLocalidadDelivery(tx, sucursal.localidadesDelivery.map((zona) => zona.idLocalidad), pedido.idLocalidad)
+      verificarCoberturaActual(sucursal, cobertura)
     }
 
     const negocio = await tx.negocio.findUnique({
@@ -313,14 +316,17 @@ export function crearControladorPedidosOnline(db: PrismaClient) {
         const momento = reservarLugar(ip)
         try {
           const pedido = validarPedidoOnline(await leerCuerpo(request))
+          const cobertura = pedido.tipoEntrega === 'delivery'
+            ? await prepararCoberturaDelivery(db, { slug: pedido.slugSucursal }, pedido.direccion, pedido.idLocalidad)
+            : null
           // Dos pedidos al mismo tiempo pueden chocar en la transacción serializable: se
           // reintenta una vez antes de pedirle al cliente que vuelva a enviarlo.
           let creado
           try {
-            creado = await registrarEnTransaccion(db, pedido)
+            creado = await registrarEnTransaccion(db, pedido, cobertura)
           } catch (error) {
             if (!esConflictoSerializable(error)) throw error
-            creado = await registrarEnTransaccion(db, pedido)
+            creado = await registrarEnTransaccion(db, pedido, cobertura)
           }
           return responder({ pedido: creado }, 201)
         } catch (error) {
