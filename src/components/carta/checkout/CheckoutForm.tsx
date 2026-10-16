@@ -21,6 +21,7 @@ import {
 } from '@/lib/pedidos/pedidos-validacion'
 import { formatearPrecio } from '@/lib/utils/precio'
 import { whatsappValido } from '@/lib/sucursales/sucursales-validacion'
+import { MENSAJE_DIRECCION_COMPLETA, radioDeliveryValido, separarDireccion } from '@/lib/sucursales/radio-delivery'
 import { textoProductos } from '@/components/carta/compartidos/BarraCarrito'
 import { PedidoConfirmado, type PedidoCreado } from './PedidoConfirmado'
 
@@ -32,6 +33,7 @@ export type SucursalCheckout = {
   whatsapp: string | null
   ofreceRetiro: boolean
   ofreceDelivery: boolean
+  radioDeliveryKm: number | null
   localidadesDelivery: { idLocalidad: number; nombre: string }[]
 }
 
@@ -129,7 +131,10 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
       const direccionLimpia = direccion.trim()
       if (direccionLimpia.length < MIN_DIRECCION || direccionLimpia.length > MAX_DIRECCION) {
         encontrados.direccion = MENSAJE_DIRECCION
+      } else if (!idLocalidad && !separarDireccion(direccionLimpia)) {
+        encontrados.direccion = MENSAJE_DIRECCION_COMPLETA
       }
+      if (!radioDeliveryValido(sucursal.radioDeliveryKm)) encontrados.tipoEntrega = 'Esta sucursal todavía no configuró su cobertura de delivery. Consultá al local o elegí retiro si está disponible.'
       if (hayZonas && !idLocalidad) encontrados.idLocalidad = MENSAJE_LOCALIDAD
       if (limpiarReferencias(referencias) === undefined) encontrados.referencias = MENSAJE_REFERENCIAS
     }
@@ -307,18 +312,24 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
 
           {tipoEntrega === 'delivery' && (
             <div className="flex flex-col gap-4 pt-1">
+              <p className="text-sm text-muted">
+                {radioDeliveryValido(sucursal.radioDeliveryKm)
+                  ? `Delivery hasta ${sucursal.radioDeliveryKm.toLocaleString('es-AR')} km en línea recta desde el local. La dirección se verifica al confirmar.`
+                  : 'Esta sucursal todavía no tiene configurada su cobertura de delivery. Consultá al local o elegí retiro si está disponible.'}
+              </p>
               <Input
                 id="checkout-direccion"
                 data-campo="direccion"
                 label="Dirección de entrega"
                 autoComplete="street-address"
-                placeholder="Calle, número, piso/depto"
+                placeholder={hayZonas ? 'Calle y número' : 'Calle y número, localidad, provincia'}
                 maxLength={MAX_DIRECCION}
                 value={direccion}
                 onChange={(evento) => { setDireccion(evento.target.value); limpiarError('direccion') }}
                 error={errores.direccion}
                 className="min-h-12 rounded-xl"
               />
+              {!hayZonas && <p className="text-xs text-muted">{MENSAJE_DIRECCION_COMPLETA}</p>}
               {hayZonas && (
                 <div className="flex flex-col gap-1">
                   <span className="text-sm font-medium text-text">Localidad</span>
@@ -421,7 +432,7 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
           </div>
         )}
 
-        <Button type="submit" variant="acento" tamano="grande" disabled={enviando} className="shadow-lg">
+        <Button type="submit" variant="acento" tamano="grande" disabled={enviando || (tipoEntrega === 'delivery' && !radioDeliveryValido(sucursal.radioDeliveryKm))} className="shadow-lg">
           {enviando ? 'Enviando tu pedido…' : `Confirmar pedido · ${formatearPrecio(carrito.total)}`}
         </Button>
         <p className="-mt-2 text-center text-xs font-normal text-muted">

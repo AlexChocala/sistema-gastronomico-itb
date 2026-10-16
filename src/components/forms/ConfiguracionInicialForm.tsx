@@ -47,6 +47,9 @@ function cuerpoSucursal(bloque: BloqueSucursal) {
     linkMaps: linkMaps || null,
     ofreceRetiro,
     ofreceDelivery,
+    radioDeliveryKm: ofreceDelivery && bloque.valores.radioDeliveryKm.trim() ? Number(bloque.valores.radioDeliveryKm) : null,
+    latitud: ofreceDelivery && bloque.valores.latitud.trim() ? Number(bloque.valores.latitud) : null,
+    longitud: ofreceDelivery && bloque.valores.longitud.trim() ? Number(bloque.valores.longitud) : null,
     ...(bloque.usarLocalidadNueva
       ? { localidadNueva: bloque.localidadNueva }
       : { idLocalidad: Number(idLocalidad) }),
@@ -61,10 +64,10 @@ function mensajeDe(error: unknown) {
 function errorDeSucursal(bloque: BloqueSucursal): string | null {
   try {
     if (bloque.usarLocalidadNueva) validarLocalidadNueva(bloque.localidadNueva)
-    const { nombre, direccion, whatsapp, horario, linkMaps, ofreceRetiro, ofreceDelivery } = cuerpoSucursal(bloque)
+    const { nombre, direccion, whatsapp, horario, linkMaps, ofreceRetiro, ofreceDelivery, radioDeliveryKm, latitud, longitud } = cuerpoSucursal(bloque)
     // Con localidad nueva el id lo genera la API; acá el 1 solo sirve para validar el resto.
     const idLocalidad = bloque.usarLocalidadNueva ? 1 : Number(bloque.valores.idLocalidad)
-    validarSucursal({ nombre, direccion, whatsapp, horario, linkMaps, idLocalidad, ofreceRetiro, ofreceDelivery }, false)
+    validarSucursal({ nombre, direccion, whatsapp, horario, linkMaps, idLocalidad, ofreceRetiro, ofreceDelivery, radioDeliveryKm, latitud, longitud }, false)
     return null
   } catch (error) {
     return mensajeDe(error)
@@ -290,9 +293,11 @@ function propsDeBloque(
     localidadNueva: bloque.localidadNueva,
     usarLocalidadNueva: bloque.usarLocalidadNueva,
     onCambiar: <C extends keyof ValoresSucursal>(campo: C, valor: ValoresSucursal[C]) =>
-      actualizar(bloque.clave, (b) => ({ ...b, valores: { ...b.valores, [campo]: valor } })),
+      actualizar(bloque.clave, (b) => ({ ...b, valores: { ...b.valores, [campo]: valor,
+        ...((campo === 'direccion' || campo === 'idLocalidad') ? { latitud: '', longitud: '' } : {}),
+      } })),
     onCambiarLocalidadNueva: (campo: keyof ValoresLocalidadNueva, valor: string) =>
-      actualizar(bloque.clave, (b) => ({ ...b, localidadNueva: { ...b.localidadNueva, [campo]: valor } })),
+      actualizar(bloque.clave, (b) => ({ ...b, localidadNueva: { ...b.localidadNueva, [campo]: valor }, valores: { ...b.valores, latitud: '', longitud: '' } })),
     onUsarLocalidadNueva: (usar: boolean) =>
       actualizar(bloque.clave, (b) => ({ ...b, usarLocalidadNueva: usar })),
   }

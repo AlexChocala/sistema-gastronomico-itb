@@ -31,6 +31,7 @@ export default async function PaginaCheckout({ params }: PageProps<'/[sucursal]/
             whatsapp: sucursal.whatsapp,
             ofreceRetiro: sucursal.ofreceRetiro,
             ofreceDelivery: sucursal.ofreceDelivery,
+            radioDeliveryKm: sucursal.radioDeliveryKm,
             localidadesDelivery: sucursal.localidadesDelivery,
           }}
           // Solo si se ofrece: los datos de la cuenta se muestran recién con el pedido creado.

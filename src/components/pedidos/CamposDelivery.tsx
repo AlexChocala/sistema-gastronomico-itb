@@ -13,6 +13,7 @@ import {
   DIGITOS_TELEFONO, MAX_DIRECCION, MAX_REFERENCIAS, filtrarTelefonoEscrito, type CampoDelivery,
 } from '@/lib/pedidos/pedidos-validacion'
 import type { ZonaDelivery } from '@/lib/pedidos/pedidos-pantallas'
+import { MENSAJE_DIRECCION_COMPLETA } from '@/lib/sucursales/radio-delivery'
 
 export type ValoresDelivery = { telefono: string; direccion: string; idLocalidad: string; referencias: string }
 
@@ -74,12 +75,13 @@ export function CamposDelivery({
         <input
           {...atributos('direccion')}
           autoComplete="off"
-          placeholder="Calle, número, piso/depto"
+          placeholder={zonas.length ? 'Calle y número' : 'Calle y número, localidad, provincia'}
           maxLength={MAX_DIRECCION}
           value={valores.direccion}
           onChange={(e) => onCambiar('direccion', e.target.value)}
         />
         {mensaje('direccion')}
+        {zonas.length === 0 && <p className="text-xs text-muted">{MENSAJE_DIRECCION_COMPLETA}</p>}
       </div>
 
       {zonas.length > 0 && (

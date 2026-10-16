@@ -15,6 +15,7 @@
 
 import { ACCIONES_ESTADO, ESTADOS_PEDIDO, type AccionEstado, type EstadoPedido } from './pedidos-estados'
 import { idValido, whatsappValido } from '@/lib/sucursales/sucursales-validacion'
+import { MENSAJE_DIRECCION_COMPLETA, separarDireccion } from '@/lib/sucursales/radio-delivery'
 
 export class ErrorPedido extends Error {
   constructor(public estado: number, mensaje: string, public extra: Record<string, unknown> = {}) {
@@ -137,6 +138,7 @@ export function erroresDatosDelivery(
   if (!whatsappValido(digitosTelefono(datos.telefono))) errores.telefono = MENSAJE_TELEFONO_CLIENTE
   const direccion = datos.direccion.trim()
   if (direccion.length < MIN_DIRECCION || direccion.length > MAX_DIRECCION) errores.direccion = MENSAJE_DIRECCION
+  else if (!datos.idLocalidad && !separarDireccion(direccion)) errores.direccion = MENSAJE_DIRECCION_COMPLETA
   if (hayZonas && !datos.idLocalidad) errores.idLocalidad = MENSAJE_LOCALIDAD
   if (limpiarReferencias(datos.referencias) === undefined) errores.referencias = MENSAJE_REFERENCIAS
   return errores
@@ -163,6 +165,7 @@ function validarDatosDelivery(datos: Record<string, unknown>): DatosDeliveryVali
     idLocalidad = datos.idLocalidad
   }
   const referencias = limpiarReferencias(datos.referencias)
+  if (idLocalidad === null && !separarDireccion(direccion)) throw new ErrorPedido(400, MENSAJE_DIRECCION_COMPLETA)
   if (referencias === undefined) throw new ErrorPedido(400, MENSAJE_REFERENCIAS)
   return { telefono, direccion, idLocalidad, referencias }
 }
@@ -272,6 +275,7 @@ export function validarPedidoOnline(cuerpo: unknown): PedidoOnlineValidado {
       idLocalidad = datos.idLocalidad
     }
     const limpias = limpiarReferencias(datos.referencias)
+    if (idLocalidad === null && !separarDireccion(direccion)) throw new ErrorPedido(400, MENSAJE_DIRECCION_COMPLETA)
     if (limpias === undefined) throw new ErrorPedido(400, MENSAJE_REFERENCIAS)
     referencias = limpias
   }

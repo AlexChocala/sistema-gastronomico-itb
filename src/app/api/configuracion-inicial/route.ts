@@ -7,7 +7,7 @@ import { authOptions } from '@/lib/auth/auth'
 import { prisma } from '@/lib/db/prisma'
 import { ErrorConfiguracion, validarNegocioInicial } from '@/lib/negocio/negocio-validacion'
 import { ErrorSucursal, MAX_SUCURSALES, idValido, leerCuerpo } from '@/lib/sucursales/sucursales-validacion'
-import { crearSucursalEnTransaccion, verificarTopeSucursales } from '@/lib/sucursales/sucursales-administracion'
+import { crearSucursalEnTransaccion, prepararSucursal, verificarTopeSucursales } from '@/lib/sucursales/sucursales-administracion'
 
 function responder(datos: unknown, estado = 200) {
   return Response.json(datos, { status: estado, headers: { 'Cache-Control': 'no-store' } })
@@ -72,6 +72,20 @@ export async function POST(request: Request) {
   try {
     await verificarAcceso(request)
     const { negocio, sucursales } = leerConfiguracion(await leerCuerpo(request))
+    if (await prisma.negocio.findUnique({ where: { idNegocio: 1 }, select: { idNegocio: true } })) {
+      throw new ErrorConfiguracion(409, 'El sistema ya está configurado.')
+    }
+    // Validar el negocio antes de consultar ubicaciones; no hay llamadas de red dentro de la transacción.
+    const datosNegocio = validarNegocioInicial(negocio)
+    const preparadas: Awaited<ReturnType<typeof prepararSucursal>>[] = []
+    for (const [indice, sucursal] of sucursales.entries()) {
+      try {
+        preparadas.push(await prepararSucursal(prisma, sucursal))
+      } catch (error) {
+        if (error instanceof ErrorSucursal) throw new ErrorSucursal(error.estado, `Sucursal ${indice + 1}: ${error.message}`)
+        throw error
+      }
+    }
 
     await prisma.$transaction(async (tx) => {
       // Se revisa adentro de la transacción serializable: dos envíos simultáneos no
@@ -79,12 +93,11 @@ export async function POST(request: Request) {
       if (await tx.negocio.findUnique({ where: { idNegocio: 1 }, select: { idNegocio: true } })) {
         throw new ErrorConfiguracion(409, 'El sistema ya está configurado.')
       }
-      const datosNegocio = validarNegocioInicial(negocio)
       await verificarTopeSucursales(tx, sucursales.length)
 
       await tx.negocio.create({ data: { idNegocio: 1, ...datosNegocio } })
 
-      for (const [indice, sucursal] of sucursales.entries()) {
+      for (const [indice, sucursal] of preparadas.entries()) {
         try {
           await crearSucursalEnTransaccion(tx, sucursal)
         } catch (error) {
