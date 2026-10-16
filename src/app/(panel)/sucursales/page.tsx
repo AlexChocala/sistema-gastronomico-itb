@@ -1,8 +1,10 @@
 // src/app/(panel)/sucursales/page.tsx
+// Activas y archivadas comparten pantalla; la URL elige qué lista mostrar.
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
 import { ExternalLink, Globe, MapPin, Pencil, Plus, Power, Search, Store, X } from '@/components/icons'
 import { MAX_SUCURSALES, generarSlug, linkGoogleMaps } from '@/lib/sucursales/sucursales-validacion'
 import { CamposSucursal, SeccionFormulario, localidadNuevaVacia, valoresSucursalVacios } from '@/components/sucursal/CamposSucursal'
@@ -36,6 +38,7 @@ function limpiarNombre(nombre: string) {
 
 export default function SucursalesPage() {
   const router = useRouter()
+  const vista = usePathname() === '/sucursales/archivadas' ? 'archivadas' : 'activas'
   const [sucursales, setSucursales] = useState<Sucursal[]>([])
   const [localidades, setLocalidades] = useState<Localidad[]>([])
   const [loading, setLoading] = useState(true)
@@ -203,7 +206,9 @@ export default function SucursalesPage() {
     cargarDatos()
   }
 
-  const sucursalesVisibles = sucursales.filter((s) =>
+  const activas = sucursales.filter((s) => s.activa)
+  const archivadas = sucursales.filter((s) => !s.activa)
+  const sucursalesVisibles = (vista === 'activas' ? activas : archivadas).filter((s) =>
     limpiarNombre(s.nombre).toLowerCase().includes(busqueda.trim().toLowerCase())
   )
 
@@ -297,6 +302,23 @@ export default function SucursalesPage() {
 
         {error && !mostrarForm && <p className="text-sm text-danger">{error}</p>}
 
+        <nav aria-label="Estado de las sucursales" className="grid w-fit grid-cols-2 gap-1 rounded-full bg-surface-muted/60 p-1 text-sm">
+          {([
+            { valor: 'activas', texto: 'Activas', href: '/sucursales', cantidad: activas.length },
+            { valor: 'archivadas', texto: 'Archivadas', href: '/sucursales/archivadas', cantidad: archivadas.length },
+          ] as const).map((opcion) => (
+            <Link
+              key={opcion.valor}
+              href={opcion.href}
+              aria-current={vista === opcion.valor ? 'page' : undefined}
+              className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-1.5 transition-colors ${vista === opcion.valor ? 'bg-surface text-text shadow-sm' : 'text-muted hover:text-text'}`}
+            >
+              {opcion.texto}
+              <span className="rounded-full bg-bg px-2 text-xs tabular-nums text-muted">{opcion.cantidad}</span>
+            </Link>
+          ))}
+        </nav>
+
         <label className="flex w-full max-w-sm items-center gap-2 rounded-full bg-surface px-4 py-2 shadow-sm">
           <Search className="size-4 text-muted" />
           <input
@@ -312,7 +334,11 @@ export default function SucursalesPage() {
         {loading ? (
           <p className="rounded-3xl bg-surface p-10 text-center text-muted">Cargando...</p>
         ) : sucursalesVisibles.length === 0 ? (
-          <p className="rounded-3xl bg-surface p-10 text-center text-muted">No hay sucursales para mostrar.</p>
+          <p className="rounded-3xl bg-surface p-10 text-center text-muted">
+            {busqueda.trim()
+              ? 'No se encontraron sucursales con esa búsqueda.'
+              : vista === 'archivadas' ? 'No hay sucursales archivadas.' : 'No hay sucursales activas.'}
+          </p>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] gap-4">
             {sucursalesVisibles.map((s) => (
@@ -326,7 +352,7 @@ export default function SucursalesPage() {
                       <p className="font-semibold leading-tight">{limpiarNombre(s.nombre)}</p>
                       <span className={`inline-flex items-center gap-1.5 text-xs ${s.activa ? 'text-success' : 'text-danger'}`}>
                         <span className={`size-1.5 rounded-full ${s.activa ? 'bg-success' : 'bg-danger'}`} />
-                        {s.activa ? 'Activa' : 'Inactiva'}
+                        {s.activa ? 'Activa' : 'Archivada'}
                       </span>
                     </div>
                   </div>
@@ -373,7 +399,7 @@ export default function SucursalesPage() {
                     className="inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-border py-2 text-xs transition-colors hover:bg-bg"
                   >
                     <Power className="size-3.5" />
-                    {s.activa ? 'Desactivar' : 'Activar'}
+                    {s.activa ? 'Desactivar' : 'Reactivar'}
                   </button>
                 </div>
               </div>
