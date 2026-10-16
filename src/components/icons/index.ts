@@ -56,3 +56,6 @@ export { CircleX } from 'lucide-react'
 
 // Barra superior — notificaciones
 export { Bell } from 'lucide-react'
+
+// Apariencia
+export { Moon, Sun } from 'lucide-react'

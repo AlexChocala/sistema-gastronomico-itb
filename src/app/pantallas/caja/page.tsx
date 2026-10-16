@@ -189,7 +189,7 @@ function ModalProductoCaja({
       onClick={(evento) => {
         if (evento.target === evento.currentTarget) dialogo.current?.close()
       }}
-      className="m-auto w-full max-w-md rounded-3xl bg-surface p-0 text-text shadow-xl backdrop:bg-text/50"
+      className="m-auto w-full max-w-md rounded-3xl bg-surface p-0 text-text shadow-xl backdrop:bg-overlay/50"
     >
       <div className="flex max-h-[85dvh] flex-col">
         <div className="flex items-start justify-between gap-3 p-5 pb-3">

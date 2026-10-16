@@ -25,11 +25,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Usuarios y Configuración son solo para admin; las APIs también lo validan. Se compara
-  // por segmento completo: un startsWith('/configuracion') también atraparía
-  // '/configuracion-inicial', que tiene su propia lógica para no-admin.
+  // Usuarios es solo para admin. Configuración permite a todos elegir su apariencia;
+  // la página y las APIs reservan los datos del negocio al administrador.
   const pathname = request.nextUrl.pathname
-  const soloAdmin = ['/usuarios', '/configuracion'].some((ruta) => pathname === ruta || pathname.startsWith(ruta + '/'))
+  const soloAdmin = ['/usuarios'].some((ruta) => pathname === ruta || pathname.startsWith(ruta + '/'))
   if (soloAdmin && token.rol !== 'admin') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }

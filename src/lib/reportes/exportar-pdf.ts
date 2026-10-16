@@ -27,6 +27,7 @@ const GRIS: [number, number, number] = [82, 82, 91]
 export async function exportarPdf({ negocio, pestana, filas, resumen, periodo, sucursal, imagenGrafico, nombreArchivo }: OpcionesPdf) {
   const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
   const acento = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+  const textoSobreAcento = getComputedStyle(document.documentElement).getPropertyValue('--on-accent').trim()
 
   const doc = new jsPDF({ orientation: pestana.columnas.length > 6 ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' })
   const anchoUtil = doc.internal.pageSize.getWidth() - MARGEN * 2
@@ -89,7 +90,7 @@ export async function exportarPdf({ negocio, pestana, filas, resumen, periodo, s
     head: [pestana.columnas.map((columna) => columna.titulo)],
     body: filas.map((fila) => fila.map((valor, i) => formatear(valor, pestana.columnas[i].formato))),
     styles: { fontSize: 9 },
-    headStyles: { fillColor: acento },
+    headStyles: { fillColor: acento, textColor: textoSobreAcento },
     // Números a la derecha, también en el encabezado.
     didParseCell: ({ cell, column }) => {
       cell.styles.halign = pestana.columnas[column.index].formato === 'texto' ? 'left' : 'right'

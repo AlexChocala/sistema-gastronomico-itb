@@ -5,10 +5,11 @@
 
 import {
   ArcElement, BarElement, CategoryScale, Chart as ChartJS, Legend, LinearScale, LineElement, PointElement, Tooltip,
-  type TooltipItem,
+  type Plugin, type TooltipItem,
 } from 'chart.js'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import { formatear, type Formato, type TipoGrafico } from '@/lib/reportes/pestanas'
+import { useTemaAplicado } from '@/components/tema/ProveedorTema'
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, Legend, LinearScale, LineElement, PointElement, Tooltip)
 
@@ -17,6 +18,19 @@ function token(nombre: string) {
   if (typeof document === 'undefined') return ''
   return getComputedStyle(document.documentElement).getPropertyValue(nombre).trim()
 }
+
+// El PNG exportado conserva el fondo: las etiquetas claras del modo oscuro no se
+// pierden al colocarlo sobre el papel blanco del PDF.
+const fondoDeTema: Plugin = {
+  id: 'fondo-del-tema',
+  beforeDraw({ ctx, width, height }) {
+    ctx.save()
+    ctx.fillStyle = token('--surface')
+    ctx.fillRect(0, 0, width, height)
+    ctx.restore()
+  },
+}
+const plugins = [fondoDeTema]
 
 interface GraficoReporteProps {
   tipo: Exclude<TipoGrafico, 'mapa'>
@@ -27,6 +41,7 @@ interface GraficoReporteProps {
 }
 
 export function GraficoReporte({ tipo, etiquetas, valores, nombreSerie, formato }: GraficoReporteProps) {
+  useTemaAplicado()
   const acento = token('--accent')
   const textoSuave = token('--text-muted')
   const borde = token('--border')
@@ -37,6 +52,7 @@ export function GraficoReporte({ tipo, etiquetas, valores, nombreSerie, formato 
     return (
       <div className="relative mx-auto h-72 w-full max-w-sm">
         <Doughnut
+          plugins={plugins}
           data={{ labels: etiquetas, datasets: [{ label: nombreSerie, data: valores, backgroundColor: colores, borderColor: token('--surface') }] }}
           options={{
             maintainAspectRatio: false,
@@ -61,11 +77,13 @@ export function GraficoReporte({ tipo, etiquetas, valores, nombreSerie, formato 
       {/* Una línea con un solo punto no se ve: en ese caso va una barra. */}
       {tipo === 'linea' && valores.length > 1 ? (
         <Line
+          plugins={plugins}
           data={{ labels: etiquetas, datasets: [{ label: nombreSerie, data: valores, borderColor: acento, backgroundColor: acento, tension: 0.3 }] }}
           options={{ maintainAspectRatio: false, plugins: { legend: leyenda, tooltip }, scales: { x: ejeEtiquetas, y: ejeValores } }}
         />
       ) : (
         <Bar
+          plugins={plugins}
           data={{ labels: etiquetas, datasets: [{ label: nombreSerie, data: valores, backgroundColor: acento, borderRadius: 6, maxBarThickness: 48 }] }}
           options={{
             maintainAspectRatio: false,

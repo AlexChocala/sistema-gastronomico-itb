@@ -674,7 +674,7 @@ export default function UsuariosPage() {
       {mostrarForm && esAdmin && (
         // El scroll va en el fondo y no en el formulario: así la lista de un desplegable
         // puede salir del recuadro sin quedar recortada. `m-auto` centra sin cortar arriba.
-        <div className="fixed inset-0 z-50 flex overflow-y-auto bg-text/40 p-4">
+        <div className="fixed inset-0 z-50 flex overflow-y-auto bg-overlay/40 p-4">
           <form
             onSubmit={handleSubmit}
             role="dialog"
@@ -777,7 +777,7 @@ export default function UsuariosPage() {
       )}
 
       {confirmarRestablecer && esAdmin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-text/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/40 p-4">
           <div
             role="alertdialog"
             aria-modal="true"

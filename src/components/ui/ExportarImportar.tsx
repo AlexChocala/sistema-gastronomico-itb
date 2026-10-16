@@ -148,7 +148,7 @@ export function ExportarImportar({
       </button>
 
       {abierto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-text/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/40 p-4">
           <div role="dialog" aria-modal="true" aria-labelledby="titulo-exportar-importar"
             className="flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col gap-5 overflow-y-auto rounded-3xl bg-surface p-6 shadow-xl">
             <div className="flex items-start justify-between gap-3">

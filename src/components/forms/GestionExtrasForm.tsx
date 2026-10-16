@@ -315,7 +315,7 @@ export function GestionExtrasForm({ idCategoriaInicial }: { idCategoriaInicial: 
       </section>
 
       {mostrarFormulario && categoria && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-text/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/40 p-4">
           <form
             onSubmit={guardar}
             role="dialog"
