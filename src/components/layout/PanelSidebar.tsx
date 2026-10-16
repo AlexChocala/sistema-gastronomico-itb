@@ -63,6 +63,12 @@ const secciones: Seccion[] = [
     ],
     pendientes: [],
   },
+  {
+    titulo: 'Preferencias',
+    roles: ['supervisor', 'empleado'],
+    enlaces: [{ href: '/configuracion', texto: 'Configuración', icono: Settings }],
+    pendientes: [],
+  },
 ]
 
 const pantallas = [

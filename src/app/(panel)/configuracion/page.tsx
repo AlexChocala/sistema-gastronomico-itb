@@ -1,6 +1,5 @@
-// Configuración del negocio: nombre, descripción, logo, redes sociales y datos para
-// transferencias. Solo admin
-// (el proxy ya redirige a los demás; acá se vuelve a controlar con el rol de la base).
+// Apariencia personal para todos los roles. Los datos del negocio se consultan y
+// muestran exclusivamente al administrador, usando su rol actual de la base.
 
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
@@ -8,6 +7,7 @@ import { authOptions } from '@/lib/auth/auth'
 import { prisma } from '@/lib/db/prisma'
 import { urlLogoNegocio } from '@/lib/negocio/negocio'
 import { ConfiguracionNegocioForm } from '@/components/forms/ConfiguracionNegocioForm'
+import { ConfiguracionApariencia } from '@/components/tema/ConfiguracionApariencia'
 
 export default async function ConfiguracionPage() {
   const sesion = await getServerSession(authOptions)
@@ -17,26 +17,29 @@ export default async function ConfiguracionPage() {
     where: { idUsuario: sesion.user.idUsuario },
     select: { rol: { select: { nombre: true } } },
   })
-  if (usuario?.rol.nombre !== 'admin') redirect('/dashboard')
+  if (!usuario) redirect('/acceso/login')
+  const esAdmin = usuario.rol.nombre === 'admin'
 
-  const negocio = await prisma.negocio.findUnique({
+  const negocio = esAdmin ? await prisma.negocio.findUnique({
     where: { idNegocio: 1 },
     select: {
       nombre: true, descripcion: true, logoPath: true, instagram: true, tiktok: true, facebook: true,
       transferenciaAlias: true, transferenciaCuit: true, transferenciaTitular: true,
     },
-  })
+  }) : null
   // El layout del panel ya exige el sistema configurado; esto cubre una carrera improbable.
-  if (!negocio) redirect('/configuracion-inicial')
+  if (esAdmin && !negocio) redirect('/configuracion-inicial')
 
   return (
     <main className="flex flex-col gap-6 p-6" lang="es">
       <header>
         <h1 className="page-title">Configuración</h1>
-        <p className="mt-1 text-sm text-muted">Los datos de tu restaurante que ven tu equipo y tus clientes.</p>
+        <p className="mt-1 text-sm text-muted">{esAdmin ? 'La apariencia del sistema y los datos de tu restaurante.' : 'Personalizá la apariencia del sistema.'}</p>
       </header>
 
-      <ConfiguracionNegocioForm
+      <ConfiguracionApariencia />
+
+      {esAdmin && negocio && <ConfiguracionNegocioForm
         inicial={{
           nombre: negocio.nombre,
           descripcion: negocio.descripcion ?? '',
@@ -49,7 +52,7 @@ export default async function ConfiguracionPage() {
         }}
         logoUrl={urlLogoNegocio(negocio.logoPath)}
         tieneLogo={negocio.logoPath !== null}
-      />
+      />}
     </main>
   )
 }

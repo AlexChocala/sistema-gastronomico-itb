@@ -99,7 +99,7 @@ export function ModalProducto({ producto, categoria, onAgregar, onCerrar }: {
       onClick={(evento) => {
         if (evento.target === evento.currentTarget) cerrar()
       }}
-      className="mx-0 mt-auto mb-0 w-full max-w-full overflow-hidden rounded-t-3xl bg-surface p-0 text-text shadow-xl transition-transform duration-200 ease-out backdrop:bg-text/50 starting:translate-y-full motion-reduce:transition-none sm:m-auto sm:max-w-3xl sm:rounded-3xl sm:transition-[opacity,translate] sm:starting:translate-y-4 sm:starting:opacity-0"
+      className="mx-0 mt-auto mb-0 w-full max-w-full overflow-hidden rounded-t-3xl bg-surface p-0 text-text shadow-xl transition-transform duration-200 ease-out backdrop:bg-overlay/50 starting:translate-y-full motion-reduce:transition-none sm:m-auto sm:max-w-3xl sm:rounded-3xl sm:transition-[opacity,translate] sm:starting:translate-y-4 sm:starting:opacity-0"
     >
       <div className="relative flex max-h-[90dvh] flex-col sm:max-h-[85dvh]">
         <button

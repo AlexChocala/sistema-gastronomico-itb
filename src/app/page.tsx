@@ -14,6 +14,7 @@ import { AvatarNegocio, ChipsEntrega, RedesNegocio } from '@/components/carta/co
 import { obtenerNegocioPublico } from '@/lib/negocio/negocio'
 import { listarSucursalesPublicas, type SucursalPublica } from '@/lib/sucursales/sucursales-publicas'
 import { linkWhatsapp } from '@/lib/sucursales/sucursales-validacion'
+import { BotonTema } from '@/components/tema/BotonTema'
 
 export async function generateMetadata(): Promise<Metadata> {
   await connection()
@@ -48,6 +49,7 @@ export default async function Home() {
   return (
     <div className="flex flex-1 justify-center bg-bg px-4 py-12 text-text">
       <main className="flex w-full max-w-md flex-col items-center gap-6">
+        <div className="flex w-full justify-end"><BotonTema /></div>
         <AvatarNegocio nombre={negocio.nombre} logoUrl={negocio.logoUrl} />
 
         <div className="flex flex-col items-center gap-1 text-center">

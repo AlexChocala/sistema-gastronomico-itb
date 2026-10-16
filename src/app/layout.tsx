@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "../styles/globals.css";
+import { ProveedorTema } from "@/components/tema/ProveedorTema";
+import { SCRIPT_TEMA_INICIAL } from "@/lib/tema/tema";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -17,8 +19,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="es"
       className={`${inter.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <head>
+        <script id="tema-inicial" dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA_INICIAL }} />
+      </head>
+      <body className="min-h-full flex flex-col"><ProveedorTema>{children}</ProveedorTema></body>
     </html>
   );
 }

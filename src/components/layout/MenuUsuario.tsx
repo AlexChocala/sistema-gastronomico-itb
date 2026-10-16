@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRef, useState } from 'react'
 import { CerrarSesionButton } from '@/components/layout/CerrarSesionButton'
-import { User } from '@/components/icons'
+import { Settings, User } from '@/components/icons'
 import { etiquetaRol } from '@/lib/usuarios/roles'
 import { useCerrarAlSalir } from '@/lib/utils/useCerrarAlSalir'
 
@@ -53,6 +53,10 @@ export function MenuUsuario({ nombre, rol, fotoUrl }: { nombre: string; rol: str
           <Link href="/perfil" onClick={() => setAbierto(false)} className={claseOpcion + ' hover:text-text'}>
             <User strokeWidth={1.75} className="size-(--sidebar-icono) shrink-0" />
             Perfil
+          </Link>
+          <Link href="/configuracion" onClick={() => setAbierto(false)} className={claseOpcion + ' hover:text-text'}>
+            <Settings strokeWidth={1.75} className="size-(--sidebar-icono) shrink-0" />
+            Configuración
           </Link>
           <CerrarSesionButton className={claseOpcion + ' hover:text-danger'} />
         </div>

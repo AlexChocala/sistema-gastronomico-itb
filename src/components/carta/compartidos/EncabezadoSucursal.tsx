@@ -8,6 +8,7 @@ import type { NegocioPublico } from '@/lib/negocio/negocio'
 import type { SucursalPublica } from '@/lib/sucursales/sucursales-publicas'
 import { linkGoogleMaps, linkWhatsapp } from '@/lib/sucursales/sucursales-validacion'
 import { AvatarNegocio, ChipsEntrega, RedesNegocio } from './IdentidadNegocio'
+import { BotonTema } from '@/components/tema/BotonTema'
 
 const claseFoco = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
 
@@ -20,13 +21,16 @@ export function EncabezadoSucursal({ negocio, sucursal, variasSucursales }: {
     <header className="bg-surface shadow-sm">
       <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pt-4 pb-6">
         {/* Siempre hay un "volver" a la portada del negocio, tenga una sucursal o varias. */}
-        <Link
-          href="/"
-          className={`-ml-2 inline-flex min-h-11 items-center gap-1 self-start rounded-full px-2 text-sm text-muted hover:text-accent ${claseFoco}`}
-        >
-          <ChevronLeft className="size-4" aria-hidden="true" />
-          {variasSucursales ? 'Cambiar de local' : 'Inicio'}
-        </Link>
+        <div className="flex items-center justify-between gap-3">
+          <Link
+            href="/"
+            className={`-ml-2 inline-flex min-h-11 items-center gap-1 self-start rounded-full px-2 text-sm text-muted hover:text-accent ${claseFoco}`}
+          >
+            <ChevronLeft className="size-4" aria-hidden="true" />
+            {variasSucursales ? 'Cambiar de local' : 'Inicio'}
+          </Link>
+          <BotonTema />
+        </div>
 
         <div className="flex items-center gap-4">
           {/* El logo también lleva a la portada, como en la mayoría de los sitios. */}
@@ -111,10 +115,11 @@ export function EncabezadoPaso({ titulo, volverA, textoVolver, sucursal }: {
         >
           <ArrowLeft className="size-5" aria-hidden="true" />
         </Link>
-        <div className="flex min-w-0 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <h1 className="text-lg leading-tight font-semibold">{titulo}</h1>
           <p className="truncate text-xs text-muted">{sucursal}</p>
         </div>
+        <BotonTema />
       </div>
     </header>
   )
