@@ -137,6 +137,7 @@ export const PESTANAS: Pestana[] = [
       { titulo: 'Vendido', formato: 'texto' },
       { titulo: 'Productos', formato: 'numero' },
       { titulo: 'Subtotal', formato: 'precio' },
+      { titulo: 'Recargo delivery', formato: 'precio' },
       { titulo: 'Total', formato: 'precio' },
     ],
     filas: (datos) =>
@@ -144,7 +145,7 @@ export const PESTANAS: Pestana[] = [
         p.idPedido, fechaYHora(p.fecha), p.sucursal, p.cliente,
         p.registradoPor ?? (p.origen === 'online' ? 'Pedido online' : 'Sin registro'),
         NOMBRES_ORIGEN[p.origen], NOMBRES_ENTREGA[p.tipoEntrega], NOMBRES_METODO_PAGO[p.metodoPago],
-        NOMBRES_ESTADO_PAGO[p.estadoPago], p.vendido ? 'Sí' : 'No', p.cantidadProductos, p.subtotal, p.total,
+        NOMBRES_ESTADO_PAGO[p.estadoPago], p.vendido ? 'Sí' : 'No', p.cantidadProductos, p.subtotal, p.recargoDelivery, p.total,
       ]),
     grafico: null,
   },

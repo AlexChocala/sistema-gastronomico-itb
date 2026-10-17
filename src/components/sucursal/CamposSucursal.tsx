@@ -10,7 +10,7 @@ import { useState } from 'react'
 import { Bike, Check, ExternalLink, MapPin, ShoppingBag, Store, type LucideIcon } from '@/components/icons'
 import { CampoConSugerencias } from '@/components/ui/CampoConSugerencias'
 import { Input } from '@/components/ui/Input'
-import { MAX_RADIO_DELIVERY_KM, MIN_RADIO_DELIVERY_KM } from '@/lib/sucursales/radio-delivery'
+import { MAX_RADIO_DELIVERY_KM, MIN_RADIO_DELIVERY_KM, MAX_RECARGO_DELIVERY } from '@/lib/sucursales/radio-delivery'
 import { buscarDirecciones, buscarLocalidades } from '@/lib/sucursales/georef'
 import { MENSAJE_LINK_MAPS, MENSAJE_WHATSAPP, linkMapsValido } from '@/lib/sucursales/sucursales-validacion'
 
@@ -29,6 +29,7 @@ export interface ValoresSucursal {
   idLocalidad: string
   ofreceRetiro: boolean
   ofreceDelivery: boolean
+  recargoFueraRadio: string
   radioDeliveryKm: string
   latitud: string
   longitud: string
@@ -49,6 +50,7 @@ export const valoresSucursalVacios: ValoresSucursal = {
   ofreceRetiro: true,
   ofreceDelivery: true,
   radioDeliveryKm: '5',
+  recargoFueraRadio: '0',
   latitud: '',
   longitud: '',
 }
@@ -356,11 +358,17 @@ export function CamposSucursal({
         {valores.ofreceDelivery && (
           <div className="flex flex-col gap-3">
             <Input
-              id={id('radioDeliveryKm')} name="radioDeliveryKm" label="Radio de delivery (km)"
+              id={id('radioDeliveryKm')} name="radioDeliveryKm" label="Radio sin recargo (km)"
               type="number" min={MIN_RADIO_DELIVERY_KM} max={MAX_RADIO_DELIVERY_KM} step="0.1"
               value={valores.radioDeliveryKm} onChange={cambiar} required className={claseInput}
             />
-            <p className={claseAyuda}>Distancia máxima en línea recta desde este local. Solo se aceptan direcciones dentro del radio.</p>
+            <p className={claseAyuda}>Dentro del radio no hay adicional. Fuera se cobra una sola vez el recargo fijo, sin importar los kilómetros excedidos. La distancia se mide en línea recta.</p>
+            <Input
+              id={id('recargoFueraRadio')} name="recargoFueraRadio" label="Recargo fijo fuera del radio ($)"
+              type="number" min="0" max={MAX_RECARGO_DELIVERY} step="1"
+              value={valores.recargoFueraRadio} onChange={cambiar} required className={claseInput}
+            />
+            <p className={claseAyuda}>Importe en pesos, sin centavos. Usá 0 si querés permitir envíos sin adicional también fuera del radio.</p>
             <details>
               <summary className="cursor-pointer text-sm text-muted">Ubicación manual del local (opcional)</summary>
               <p className={claseAyuda}>Dejá ambos campos vacíos para ubicar la dirección automáticamente. Si no se encuentra, copiá las coordenadas del punto exacto del local en Google Maps. Al cambiar la dirección se vuelve a calcular la ubicación.</p>

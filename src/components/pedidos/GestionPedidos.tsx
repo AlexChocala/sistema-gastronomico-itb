@@ -19,6 +19,7 @@ import {
   Banknote, Bike, CheckCheck, ChefHat, CircleCheck, Landmark, RotateCcw, Search, ShoppingBag,
   type LucideIcon,
 } from '@/components/icons'
+import { CotizadorDelivery, useCotizacionDelivery } from '@/components/pedidos/CotizadorDelivery'
 import { CamposDelivery, type ValoresDelivery } from '@/components/pedidos/CamposDelivery'
 import { DatosEntrega } from '@/components/pedidos/DatosEntrega'
 import { EstadoConexion } from '@/components/pedidos/EstadoConexion'
@@ -203,8 +204,10 @@ function FormularioDelivery({
     idLocalidad: '',
     referencias: '',
   })
-  const errores = erroresDatosDelivery(valores, zonas.length > 0)
-  const valido = Object.keys(errores).length === 0
+  const cotizador = useCotizacionDelivery(valores.direccion, valores.idLocalidad)
+  const errores = erroresDatosDelivery(valores)
+  const cambiaPago = cotizador.cotizacion !== null && pedido.estadoPago === 'pagado' && cotizador.cotizacion.recargoDelivery !== pedido.recargoDelivery
+  const valido = Object.keys(errores).length === 0 && cotizador.cotizacion !== null && !cambiaPago
 
   return (
     <form
@@ -213,6 +216,7 @@ function FormularioDelivery({
         evento.preventDefault()
         if (!valido || guardando) return
         onGuardar({
+          recargoDeliveryAceptado: cotizador.cotizacion!.recargoDelivery,
           telefono: valores.telefono,
           direccion: valores.direccion,
           idLocalidad: valores.idLocalidad ? Number(valores.idLocalidad) : null,
@@ -230,6 +234,9 @@ function FormularioDelivery({
         zonas={zonas}
         onCambiar={(campo, valor) => setValores((previos) => ({ ...previos, [campo]: valor }))}
       />
+      <CotizadorDelivery cotizador={cotizador} disabled={guardando || !valores.direccion.trim()} />
+      {cotizador.cotizacion && <p className="text-sm">Nuevo total: {formatoPrecio.format(pedido.total - pedido.recargoDelivery + cotizador.cotizacion.recargoDelivery)}</p>}
+      {cambiaPago && <p role="alert" className="text-sm text-danger">Este pedido ya está pagado. No se puede modificar el importe cobrado desde el cambio de entrega.</p>}
       <div className="grid grid-cols-2 gap-2 text-sm">
         <button
           type="button"
@@ -247,7 +254,7 @@ function FormularioDelivery({
           {guardando ? 'Guardando…' : 'Guardar'}
         </button>
       </div>
-      {!valido && <p className="-mt-1 text-center text-xs text-muted">Completá celular y dirección para guardar.</p>}
+      {!valido && !cambiaPago && <p className="-mt-1 text-center text-xs text-muted">Completá los datos y calculá el envío para guardar.</p>}
     </form>
   )
 }
@@ -375,6 +382,7 @@ function TarjetaPedido({
           </p>
         )}
 
+        {pedido.recargoDelivery > 0 && <p className="text-xs text-muted">Incluye recargo de envío: {formatoPrecio.format(pedido.recargoDelivery)}</p>}
         {!soloLectura && accion && pista && <p className="-mt-1 text-center text-xs text-muted">{pista}</p>}
 
         {soloLectura ? null : editandoEntrega ? (
@@ -476,6 +484,7 @@ export function GestionPedidos({ soloLectura }: { soloLectura: boolean }) {
       telefono: pedido.telefono ?? '',
       direccion: pedido.direccion ?? '',
       idLocalidad: pedido.idLocalidad,
+      recargoDeliveryAceptado: pedido.recargoDelivery,
       referencias: pedido.referencias ?? '',
     }
     void correr(pedido.idPedido, () => cambiarTipoEntrega(pedido.idPedido, 'retiro'), {

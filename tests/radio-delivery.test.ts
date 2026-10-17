@@ -2,12 +2,12 @@ import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import type { PrismaClient } from '@prisma/client'
 import {
-  coordenadasValidas, dentroDelRadio, distanciaEnKm, radioDeliveryValido, separarDireccion,
+  cotizarDistancia, recargoDeliveryValido, coordenadasValidas, dentroDelRadio, distanciaEnKm, radioDeliveryValido, separarDireccion,
 } from '../src/lib/sucursales/radio-delivery'
 import { geocodificarDireccion } from '../src/lib/sucursales/geocodificacion'
 import { prepararCoberturaDelivery, verificarCoberturaActual } from '../src/lib/sucursales/cobertura-delivery'
 import { prepararSucursal } from '../src/lib/sucursales/sucursales-administracion'
-import { ErrorSucursal } from '../src/lib/sucursales/sucursales-validacion'
+import { validarSucursal, ErrorSucursal } from '../src/lib/sucursales/sucursales-validacion'
 import { validarPedidoCaja, validarPedidoOnline } from '../src/lib/pedidos/pedidos-validacion'
 import { crearControladorPedidosOnline } from '../src/lib/pedidos/pedidos-online'
 import { crearControladorPedidosInternos } from '../src/lib/pedidos/pedidos-internos'
@@ -21,7 +21,7 @@ const lejos = { latitud: -37.9994, longitud: -57.5469 }
 const contexto = { localidad: 'Avellaneda', provincia: 'Buenos Aires' }
 const sucursalBase = {
   idSucursal: 1, nombre: 'Avellaneda', slug: 'avellaneda', activa: true, ofreceDelivery: true, ofreceRetiro: true,
-  direccion: 'Olavarría 65', idLocalidad: 1, radioDeliveryKm: 5, ...origen,
+  direccion: 'Olavarría 65', idLocalidad: 1, radioDeliveryKm: 5, recargoFueraRadio: 2500 as number | null, ...origen,
   whatsapp: '1123456789', localidadesDelivery: [] as { idLocalidad: number }[],
 }
 function direccionGeoref(punto = cerca, calle = 'OLAVARRIA', id = 'calle-1') {
@@ -102,11 +102,11 @@ test('Georef: proveedor caído devuelve 503 y no una ubicación supuesta', async
 
 function escenario() {
   const sucursal = structuredClone(sucursalBase)
-  const estado = { enTransaccion: false, clientes: 0, pedidos: 0, cambios: 0, cambiarRadio: false }
+  const estado = { guardados: [] as { subtotal: number; total: number; recargoDelivery: number }[], cambiarTarifa: false, rol: 'empleado', enTransaccion: false, clientes: 0, pedidos: 0, cambios: 0, cambiarRadio: false }
   const fila = {
     idPedido: 20, idSucursal: 1, idCliente: 1, idTipoEntrega: 1, fecha: new Date(), origenPedido: 'mostrador',
     estadoPedido: 'recibido', estadoPago: 'pagado', metodoPago: 'efectivo', direccion: null,
-    referencias: null, aclaracion: null, total: 1000, idLocalidad: null,
+    referencias: null, aclaracion: null, subtotal: 1000, recargoDelivery: 0, total: 1000, idLocalidad: null,
     cliente: { nombre: 'Juan', apellido: null, telefono: '1123456789' }, tipoEntrega: { nombre: 'retiro' },
     localidad: null, detalles: [],
   }
@@ -114,7 +114,7 @@ function escenario() {
     sucursal: { findUnique: async () => structuredClone(sucursal) },
     localidad: { findUnique: async () => ({ idLocalidad: 1, nombre: 'Avellaneda', provincia: { nombre: 'Buenos Aires' } }) },
     sucursalLocalidad: { findMany: async () => sucursal.localidadesDelivery },
-    usuario: { findUnique: async () => ({ activo: true, debeCambiarContrasena: false, rol: { nombre: 'empleado' } }) },
+    usuario: { findUnique: async () => ({ activo: true, debeCambiarContrasena: false, rol: { nombre: estado.rol } }) },
     negocio: { findUnique: async () => null },
     tipoEntrega: { findUnique: async () => ({ idTipoEntrega: 2 }) },
     producto: { findMany: async () => [{ idProducto: 1, nombre: 'Hamburguesa', precio: 1000, activo: true, categoria: { activa: true }, sucursales: [{ disponible: true }], variaciones: [], extras: [] }] },
@@ -123,20 +123,30 @@ function escenario() {
       update: async () => { estado.cambios++; return fila.cliente },
     },
     pedido: {
-      create: async () => { estado.pedidos++; return fila },
+      create: async ({ data }: { data: { subtotal: number; total: number; recargoDelivery: number } }) => {
+        estado.pedidos++; estado.guardados.push(data)
+        return { ...fila, subtotal: data.subtotal, total: data.total, recargoDelivery: data.recargoDelivery }
+      },
       findFirst: async () => fila,
-      updateMany: async () => { estado.cambios++; return { count: 1 } },
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+        estado.cambios++
+        for (const campo of ['total', 'recargoDelivery', 'idTipoEntrega', 'direccion', 'referencias', 'idLocalidad', 'estadoPago', 'estadoPedido']) {
+          if (campo in data) Object.assign(fila, { [campo]: data[campo] })
+        }
+        return { count: 1 }
+      },
       findUniqueOrThrow: async () => fila,
     },
     $transaction: async <T>(operacion: (tx: PrismaClient) => Promise<T>) => {
       estado.enTransaccion = true
       if (estado.cambiarRadio) sucursal.radioDeliveryKm = 1
+      if (estado.cambiarTarifa) sucursal.recargoFueraRadio = 9000
       try { return await operacion(dbDoble as unknown as PrismaClient) } finally { estado.enTransaccion = false }
     },
   }
   const db = dbDoble as unknown as PrismaClient
   const interno = crearControladorPedidosInternos(db, async () => ({ user: { idUsuario: 2 } }), async () => 1)
-  return { db, sucursal, estado, interno, online: crearControladorPedidosOnline(db) }
+  return { db, fila, sucursal, estado, interno, online: crearControladorPedidosOnline(db) }
 }
 let ip = 0
 function request(cuerpo: unknown, method = 'POST') {
@@ -146,20 +156,20 @@ function request(cuerpo: unknown, method = 'POST') {
 }
 const cuerpoDelivery = {
   cliente: { nombre: 'Juan', telefono: '1123456789' }, tipoEntrega: 'delivery', metodoPago: 'efectivo',
-  direccion: 'Olavarría 100, Avellaneda, Buenos Aires', items: [{ idProducto: 1, cantidad: 1 }],
+  direccion: 'Olavarría 100, Avellaneda, Buenos Aires', recargoDeliveryAceptado: 0, items: [{ idProducto: 1, cantidad: 1 }],
 }
 for (const canal of ['online', 'caja', 'cambiarEntrega'] as const) {
   async function enviar(e: ReturnType<typeof escenario>) {
     if (canal === 'online') return e.online.crear(request({ ...cuerpoDelivery, slugSucursal: 'avellaneda' }))
     if (canal === 'caja') return e.interno.crearCaja(request(cuerpoDelivery))
-    return e.interno.actualizar(request({ accion: 'cambiarTipoEntrega', tipoEntrega: 'delivery', direccion: cuerpoDelivery.direccion, telefono: cuerpoDelivery.cliente.telefono }, 'PATCH'), '20')
+    return e.interno.actualizar(request({ accion: 'cambiarTipoEntrega', tipoEntrega: 'delivery', direccion: cuerpoDelivery.direccion, telefono: cuerpoDelivery.cliente.telefono, recargoDeliveryAceptado: 0 }, 'PATCH'), '20')
   }
-  test(`${canal}: fuera de radio rechaza sin crear cliente, pedido ni cambiar entrega`, async () => {
+  test(`${canal}: fuera de radio exige aceptar el recargo antes de guardar`, async () => {
     const e = escenario()
     mockGeoref([direccionGeoref(lejos)], () => assert.equal(e.estado.enTransaccion, false))
     const respuesta = await enviar(e)
-    assert.equal(respuesta.status, 400)
-    assert.match((await respuesta.json()).error, /fuera del radio/)
+    assert.equal(respuesta.status, 409)
+    assert.match((await respuesta.json()).error, /costo del envío cambió/)
     assert.equal(e.estado.clientes + e.estado.pedidos + e.estado.cambios, 0)
   })
   test(`${canal}: dirección cercana se acepta y Georef se consulta fuera de la transacción`, async () => {
@@ -190,17 +200,19 @@ test('no se aceptan coordenadas ni radio enviados por el comprador para evitar l
   assert.throws(() => validarPedidoCaja({ ...cuerpoDelivery, latitud: 0, longitud: 0, radioDeliveryKm: 100 }))
   assert.throws(() => validarPedidoOnline({ ...cuerpoDelivery, slugSucursal: 'avellaneda', latitud: 0, longitud: 0, radioDeliveryKm: 100 }))
 })
-test('sucursal pendiente de configurar y localidad fuera de zonas se rechazan antes de la red', async () => {
+test('sucursal sin cobertura se rechaza; las localidades guardadas no limitan otras direcciones', async () => {
   const e = escenario()
-  globalThis.fetch = async () => { assert.fail('No debe consultar Georef') }
   e.sucursal.radioDeliveryKm = 0
+  globalThis.fetch = async () => { assert.fail('No debe consultar Georef') }
   await assert.rejects(prepararCoberturaDelivery(e.db, { idSucursal: 1 }, cuerpoDelivery.direccion, null), esError(409))
   e.sucursal.radioDeliveryKm = 5
   e.sucursal.localidadesDelivery = [{ idLocalidad: 2 }]
-  await assert.rejects(prepararCoberturaDelivery(e.db, { idSucursal: 1 }, cuerpoDelivery.direccion, 1), esError(400))
+  mockGeoref()
+  assert.equal((await prepararCoberturaDelivery(e.db, { idSucursal: 1 }, 'Olavarría 100', 1)).cotizacion.recargoDelivery, 0)
 })
+
 test('la comparación de cobertura detecta el cambio de ubicación', () => {
-  assert.throws(() => verificarCoberturaActual({ ...sucursalBase, latitud: 0 }, { sucursal: sucursalBase, distanciaKm: 1 }), esError(409))
+  assert.throws(() => verificarCoberturaActual({ ...sucursalBase, latitud: 0 }, { sucursal: sucursalBase, distanciaKm: 1, cotizacion: cotizarDistancia(1, 5, 2500) }), esError(409))
 })
 test('editar radio conserva coordenadas; cambiar dirección geocodifica nuevamente', async () => {
   const e = escenario()
@@ -281,4 +293,115 @@ test('la provincia CABA se consulta con su identificador oficial y se verifica e
       : Response.json({ total: 1, direcciones: [{ ...direccionGeoref(), calle: { id: 'santafe', nombre: 'AV SANTA FE' }, altura: { valor: 2000 }, provincia: { id: '02' }, localidad: { nombre: 'Recoleta' } }] })
   }
   assert.deepEqual(await geocodificarDireccion('Avenida Santa Fe 2000', { localidad: 'Recoleta', provincia: 'CABA' }), cerca)
+})
+
+test('tarifa fija: frontera incluida, distancias lejanas y pesos enteros válidos', () => {
+  for (const importe of [0, 1, 2500, 10000000]) assert.equal(recargoDeliveryValido(importe), true)
+  for (const importe of [-1, 0.5, 10000001, Infinity, NaN, null, '2500']) assert.equal(recargoDeliveryValido(importe), false)
+  assert.equal(cotizarDistancia(5, 5, 2500).recargoDelivery, 0)
+  assert.equal(cotizarDistancia(5.001, 5, 2500).recargoDelivery, 2500)
+  assert.equal(cotizarDistancia(380, 5, 2500).recargoDelivery, 2500)
+  assert.equal(cotizarDistancia(380, 5, 0).recargoDelivery, 0)
+  assert.throws(() => cotizarDistancia(380, 5, null))
+  assert.equal(validarSucursal({ recargoFueraRadio: 2500 }, true).recargoFueraRadio, 2500)
+  assert.throws(() => validarSucursal({ recargoFueraRadio: -1 }, true))
+})
+
+for (const canal of ['online', 'caja'] as const) {
+  test(canal + ': pedido lejano guarda subtotal, recargo fijo y total sin multiplicarlo por km', async () => {
+    const e = escenario()
+    mockGeoref([direccionGeoref(lejos)])
+    const cuerpo = { ...cuerpoDelivery, recargoDeliveryAceptado: 2500 }
+    const respuesta = canal === 'online' ? await e.online.crear(request({ ...cuerpo, slugSucursal: 'avellaneda' })) : await e.interno.crearCaja(request(cuerpo))
+    assert.equal(respuesta.status, 201, JSON.stringify(await respuesta.clone().json()))
+    const { pedido } = await respuesta.json()
+    assert.equal(pedido.subtotal, 1000)
+    assert.equal(pedido.recargoDelivery, 2500)
+    assert.equal(pedido.total, 3500)
+    assert.equal(e.estado.guardados[0].total, 3500)
+    assert.equal(e.estado.guardados[0].subtotal, 1000)
+    e.sucursal.recargoFueraRadio = 9000
+    assert.equal(e.estado.guardados[0].recargoDelivery, 2500)
+  })
+  test(canal + ': cambio concurrente de tarifa impide crear pedidos con otro importe', async () => {
+    const e = escenario()
+    mockGeoref([direccionGeoref(lejos)])
+    e.estado.cambiarTarifa = true
+    const cuerpo = { ...cuerpoDelivery, recargoDeliveryAceptado: 2500, slugSucursal: 'avellaneda' }
+    const respuesta = canal === 'online' ? await e.online.crear(request(cuerpo)) : await e.interno.crearCaja(request({ ...cuerpoDelivery, recargoDeliveryAceptado: 2500 }))
+    assert.equal(respuesta.status, 409)
+    assert.equal(e.estado.clientes + e.estado.pedidos + e.estado.cambios, 0)
+  })
+}
+
+test('cotizaciones pública e interna no escriben y no exponen datos del cliente ni coordenadas del local', async () => {
+  const e = escenario()
+  mockGeoref([direccionGeoref(lejos)])
+  for (const respuesta of [
+    await e.online.cotizarDelivery(request({ direccion: cuerpoDelivery.direccion, slugSucursal: 'avellaneda' })),
+    await e.interno.cotizarDelivery(request({ direccion: cuerpoDelivery.direccion })),
+  ]) {
+    assert.equal(respuesta.status, 200)
+    const datos = await respuesta.json()
+    assert.deepEqual(Object.keys(datos), ['cotizacion'])
+    assert.equal(datos.cotizacion.recargoDelivery, 2500)
+    assert.equal(datos.cotizacion.fueraDelRadio, true)
+    assert.equal('sucursal' in datos.cotizacion, false)
+  }
+  assert.equal(e.estado.clientes + e.estado.pedidos + e.estado.cambios, 0)
+})
+
+test('cotizar conserva permisos: sin sesión, admin y solicitud de otro origen rechazados', async () => {
+  const e = escenario()
+  globalThis.fetch = async () => { assert.fail('No debe consultar Georef') }
+  const sinSesion = crearControladorPedidosInternos(e.db, async () => null, async () => 1)
+  assert.equal((await sinSesion.cotizarDelivery(request({ direccion: cuerpoDelivery.direccion }))).status, 401)
+  e.estado.rol = 'admin'
+  assert.equal((await e.interno.cotizarDelivery(request({ direccion: cuerpoDelivery.direccion }))).status, 403)
+  assert.equal((await e.online.cotizarDelivery(new Request('http://localhost:3000/api/pedidos/cotizacion-delivery', { method: 'POST', headers: { origin: 'https://otro.test', 'content-type': 'application/json' }, body: '{}' }))).status, 403)
+})
+
+test('delivery exige revisar un recargo y no permite enviar su propio total o tarifa', () => {
+  const { recargoDeliveryAceptado, ...sinCotizar } = cuerpoDelivery
+  void recargoDeliveryAceptado
+  assert.throws(() => validarPedidoCaja(sinCotizar))
+  assert.throws(() => validarPedidoOnline({ ...sinCotizar, slugSucursal: 'avellaneda' }))
+  assert.throws(() => validarPedidoCaja({ ...cuerpoDelivery, recargoFueraRadio: 0, total: 1 }))
+})
+
+test('recargo pendiente solo bloquea fuera del radio; tarifa cero permite entregar lejos sin adicional', async () => {
+  const e = escenario()
+  e.sucursal.recargoFueraRadio = null
+  mockGeoref()
+  assert.equal((await prepararCoberturaDelivery(e.db, { idSucursal: 1 }, cuerpoDelivery.direccion, null)).cotizacion.recargoDelivery, 0)
+  mockGeoref([direccionGeoref(lejos)])
+  await assert.rejects(prepararCoberturaDelivery(e.db, { idSucursal: 1 }, cuerpoDelivery.direccion, null), esError(409))
+  e.sucursal.recargoFueraRadio = 0
+  assert.equal((await prepararCoberturaDelivery(e.db, { idSucursal: 1 }, cuerpoDelivery.direccion, null)).cotizacion.recargoDelivery, 0)
+})
+
+test('cambiar entrega suma y quita recargo en pendientes, sin alterar subtotal', async () => {
+  const e = escenario()
+  e.fila.estadoPago = 'pendiente'
+  mockGeoref([direccionGeoref(lejos)])
+  const respuesta = await e.interno.actualizar(request({ accion: 'cambiarTipoEntrega', tipoEntrega: 'delivery', direccion: cuerpoDelivery.direccion, telefono: '1123456789', recargoDeliveryAceptado: 2500 }, 'PATCH'), '20')
+  assert.equal(respuesta.status, 200, JSON.stringify(await respuesta.clone().json()))
+  assert.equal(e.fila.total, 3500)
+  assert.equal(e.fila.subtotal, 1000)
+  e.fila.tipoEntrega.nombre = 'delivery'
+  assert.equal((await e.interno.actualizar(request({ accion: 'cambiarTipoEntrega', tipoEntrega: 'retiro' }, 'PATCH'), '20')).status, 200)
+  assert.equal(e.fila.total, 1000)
+  assert.equal(e.fila.recargoDelivery, 0)
+})
+
+test('un cambio de entrega nunca suma ni quita un recargo de un pedido ya pagado', async () => {
+  const e = escenario()
+  mockGeoref([direccionGeoref(lejos)])
+  const respuesta = await e.interno.actualizar(request({ accion: 'cambiarTipoEntrega', tipoEntrega: 'delivery', direccion: cuerpoDelivery.direccion, telefono: '1123456789', recargoDeliveryAceptado: 2500 }, 'PATCH'), '20')
+  assert.equal(respuesta.status, 409)
+  assert.match((await respuesta.json()).error, /ya está pagado/)
+  assert.equal(e.estado.cambios, 0)
+  e.fila.tipoEntrega.nombre = 'delivery'; e.fila.recargoDelivery = 2500; e.fila.total = 3500
+  assert.equal((await e.interno.actualizar(request({ accion: 'cambiarTipoEntrega', tipoEntrega: 'retiro' }, 'PATCH'), '20')).status, 409)
+  assert.equal(e.fila.total, 3500)
 })

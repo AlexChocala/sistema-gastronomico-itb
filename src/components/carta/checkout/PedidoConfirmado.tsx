@@ -36,6 +36,8 @@ export type PedidoCreado = {
     variacion: string | null
     extras: string[]
   }[]
+  subtotal: number
+  recargoDelivery: number
   total: number
   sucursal: { nombre: string; whatsapp: string | null }
   transferencia?: Datos
@@ -129,6 +131,7 @@ export function PedidoConfirmado({ pedido, slug, refTitulo }: {
             {pedido.aclaracion}
           </p>
         )}
+        {pedido.recargoDelivery > 0 && <p className="text-sm">Subtotal: {formatearPrecio(pedido.subtotal)} · Recargo de envío: {formatearPrecio(pedido.recargoDelivery)}</p>}
         <div className="flex items-baseline justify-between border-t border-border/60 pt-3">
           <span className="font-semibold">Total</span>
           <span className="text-xl font-semibold tabular-nums">{formatearPrecio(pedido.total)}</span>

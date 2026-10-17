@@ -54,6 +54,7 @@ export type PedidoReporte = {
   estadoPago: EstadoPago
   vendido: boolean
   cantidadProductos: number // suma de las cantidades de sus detalles
+  recargoDelivery: number
   subtotal: number
   total: number
 }

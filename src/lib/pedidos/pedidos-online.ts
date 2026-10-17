@@ -10,11 +10,11 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { ErrorSucursal, leerCuerpo } from '@/lib/sucursales/sucursales-validacion'
 import {
-  ErrorPedido, MENSAJE_LOCALIDAD, MENSAJE_SUCURSAL_NO_DISPONIBLE, validarPedidoOnline,
+  ErrorPedido, validarCotizacionDelivery, MENSAJE_SUCURSAL_NO_DISPONIBLE, validarPedidoOnline,
   type ItemPedidoOnline, type PedidoOnlineValidado, type TipoEntregaOnline,
 } from './pedidos-validacion'
 import { datosTransferencia } from '@/lib/negocio/negocio'
-import { camposCobertura, prepararCoberturaDelivery, verificarCoberturaActual, type CoberturaVerificada } from '@/lib/sucursales/cobertura-delivery'
+import { camposCobertura, exigirRecargoAceptado, prepararCoberturaDelivery, verificarCoberturaActual, type CoberturaVerificada } from '@/lib/sucursales/cobertura-delivery'
 
 // Límite de pedidos por IP. Vive en la memoria del proceso: si la aplicación corre en
 // varias instancias (o serverless), cada una lleva su propia cuenta. Al desplegar hay que
@@ -79,18 +79,14 @@ function redondear(valor: number) {
 
 // ---- Reglas compartidas con el alta de Caja (lib/pedidos/pedidos-internos.ts) ----
 
-// Localidad de un delivery. Si la sucursal tiene zonas de delivery cargadas, la
-// localidad es obligatoria y tiene que ser una de ellas; si no, es opcional (pero tiene
-// que existir).
+// Una localidad seleccionada debe existir. Sin selección se usa la dirección completa;
+// el destino puede estar fuera de las localidades guardadas y del radio sin recargo.
 export async function verificarLocalidadDelivery(
   tx: Prisma.TransactionClient,
-  zonas: number[],
   idLocalidad: number | null,
 ) {
-  if (zonas.length > 0) {
-    if (idLocalidad === null) throw new ErrorPedido(400, MENSAJE_LOCALIDAD)
-    if (!zonas.includes(idLocalidad)) throw new ErrorPedido(400, 'No hacemos delivery a esa localidad.')
-  } else if (idLocalidad !== null) {
+  // Se puede enviar a otras localidades; el radio determina el adicional.
+  if (idLocalidad !== null) {
     const existe = await tx.localidad.findUnique({ where: { idLocalidad }, select: { idLocalidad: true } })
     if (!existe) throw new ErrorPedido(400, 'La localidad elegida no existe.')
   }
@@ -227,7 +223,6 @@ async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineVali
       select: {
         ...camposCobertura,
         idSucursal: true, nombre: true, whatsapp: true, activa: true, ofreceRetiro: true, ofreceDelivery: true,
-        localidadesDelivery: { select: { idLocalidad: true } },
       },
     })
     if (!sucursal?.activa) throw new ErrorPedido(404, MENSAJE_SUCURSAL_NO_DISPONIBLE)
@@ -237,7 +232,7 @@ async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineVali
     }
     if (pedido.tipoEntrega === 'delivery') {
       if (!sucursal.ofreceDelivery) throw new ErrorPedido(400, 'Esta sucursal no hace delivery.')
-      await verificarLocalidadDelivery(tx, sucursal.localidadesDelivery.map((zona) => zona.idLocalidad), pedido.idLocalidad)
+      await verificarLocalidadDelivery(tx, pedido.idLocalidad)
       verificarCoberturaActual(sucursal, cobertura)
     }
 
@@ -250,7 +245,9 @@ async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineVali
       throw new ErrorPedido(400, 'Por ahora no se puede pagar por transferencia. Elegí efectivo.')
     }
 
-    const { lineas, total } = await calcularLineas(tx, sucursal.idSucursal, pedido.items)
+    const recargoDelivery = pedido.tipoEntrega === 'delivery' ? exigirRecargoAceptado(cobertura, pedido.recargoDeliveryAceptado) : 0
+    const { lineas, total: subtotal } = await calcularLineas(tx, sucursal.idSucursal, pedido.items)
+    const total = redondear(subtotal + recargoDelivery)
     const idTipoEntrega = await buscarTipoEntrega(tx, pedido.tipoEntrega)
 
     const esTransferencia = pedido.metodoPago === 'transferencia'
@@ -268,7 +265,8 @@ async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineVali
         direccion: pedido.direccion,
         referencias: pedido.referencias,
         aclaracion: pedido.aclaracion,
-        subtotal: total,
+        subtotal,
+        recargoDelivery,
         total,
         idCliente: cliente.idCliente,
         idSucursal: sucursal.idSucursal,
@@ -291,6 +289,8 @@ async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineVali
       estadoPedido: creado.estadoPedido,
       estadoPago: creado.estadoPago,
       items: lineas.map(itemRespuesta),
+      subtotal,
+      recargoDelivery,
       total,
       sucursal: { nombre: sucursal.nombre, whatsapp: sucursal.whatsapp },
       // Los datos para transferir solo se devuelven a quien eligió pagar así.
@@ -305,6 +305,16 @@ function esConflictoSerializable(error: unknown) {
 
 export function crearControladorPedidosOnline(db: PrismaClient) {
   return {
+    cotizarDelivery: async (request: Request) => {
+      try {
+        const origen = request.headers.get('origin')
+        if ((origen && origen !== new URL(request.url).origin) || request.headers.get('sec-fetch-site') === 'cross-site') throw new ErrorPedido(403, 'La solicitud debe realizarse desde esta aplicación.')
+        limitarCotizaciones(ipDe(request))
+        const datos = validarCotizacionDelivery(await leerCuerpo(request), true)
+        const cobertura = await prepararCoberturaDelivery(db, { slug: datos.slugSucursal }, datos.direccion, datos.idLocalidad)
+        return responder({ cotizacion: cobertura.cotizacion })
+      } catch (error) { return responderError(error) }
+    },
     crear: async (request: Request) => {
       try {
         // Solo desde el propio menú: se rechaza si el navegador indica otro origen.
@@ -338,4 +348,16 @@ export function crearControladorPedidosOnline(db: PrismaClient) {
       }
     },
   }
+}
+
+// Límite independiente de las altas: calcular un envío no consume un pedido.
+const cotizacionesPorIp = new Map<string, number[]>()
+function limitarCotizaciones(ip: string) {
+  const ahora = Date.now()
+  if (cotizacionesPorIp.size > 10000) {
+    for (const [clave, momentos] of cotizacionesPorIp) if (!momentos.some(t => ahora - t < VENTANA_LIMITE_MS)) cotizacionesPorIp.delete(clave)
+  }
+  const actuales = (cotizacionesPorIp.get(ip) ?? []).filter(t => ahora - t < VENTANA_LIMITE_MS)
+  if (actuales.length >= 30) throw new ErrorPedido(429, 'Calculaste varios envíos seguidos. Esperá unos minutos e intentá nuevamente.')
+  cotizacionesPorIp.set(ip, [...actuales, ahora])
 }

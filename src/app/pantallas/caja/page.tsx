@@ -15,6 +15,7 @@ import { SelectorCantidad } from '@/components/carta/compartidos/SelectorCantida
 import { IconoCategoria } from '@/components/icons/IconoCategoria'
 import { Campanita } from '@/components/notificaciones/Campanita'
 import { TicketsPedido } from '@/components/pantallas/TicketsPedido'
+import { CotizadorDelivery, useCotizacionDelivery } from '@/components/pedidos/CotizadorDelivery'
 import { CamposDelivery, VALORES_DELIVERY_VACIOS, type ValoresDelivery } from '@/components/pedidos/CamposDelivery'
 import { DatosEntrega } from '@/components/pedidos/DatosEntrega'
 import { PastillaSucursal } from '@/components/sucursal/SucursalActiva'
@@ -530,6 +531,7 @@ export default function CajaPage() {
   const [tipoEntrega, setTipoEntrega] = useState<TipoEntregaPantalla>('retiro')
   // Solo se mandan en delivery; se conservan si se vuelve a retiro por error.
   const [entrega, setEntrega] = useState<ValoresDelivery>(VALORES_DELIVERY_VACIOS)
+  const cotizador = useCotizacionDelivery(entrega.direccion, entrega.idLocalidad)
   // Línea (clave) que espera confirmación antes de salir del carrito.
   const [confirmandoQuitar, setConfirmandoQuitar] = useState<string | null>(null)
   // Aclaración para la cocina, de todo el pedido.
@@ -600,11 +602,13 @@ export default function CajaPage() {
 
   const cantidadItems = carrito.reduce((suma, linea) => suma + linea.cantidad, 0)
   // Estimado con los precios en pantalla: el total real lo calcula el servidor al crear el pedido.
-  const total = carrito.reduce((suma, linea) => suma + precioUnitario(linea) * linea.cantidad, 0)
+  const subtotal = carrito.reduce((suma, linea) => suma + precioUnitario(linea) * linea.cantidad, 0)
+  const recargoDelivery = tipoEntrega === 'delivery' ? cotizador.cotizacion?.recargoDelivery ?? null : 0
+  const total = Math.round((subtotal + (recargoDelivery ?? 0)) * 100) / 100
   const faltaCliente = cliente.trim() === ''
-  const erroresEntrega = tipoEntrega === 'delivery' ? erroresDatosDelivery(entrega, zonas.length > 0) : {}
+  const erroresEntrega = tipoEntrega === 'delivery' ? erroresDatosDelivery(entrega) : {}
   const entregaValida = Object.keys(erroresEntrega).length === 0
-  const puedeCobrar = carrito.length > 0 && !faltaCliente && entregaValida
+  const puedeCobrar = carrito.length > 0 && !faltaCliente && entregaValida && recargoDelivery !== null
   // Por qué no se puede cobrar todavía (se muestra debajo del botón).
   const pistaCobro = carrito.length === 0
     ? ''
@@ -612,7 +616,7 @@ export default function CajaPage() {
       ? 'Cargá el nombre del cliente para cobrar.'
       : !entregaValida
         ? 'Completá los datos del delivery para cobrar.'
-        : ''
+        : recargoDelivery === null ? 'Calculá el envío antes de cobrar.' : ''
 
   function agregar(combinacion: Combinacion, cantidad = 1) {
     const clave = claveDe(combinacion)
@@ -661,7 +665,7 @@ export default function CajaPage() {
   }
 
   async function confirmarPago() {
-    if (enviando) return
+    if (enviando || recargoDelivery === null) return
     const datos = {
       cliente,
       tipoEntrega,
@@ -677,6 +681,7 @@ export default function CajaPage() {
         ? {
             telefono: entrega.telefono,
             direccion: entrega.direccion,
+            recargoDeliveryAceptado: recargoDelivery,
             idLocalidad: entrega.idLocalidad ? Number(entrega.idLocalidad) : null,
             referencias: entrega.referencias,
           }
@@ -696,6 +701,7 @@ export default function CajaPage() {
     setEnviando(false)
 
     if (!resultado.ok) {
+      if (tipoEntrega === 'delivery') { cotizador.invalidar(); setCobrando(false) }
       const noDisponibles = resultado.datos.productosNoDisponibles
       if (resultado.estado === 409 && Array.isArray(noDisponibles)) {
         // Se sacan del carrito y se vuelve a armar el pedido: el total cambió.
@@ -893,6 +899,8 @@ export default function CajaPage() {
                 />
               )}
 
+              {tipoEntrega === 'delivery' && <CotizadorDelivery cotizador={cotizador} disabled={enviando || !entrega.direccion.trim()} />}
+              {tipoEntrega === 'delivery' && <p className="text-sm">Subtotal: {formatoPrecio.format(subtotal)} · Envío: {recargoDelivery === null ? 'por calcular' : formatoPrecio.format(recargoDelivery)}</p>}
               <div className="flex flex-col gap-4 border-t border-border pt-4">
                 <div className="flex items-end justify-between">
                   <div>
@@ -901,7 +909,7 @@ export default function CajaPage() {
                       {cantidadItems} {cantidadItems === 1 ? 'producto' : 'productos'}
                     </p>
                   </div>
-                  <p className="text-3xl font-bold">{formatoPrecio.format(total)}</p>
+                  <p className="text-3xl font-bold">{recargoDelivery === null ? 'Por calcular' : formatoPrecio.format(total)}</p>
                 </div>
                 <button
                   type="button"

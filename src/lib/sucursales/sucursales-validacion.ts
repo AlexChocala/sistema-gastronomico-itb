@@ -1,3 +1,4 @@
+import { recargoDeliveryValido, MENSAJE_RECARGO_DELIVERY } from './radio-delivery'
 import { coordenadasValidas, MENSAJE_RADIO_DELIVERY, radioDeliveryValido } from './radio-delivery'
 
 export class ErrorSucursal extends Error {
@@ -114,6 +115,7 @@ type DatosSucursal = {
   activa?: boolean
   ofreceRetiro?: boolean
   ofreceDelivery?: boolean
+  recargoFueraRadio?: number | null
   radioDeliveryKm?: number | null
   latitud?: number | null
   longitud?: number | null
@@ -141,7 +143,7 @@ export function validarSucursal(cuerpo: unknown, parcial: boolean): DatosSucursa
   // el admin lo puede cambiar (el anterior queda redirigiendo, ver cambiarSlug).
   const permitidos = [
     'nombre', 'direccion', 'whatsapp', 'horario', 'linkMaps', 'idLocalidad', 'ofreceRetiro', 'ofreceDelivery',
-    'radioDeliveryKm', 'latitud', 'longitud',
+    'radioDeliveryKm', 'recargoFueraRadio', 'latitud', 'longitud',
     ...(parcial ? ['activa', 'slug'] : []),
   ]
   if (Object.keys(datos).length === 0 || Object.keys(datos).some((c) => !permitidos.includes(c))) {
@@ -221,6 +223,10 @@ export function validarSucursal(cuerpo: unknown, parcial: boolean): DatosSucursa
   // contra la fila actual (ver editar en sucursales-administracion).
   if (salida.ofreceRetiro === false && salida.ofreceDelivery === false) {
     throw new ErrorSucursal(400, MENSAJE_SIN_ENTREGA)
+  }
+  if ('recargoFueraRadio' in datos) {
+    if (datos.recargoFueraRadio !== null && !recargoDeliveryValido(datos.recargoFueraRadio)) throw new ErrorSucursal(400, MENSAJE_RECARGO_DELIVERY)
+    salida.recargoFueraRadio = datos.recargoFueraRadio as number | null
   }
   if ('radioDeliveryKm' in datos) {
     if (datos.radioDeliveryKm !== null && !radioDeliveryValido(datos.radioDeliveryKm)) throw new ErrorSucursal(400, MENSAJE_RADIO_DELIVERY)

@@ -165,6 +165,7 @@ export type NuevoPedidoMostrador = {
   items: { idProducto: number; cantidad: number; idVariacion?: number; extras?: number[] }[]
   // Para la cocina, de todo el pedido (vacía no se manda).
   aclaracion?: string
+  recargoDeliveryAceptado?: number
   // Solo delivery (en retiro no se mandan).
   telefono?: string
   direccion?: string
@@ -172,7 +173,7 @@ export type NuevoPedidoMostrador = {
   referencias?: string
 }
 
-export type DatosDelivery = { telefono: string; direccion: string; idLocalidad: number | null; referencias: string }
+export type DatosDelivery = { recargoDeliveryAceptado?: number; telefono: string; direccion: string; idLocalidad: number | null; referencias: string }
 
 export type ResultadoAccion =
   | { ok: true; pedido: PedidoPantalla }
@@ -199,6 +200,7 @@ export function cuerpoPedidoCaja(datos: NuevoPedidoMostrador) {
     ...(datos.tipoEntrega === 'delivery'
       ? {
           direccion: datos.direccion ?? '',
+          recargoDeliveryAceptado: datos.recargoDeliveryAceptado,
           ...(datos.idLocalidad ? { idLocalidad: datos.idLocalidad } : {}),
           ...(datos.referencias?.trim() ? { referencias: datos.referencias.trim() } : {}),
         }
@@ -322,6 +324,7 @@ export function usePedidosPantalla(idSucursal: number | null) {
               tipoEntrega,
               telefono: entrega.telefono,
               direccion: entrega.direccion,
+              recargoDeliveryAceptado: entrega.recargoDeliveryAceptado,
               ...(entrega.idLocalidad ? { idLocalidad: entrega.idLocalidad } : {}),
               ...(entrega.referencias.trim() ? { referencias: entrega.referencias.trim() } : {}),
             },

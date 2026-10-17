@@ -26,6 +26,7 @@ interface Sucursal {
   activa: boolean
   ofreceRetiro: boolean
   ofreceDelivery: boolean
+  recargoFueraRadio: number | null
   radioDeliveryKm: number | null
   latitud: number | null
   longitud: number | null
@@ -124,6 +125,7 @@ export default function SucursalesPage() {
       ofreceRetiro: s.ofreceRetiro,
       ofreceDelivery: s.ofreceDelivery,
       radioDeliveryKm: s.radioDeliveryKm === null ? '' : String(s.radioDeliveryKm),
+      recargoFueraRadio: s.recargoFueraRadio === null ? '' : String(s.recargoFueraRadio),
       latitud: s.latitud === null ? '' : String(s.latitud),
       longitud: s.longitud === null ? '' : String(s.longitud),
     })
@@ -185,6 +187,7 @@ export default function SucursalesPage() {
       linkMaps: form.linkMaps || null,
       ofreceRetiro: form.ofreceRetiro,
       ofreceDelivery: form.ofreceDelivery,
+      recargoFueraRadio: form.recargoFueraRadio.trim() ? Number(form.recargoFueraRadio) : null,
       radioDeliveryKm: form.ofreceDelivery && form.radioDeliveryKm.trim() ? Number(form.radioDeliveryKm) : null,
       latitud: form.ofreceDelivery && form.latitud.trim() ? Number(form.latitud) : null,
       longitud: form.ofreceDelivery && form.longitud.trim() ? Number(form.longitud) : null,
@@ -399,7 +402,8 @@ export default function SucursalesPage() {
                   {s.whatsapp && <p>{s.whatsapp}</p>}
                   {s.horario && <p>{s.horario}</p>}
                   <p>{[s.ofreceRetiro && 'Retiro en el local', s.ofreceDelivery && 'Delivery'].filter(Boolean).join(' · ')}</p>
-                  {s.ofreceDelivery && <p>{s.radioDeliveryKm === null ? 'Delivery pendiente de configurar el radio' : `Radio de delivery: ${s.radioDeliveryKm.toLocaleString('es-AR')} km`}</p>}
+                  {s.ofreceDelivery && <p>{s.recargoFueraRadio === null ? 'Recargo fuera del radio pendiente de configurar' : `Fuera del radio: $ ${s.recargoFueraRadio.toLocaleString('es-AR')} adicional`}</p>}
+                  {s.ofreceDelivery && <p>{s.radioDeliveryKm === null ? 'Delivery pendiente de configurar el radio' : `Radio sin recargo: ${s.radioDeliveryKm.toLocaleString('es-AR')} km`}</p>}
                   {/* URL pública del menú. Se edita desde el formulario; los links viejos redirigen a este. */}
                   <a
                     href={`/${s.slug}`} target="_blank" rel="noopener noreferrer"

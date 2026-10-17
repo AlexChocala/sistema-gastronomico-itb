@@ -75,13 +75,13 @@ export function CamposDelivery({
         <input
           {...atributos('direccion')}
           autoComplete="off"
-          placeholder={zonas.length ? 'Calle y número' : 'Calle y número, localidad, provincia'}
+          placeholder={valores.idLocalidad ? 'Calle y número' : 'Calle y número, localidad, provincia'}
           maxLength={MAX_DIRECCION}
           value={valores.direccion}
           onChange={(e) => onCambiar('direccion', e.target.value)}
         />
         {mensaje('direccion')}
-        {zonas.length === 0 && <p className="text-xs text-muted">{MENSAJE_DIRECCION_COMPLETA}</p>}
+        {!valores.idLocalidad && <p className="text-xs text-muted">{MENSAJE_DIRECCION_COMPLETA}</p>}
       </div>
 
       {zonas.length > 0 && (
@@ -90,10 +90,10 @@ export function CamposDelivery({
           <Desplegable
             etiqueta="Localidad de entrega"
             icono={MapPin}
-            opciones={zonas.map((zona) => ({ valor: String(zona.idLocalidad), texto: zona.nombre }))}
+            opciones={[{ valor: '', texto: 'Otra localidad (completar dirección)' }, ...zonas.map((zona) => ({ valor: String(zona.idLocalidad), texto: zona.nombre }))]}
             valor={valores.idLocalidad || null}
             onElegir={(valor) => { onCambiar('idLocalidad', valor); tocar('idLocalidad') }}
-            textoVacio="Elegí la localidad"
+            textoVacio="Otra localidad / dirección completa"
           />
           {mensaje('idLocalidad')}
         </div>
