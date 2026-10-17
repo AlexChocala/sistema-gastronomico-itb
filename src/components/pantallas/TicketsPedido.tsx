@@ -158,6 +158,12 @@ export function TicketsPedido({ pedido, pagaCon }: { pedido: PedidoPantalla; pag
           </tbody>
         </table>
         <Separador />
+        {pedido.recargoDelivery > 0 && (
+          <>
+            <p className="flex justify-between"><span>Subtotal</span><span>{formatoPrecio.format(pedido.subtotal)}</span></p>
+            <p className="flex justify-between"><span>Recargo de envío</span><span>{formatoPrecio.format(pedido.recargoDelivery)}</span></p>
+          </>
+        )}
         <p className="flex justify-between text-[16px] font-bold">
           <span>TOTAL</span>
           <span>{formatoPrecio.format(pedido.total)}</span>

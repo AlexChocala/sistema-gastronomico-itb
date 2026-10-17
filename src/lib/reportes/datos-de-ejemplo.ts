@@ -135,6 +135,7 @@ function generarPedidosDelDia(dia: string, sucursal: { idSucursal: number; nombr
       metodoPago: origen === 'online' && azar() < 0.6 ? 'transferencia' : 'efectivo',
       cantidadProductos: lineas.reduce((suma, linea) => suma + linea.cantidad, 0),
       subtotal,
+      recargoDelivery: 0,
       total: subtotal,
       lineas,
     })
@@ -236,7 +237,7 @@ export function generarDatosDeEjemplo(filtros: FiltrosReportes): DatosReportes {
         idPedido: p.idPedido, fecha: p.fecha, sucursal: p.sucursal, cliente: p.cliente, origen: p.origen,
         registradoPor: p.registradoPor, estadoPago: p.estadoPago, vendido: p.vendido,
         tipoEntrega: p.tipoEntrega, metodoPago: p.metodoPago, cantidadProductos: p.cantidadProductos,
-        subtotal: p.subtotal, total: p.total,
+        subtotal: p.subtotal, recargoDelivery: 0, total: p.total,
       }))
       .reverse(),
   }

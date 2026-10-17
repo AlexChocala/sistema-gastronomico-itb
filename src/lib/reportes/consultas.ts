@@ -80,7 +80,7 @@ function periodoDe(dia: string, agrupacion: Agrupacion) {
 
 const camposPedido = {
   idPedido: true, fecha: true, idSucursal: true, origenPedido: true,
-  metodoPago: true, estadoPago: true, subtotal: true, total: true,
+  metodoPago: true, estadoPago: true, subtotal: true, recargoDelivery: true, total: true,
   usuario: { select: { nombre: true, apellido: true } },
   cliente: { select: { nombre: true, apellido: true } },
   sucursal: { select: { nombre: true } },
@@ -139,6 +139,7 @@ export function calcularReportes(
       registradoPor: pedido.usuario ? [pedido.usuario.nombre, pedido.usuario.apellido].filter(Boolean).join(' ') : null,
       origen, metodoPago, estadoPago, vendido, tipoEntrega,
       cantidadProductos: pedido.detalles.reduce((suma, d) => suma + d.cantidad, 0),
+      recargoDelivery: dinero(pedido.recargoDelivery),
       subtotal: dinero(pedido.subtotal), total: dinero(pedido.total),
     })
     // Los pendientes se muestran en el detalle, pero no suman ventas ni productos vendidos.

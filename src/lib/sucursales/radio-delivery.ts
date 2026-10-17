@@ -57,3 +57,19 @@ export function separarDireccion(direccion: string, contexto?: ContextoDireccion
     || normalizarLugar(provincia) !== normalizarLugar(contexto.provincia))) return null
   return { direccion: calle, localidad, provincia }
 }
+
+// El resto de la app presenta los importes en pesos enteros.
+export const MAX_RECARGO_DELIVERY = 10000000
+export const MENSAJE_RECARGO_DELIVERY = 'Ingresá un recargo entre 0 y 10.000.000 de pesos, sin centavos.'
+export function recargoDeliveryValido(valor: unknown): valor is number {
+  return typeof valor === 'number' && Number.isSafeInteger(valor) && valor >= 0 && valor <= MAX_RECARGO_DELIVERY
+}
+
+export type CotizacionDelivery = { distanciaKm: number; fueraDelRadio: boolean; radioDeliveryKm: number; recargoDelivery: number }
+
+export function cotizarDistancia(distanciaKm: number, radioDeliveryKm: number, recargoFueraRadio: number | null): CotizacionDelivery {
+  if (!Number.isFinite(distanciaKm) || distanciaKm < 0 || !radioDeliveryValido(radioDeliveryKm)) throw new Error('Distancia o radio inválido.')
+  const fueraDelRadio = !dentroDelRadio(distanciaKm, radioDeliveryKm)
+  if (fueraDelRadio && !recargoDeliveryValido(recargoFueraRadio)) throw new Error('Falta configurar el recargo fuera del radio.')
+  return { distanciaKm, fueraDelRadio, radioDeliveryKm, recargoDelivery: fueraDelRadio ? recargoFueraRadio! : 0 }
+}

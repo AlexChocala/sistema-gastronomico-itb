@@ -1,5 +1,7 @@
 'use client'
 
+import { CotizadorDelivery, useCotizacionDelivery } from '@/components/pedidos/CotizadorDelivery'
+
 // Checkout del menú digital: datos de contacto, entrega y pago, y envío a POST /api/pedidos.
 // Las reglas de los campos son las mismas que valida el servidor (lib/pedidos/pedidos-validacion),
 // con los mismos mensajes; igual el servidor es el que decide. Al crearse el pedido, el
@@ -15,7 +17,7 @@ import { Input } from '@/components/ui/Input'
 import { detalleLinea, useCarrito, useHidratado, type ItemCarrito, type ProductoCarrito } from '@/lib/pedidos/carrito'
 import {
   DIGITOS_TELEFONO, ErrorPedido, MAX_DIRECCION, MAX_NOMBRE_CLIENTE, MAX_REFERENCIAS, MENSAJE_DIRECCION,
-  MENSAJE_LOCALIDAD, MENSAJE_NOMBRE, MENSAJE_REFERENCIAS, MENSAJE_TELEFONO, MIN_DIRECCION,
+  MENSAJE_NOMBRE, MENSAJE_REFERENCIAS, MENSAJE_TELEFONO, MIN_DIRECCION,
   filtrarNombreEscrito, filtrarTelefonoEscrito, limpiarReferencias, nombreClienteValido, validarPedidoOnline,
   type MetodoPagoOnline, type TipoEntregaOnline,
 } from '@/lib/pedidos/pedidos-validacion'
@@ -74,6 +76,9 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
   const [direccion, setDireccion] = useState('')
   const [idLocalidad, setIdLocalidad] = useState('')
   const [referencias, setReferencias] = useState('')
+  const cotizador = useCotizacionDelivery(direccion, idLocalidad, slug)
+  const recargoDelivery = tipoEntrega === 'delivery' ? cotizador.cotizacion?.recargoDelivery ?? null : 0
+  const totalConEnvio = Math.round((carrito.total + (recargoDelivery ?? 0)) * 100) / 100
   const [metodoPago, setMetodoPago] = useState<MetodoPagoOnline | null>(aceptaTransferencia ? null : 'efectivo')
   const [errores, setErrores] = useState<Errores>({})
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null)
@@ -135,7 +140,6 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
         encontrados.direccion = MENSAJE_DIRECCION_COMPLETA
       }
       if (!radioDeliveryValido(sucursal.radioDeliveryKm)) encontrados.tipoEntrega = 'Esta sucursal todavía no configuró su cobertura de delivery. Consultá al local o elegí retiro si está disponible.'
-      if (hayZonas && !idLocalidad) encontrados.idLocalidad = MENSAJE_LOCALIDAD
       if (limpiarReferencias(referencias) === undefined) encontrados.referencias = MENSAJE_REFERENCIAS
     }
     if (!metodoPago) encontrados.metodoPago = 'Elegí cómo vas a pagar: efectivo o transferencia.'
@@ -158,6 +162,10 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
       return
     }
 
+    if (tipoEntrega === 'delivery' && recargoDelivery === null) {
+      mostrarErrorGeneral('Calculá el envío y revisá el total antes de confirmar.')
+      return
+    }
     const cuerpo = {
       slugSucursal: slug,
       cliente: { nombre: nombre.trim(), telefono: soloDigitos(telefono) },
@@ -165,6 +173,7 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
       ...(tipoEntrega === 'delivery'
         ? {
             direccion: direccion.trim(),
+            recargoDeliveryAceptado: recargoDelivery,
             ...(idLocalidad ? { idLocalidad: Number(idLocalidad) } : {}),
             // Opcionales: vacías no se mandan.
             ...(referencias.trim() ? { referencias: referencias.trim() } : {}),
@@ -217,6 +226,7 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
         )
         return
       }
+      if (tipoEntrega === 'delivery') cotizador.invalidar()
       mostrarErrorGeneral(datos?.error ?? MENSAJE_SIN_CONEXION)
     } catch {
       mostrarErrorGeneral(MENSAJE_SIN_CONEXION)
@@ -236,6 +246,8 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
       <ResumenPedido
         items={carrito.items}
         total={carrito.total}
+        recargoDelivery={recargoDelivery}
+        delivery={tipoEntrega === 'delivery'}
         cantidadTotal={carrito.cantidadTotal}
         aclaracion={carrito.aclaracion.trim()}
         slug={slug}
@@ -314,7 +326,7 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
             <div className="flex flex-col gap-4 pt-1">
               <p className="text-sm text-muted">
                 {radioDeliveryValido(sucursal.radioDeliveryKm)
-                  ? `Delivery hasta ${sucursal.radioDeliveryKm.toLocaleString('es-AR')} km en línea recta desde el local. La dirección se verifica al confirmar.`
+                  ? `Dentro de ${sucursal.radioDeliveryKm.toLocaleString('es-AR')} km no hay adicional. Fuera del radio se aplica el recargo fijo del local. Calculá el envío para ver el importe.`
                   : 'Esta sucursal todavía no tiene configurada su cobertura de delivery. Consultá al local o elegí retiro si está disponible.'}
               </p>
               <Input
@@ -322,14 +334,14 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
                 data-campo="direccion"
                 label="Dirección de entrega"
                 autoComplete="street-address"
-                placeholder={hayZonas ? 'Calle y número' : 'Calle y número, localidad, provincia'}
+                placeholder={idLocalidad ? 'Calle y número' : 'Calle y número, localidad, provincia'}
                 maxLength={MAX_DIRECCION}
                 value={direccion}
                 onChange={(evento) => { setDireccion(evento.target.value); limpiarError('direccion') }}
                 error={errores.direccion}
                 className="min-h-12 rounded-xl"
               />
-              {!hayZonas && <p className="text-xs text-muted">{MENSAJE_DIRECCION_COMPLETA}</p>}
+              {!idLocalidad && <p className="text-xs text-muted">{MENSAJE_DIRECCION_COMPLETA}</p>}
               {hayZonas && (
                 <div className="flex flex-col gap-1">
                   <span className="text-sm font-medium text-text">Localidad</span>
@@ -338,21 +350,22 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
                     <Desplegable
                       etiqueta="Localidad de entrega"
                       icono={MapPin}
-                      opciones={sucursal.localidadesDelivery.map((localidad) => ({
+                      opciones={[{ valor: '', texto: 'Otra localidad (completar dirección)' }, ...sucursal.localidadesDelivery.map((localidad) => ({
                         valor: String(localidad.idLocalidad), texto: localidad.nombre,
-                      }))}
+                      }))]}
                       valor={idLocalidad || null}
                       onElegir={(valor) => { setIdLocalidad(valor); limpiarError('idLocalidad') }}
-                      textoVacio="Elegí tu localidad"
+                      textoVacio="Otra localidad / dirección completa"
                     />
                   </div>
                   {errores.idLocalidad ? (
                     <span id="checkout-localidad-error" className="text-sm text-danger">{errores.idLocalidad}</span>
                   ) : (
-                    <span className="text-xs font-normal text-muted">Solo hacemos delivery a estas localidades.</span>
+                    <span className="text-xs font-normal text-muted">Podés elegir una localidad guardada o escribir otra en la dirección completa.</span>
                   )}
                 </div>
               )}
+              <CotizadorDelivery cotizador={cotizador} disabled={enviando || !direccion.trim()} />
               <div className="flex flex-col gap-1">
                 <label htmlFor="checkout-referencias" className="text-sm font-medium text-text">
                   Indicaciones para el repartidor (opcional)
@@ -432,8 +445,8 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
           </div>
         )}
 
-        <Button type="submit" variant="acento" tamano="grande" disabled={enviando || (tipoEntrega === 'delivery' && !radioDeliveryValido(sucursal.radioDeliveryKm))} className="shadow-lg">
-          {enviando ? 'Enviando tu pedido…' : `Confirmar pedido · ${formatearPrecio(carrito.total)}`}
+        <Button type="submit" variant="acento" tamano="grande" disabled={enviando || (tipoEntrega === 'delivery' && (!radioDeliveryValido(sucursal.radioDeliveryKm) || recargoDelivery === null))} className="shadow-lg">
+          {enviando ? 'Enviando tu pedido…' : recargoDelivery === null ? 'Calculá el envío para confirmar' : `Confirmar pedido · ${formatearPrecio(totalConEnvio)}`}
         </Button>
         <p className="-mt-2 text-center text-xs font-normal text-muted">
           Los precios se confirman al enviar el pedido.
@@ -522,10 +535,12 @@ function OpcionFija({ icono, titulo, detalle }: { icono: ReactNode; titulo: stri
   )
 }
 
-function ResumenPedido({ items, total, cantidadTotal, aclaracion, slug }: {
+function ResumenPedido({ items, total, cantidadTotal, aclaracion, slug, recargoDelivery, delivery }: {
   items: ItemCarrito[]
   total: number
   cantidadTotal: number
+  recargoDelivery: number | null
+  delivery: boolean
   aclaracion: string
   slug: string
 }) {
@@ -557,9 +572,15 @@ function ResumenPedido({ items, total, cantidadTotal, aclaracion, slug }: {
           {aclaracion}
         </p>
       )}
+      {delivery && (
+        <div className="flex flex-col gap-1 text-sm" aria-live="polite">
+          <p className="flex justify-between"><span>Subtotal</span><span>{formatearPrecio(total)}</span></p>
+          <p className="flex justify-between"><span>Recargo de envío</span><span>{recargoDelivery === null ? 'Por calcular' : formatearPrecio(recargoDelivery)}</span></p>
+        </div>
+      )}
       <div className="flex items-baseline justify-between border-t border-border/60 pt-3">
         <span className="text-sm text-muted">Total · {textoProductos(cantidadTotal)}</span>
-        <span className="text-xl font-semibold tabular-nums">{formatearPrecio(total)}</span>
+        <span className="text-xl font-semibold tabular-nums">{recargoDelivery === null ? 'Por calcular' : formatearPrecio(total + recargoDelivery)}</span>
       </div>
     </aside>
   )

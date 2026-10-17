@@ -12,7 +12,7 @@ type Sesion = { user: { idUsuario: number } } | null
 const camposSucursal = {
   idSucursal: true, nombre: true, slug: true, direccion: true, whatsapp: true, horario: true, linkMaps: true, activa: true,
   ofreceRetiro: true, ofreceDelivery: true, idLocalidad: true,
-  radioDeliveryKm: true, latitud: true, longitud: true,
+  radioDeliveryKm: true, recargoFueraRadio: true, latitud: true, longitud: true,
   localidad: { select: { idLocalidad: true, nombre: true, provincia: { select: { idProvincia: true, nombre: true } } } },
 } satisfies Prisma.SucursalSelect
 
@@ -228,7 +228,7 @@ export function crearControladorSucursales(db: PrismaClient, leerSesion: () => P
       const sucursal = await db.$transaction(async (tx) => {
         const actual = await tx.sucursal.findUnique({ where: { idSucursal } })
         if (!actual) throw new ErrorSucursal(404, 'Sucursal no encontrada.')
-        if ((['direccion', 'idLocalidad', 'ofreceDelivery', 'radioDeliveryKm', 'latitud', 'longitud'] as const)
+        if ((['direccion', 'idLocalidad', 'ofreceDelivery', 'radioDeliveryKm', 'recargoFueraRadio', 'latitud', 'longitud'] as const)
           .some(campo => actual[campo] !== anterior[campo])) {
           throw new ErrorSucursal(409, 'La ubicación o la cobertura cambió. Actualizá la sucursal e intentá nuevamente.')
         }

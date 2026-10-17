@@ -72,6 +72,8 @@ model Sucursal {
   // Radio en línea recta y centro del local. Null = pendiente de configuración;
   // los pedidos de delivery no se aceptan hasta guardar los tres valores.
   radioDeliveryKm Float?
+  // Adicional fijo en pesos fuera del radio. Null = pendiente de configurar.
+  recargoFueraRadio Float?
   latitud         Float?
   longitud        Float?
 
@@ -240,6 +242,8 @@ model Pedido {
   aclaracion String? @db.VarChar(200)
 
   subtotal  Float
+  // Importe aceptado al crear el pedido: no cambia al editar la tarifa del local.
+  recargoDelivery Float @default(0)
   total     Float
 
   idCliente Int

@@ -81,6 +81,8 @@ export interface PedidoPantalla extends PedidoTransicion {
   // Para la cocina, de todo el pedido (null si no hay).
   aclaracion: string | null
   items: ItemPedidoPantalla[]
+  subtotal: number
+  recargoDelivery: number
   total: number
 }
 

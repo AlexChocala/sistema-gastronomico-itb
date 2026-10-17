@@ -1,3 +1,4 @@
+import { recargoDeliveryValido } from '@/lib/sucursales/radio-delivery'
 // Validación de los pedidos: el que hace un cliente desde el menú digital (POST
 // /api/pedidos), el que carga Caja (POST /api/pedidos/caja) y las acciones del personal
 // sobre un pedido (PATCH /api/pedidos/{id}).
@@ -93,6 +94,7 @@ export type PedidoOnlineValidado = {
   // Para la cocina, de todo el pedido ("2 sin cebolla, la otra completa"). Vacía = null.
   aclaracion: string | null
   items: ItemPedidoOnline[]
+  recargoDeliveryAceptado: number | null
 }
 
 // Se aceptan espacios, guiones o paréntesis al escribir; se guardan solo los dígitos.
@@ -132,14 +134,12 @@ export type CampoDelivery = 'telefono' | 'direccion' | 'idLocalidad' | 'referenc
 // deshabilitar el botón; el servidor valida igual con validarDatosDelivery.
 export function erroresDatosDelivery(
   datos: { telefono: string; direccion: string; idLocalidad: string; referencias: string },
-  hayZonas: boolean,
 ): Partial<Record<CampoDelivery, string>> {
   const errores: Partial<Record<CampoDelivery, string>> = {}
   if (!whatsappValido(digitosTelefono(datos.telefono))) errores.telefono = MENSAJE_TELEFONO_CLIENTE
   const direccion = datos.direccion.trim()
   if (direccion.length < MIN_DIRECCION || direccion.length > MAX_DIRECCION) errores.direccion = MENSAJE_DIRECCION
   else if (!datos.idLocalidad && !separarDireccion(direccion)) errores.direccion = MENSAJE_DIRECCION_COMPLETA
-  if (hayZonas && !datos.idLocalidad) errores.idLocalidad = MENSAJE_LOCALIDAD
   if (limpiarReferencias(datos.referencias) === undefined) errores.referencias = MENSAJE_REFERENCIAS
   return errores
 }
@@ -149,10 +149,11 @@ export type DatosDeliveryValidados = {
   direccion: string
   idLocalidad: number | null
   referencias: string | null
+  recargoDeliveryAceptado: number
 }
 
 // Datos de entrega de un delivery cargado por el personal (alta en Caja o cambio de
-// retiro a delivery). Si la localidad es obligatoria lo decide la sucursal en el servidor.
+// retiro a delivery). Sin localidad seleccionada se exige la dirección completa.
 function validarDatosDelivery(datos: Record<string, unknown>): DatosDeliveryValidados {
   if (typeof datos.telefono !== 'string') throw new ErrorPedido(400, MENSAJE_TELEFONO_CLIENTE)
   const telefono = digitosTelefono(datos.telefono)
@@ -167,7 +168,7 @@ function validarDatosDelivery(datos: Record<string, unknown>): DatosDeliveryVali
   const referencias = limpiarReferencias(datos.referencias)
   if (idLocalidad === null && !separarDireccion(direccion)) throw new ErrorPedido(400, MENSAJE_DIRECCION_COMPLETA)
   if (referencias === undefined) throw new ErrorPedido(400, MENSAJE_REFERENCIAS)
-  return { telefono, direccion, idLocalidad, referencias }
+  return { telefono, direccion, idLocalidad, referencias, recargoDeliveryAceptado: validarRecargoAceptado(datos.recargoDeliveryAceptado) }
 }
 
 function objeto(valor: unknown, mensaje: string) {
@@ -246,7 +247,7 @@ export function validarPedidoOnline(cuerpo: unknown): PedidoOnlineValidado {
   const datos = objeto(cuerpo, 'Enviá un objeto JSON con los datos del pedido.')
   soloCampos(
     datos,
-    ['slugSucursal', 'cliente', 'tipoEntrega', 'direccion', 'idLocalidad', 'referencias', 'metodoPago', 'aclaracion', 'items'],
+    ['slugSucursal', 'cliente', 'tipoEntrega', 'direccion', 'idLocalidad', 'referencias', 'metodoPago', 'aclaracion', 'items', 'recargoDeliveryAceptado'],
     'El pedido tiene campos que no se reconocen.',
   )
 
@@ -269,7 +270,7 @@ export function validarPedidoOnline(cuerpo: unknown): PedidoOnlineValidado {
     const texto = typeof datos.direccion === 'string' ? datos.direccion.trim() : ''
     if (texto.length < MIN_DIRECCION || texto.length > MAX_DIRECCION) throw new ErrorPedido(400, MENSAJE_DIRECCION)
     direccion = texto
-    // Si la localidad es obligatoria o no lo decide la sucursal (ver pedidos-online).
+    // Elegir una localidad es opcional si se escribe una dirección completa.
     if (datos.idLocalidad !== undefined && datos.idLocalidad !== null) {
       if (!idValido(datos.idLocalidad)) throw new ErrorPedido(400, 'Elegí una localidad válida.')
       idLocalidad = datos.idLocalidad
@@ -294,6 +295,7 @@ export function validarPedidoOnline(cuerpo: unknown): PedidoOnlineValidado {
     metodoPago: datos.metodoPago,
     aclaracion: validarAclaracion(datos.aclaracion),
     items: validarItems(datos.items),
+    recargoDeliveryAceptado: tipoEntrega === 'delivery' ? validarRecargoAceptado(datos.recargoDeliveryAceptado) : null,
   }
 }
 
@@ -309,6 +311,7 @@ export type PedidoCajaValidado = {
   referencias: string | null
   aclaracion: string | null
   items: ItemPedidoOnline[]
+  recargoDeliveryAceptado: number | null
 }
 
 const CAMPOS_DELIVERY = ['direccion', 'idLocalidad', 'referencias']
@@ -320,7 +323,7 @@ export function validarPedidoCaja(cuerpo: unknown): PedidoCajaValidado {
   const datos = objeto(cuerpo, 'Enviá un objeto JSON con los datos del pedido.')
   soloCampos(
     datos,
-    ['cliente', 'tipoEntrega', 'metodoPago', 'aclaracion', 'items', ...CAMPOS_DELIVERY],
+    ['cliente', 'tipoEntrega', 'metodoPago', 'aclaracion', 'items', 'recargoDeliveryAceptado', ...CAMPOS_DELIVERY],
     'El pedido tiene campos que no se reconocen.',
   )
 
@@ -350,14 +353,14 @@ export function validarPedidoCaja(cuerpo: unknown): PedidoCajaValidado {
     }
     return {
       cliente: { nombre, telefono: null }, tipoEntrega, metodoPago,
-      direccion: null, idLocalidad: null, referencias: null, aclaracion, items,
+      direccion: null, idLocalidad: null, referencias: null, aclaracion, items, recargoDeliveryAceptado: null,
     }
   }
 
   const entrega = validarDatosDelivery({ ...datos, telefono: cliente.telefono })
   return {
     cliente: { nombre, telefono: entrega.telefono }, tipoEntrega, metodoPago,
-    direccion: entrega.direccion, idLocalidad: entrega.idLocalidad, referencias: entrega.referencias, aclaracion, items,
+    direccion: entrega.direccion, idLocalidad: entrega.idLocalidad, referencias: entrega.referencias, aclaracion, items, recargoDeliveryAceptado: entrega.recargoDeliveryAceptado,
   }
 }
 
@@ -395,7 +398,7 @@ export function validarAccionPedido(cuerpo: unknown): AccionPedido {
     if (datos.tipoEntrega === 'delivery') {
       soloCampos(
         datos,
-        ['accion', 'tipoEntrega', 'telefono', ...CAMPOS_DELIVERY],
+        ['accion', 'tipoEntrega', 'telefono', 'recargoDeliveryAceptado', ...CAMPOS_DELIVERY],
         'La acción tiene campos que no se reconocen.',
       )
       return { accion, tipoEntrega: 'delivery', ...validarDatosDelivery(datos) }
@@ -404,4 +407,20 @@ export function validarAccionPedido(cuerpo: unknown): AccionPedido {
   }
 
   throw new ErrorPedido(400, 'La acción no es válida.')
+}
+
+function validarRecargoAceptado(valor: unknown): number {
+  if (!recargoDeliveryValido(valor)) throw new ErrorPedido(400, 'Calculá el envío y revisá el total antes de confirmar.')
+  return valor
+}
+
+export function validarCotizacionDelivery(cuerpo: unknown, publica: boolean) {
+  const datos = objeto(cuerpo, 'Enviá los datos de la dirección de entrega.')
+  soloCampos(datos, ['direccion', 'idLocalidad', ...(publica ? ['slugSucursal'] : [])], 'La cotización tiene campos que no se reconocen.')
+  if (publica && (typeof datos.slugSucursal !== 'string' || !/^[a-z0-9-]{1,80}$/.test(datos.slugSucursal))) throw new ErrorPedido(400, 'Indicá una sucursal válida.')
+  if (typeof datos.direccion !== 'string' || datos.direccion.trim().length < MIN_DIRECCION || datos.direccion.trim().length > MAX_DIRECCION) throw new ErrorPedido(400, MENSAJE_DIRECCION)
+  const idLocalidad = datos.idLocalidad ?? null
+  if (idLocalidad !== null && !idValido(idLocalidad)) throw new ErrorPedido(400, 'Elegí una localidad válida.')
+  if (idLocalidad === null && !separarDireccion(datos.direccion.trim())) throw new ErrorPedido(400, MENSAJE_DIRECCION_COMPLETA)
+  return { direccion: datos.direccion.trim(), idLocalidad: idLocalidad as number | null, slugSucursal: datos.slugSucursal as string }
 }

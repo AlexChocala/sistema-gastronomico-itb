@@ -15,7 +15,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { ErrorSucursal, idValido, leerCuerpo, leerId } from '@/lib/sucursales/sucursales-validacion'
 import {
-  ErrorPedido, MENSAJE_SUCURSAL_NO_DISPONIBLE, validarAccionPedido, validarPedidoCaja,
+  ErrorPedido, MENSAJE_SUCURSAL_NO_DISPONIBLE, validarAccionPedido, validarPedidoCaja, validarCotizacionDelivery,
 } from './pedidos-validacion'
 import {
   MENSAJE_CONFLICTO_ESTADO, aplicarAccion, deshacerA, puedeCambiarEntrega,
@@ -23,7 +23,7 @@ import {
   type PedidoPantalla, type TipoEntrega,
 } from './pedidos-estados'
 import { buscarTipoEntrega, calcularLineas, detallesDe, verificarLocalidadDelivery } from './pedidos-online'
-import { camposCobertura, prepararCoberturaDelivery, verificarCoberturaActual } from '@/lib/sucursales/cobertura-delivery'
+import { camposCobertura, exigirRecargoAceptado, prepararCoberturaDelivery, verificarCoberturaActual } from '@/lib/sucursales/cobertura-delivery'
 
 type SesionPersonal = { user: { idUsuario: number } }
 
@@ -35,7 +35,7 @@ const MAX_PEDIDOS_LISTA = 500
 
 const camposPedido = {
   idPedido: true, idSucursal: true, fecha: true, origenPedido: true, estadoPedido: true, metodoPago: true,
-  estadoPago: true, direccion: true, referencias: true, aclaracion: true, total: true, idLocalidad: true, idCliente: true,
+  estadoPago: true, direccion: true, referencias: true, aclaracion: true, subtotal: true, recargoDelivery: true, total: true, idLocalidad: true, idCliente: true,
   idTipoEntrega: true,
   cliente: { select: { nombre: true, apellido: true, telefono: true } },
   tipoEntrega: { select: { nombre: true } },
@@ -80,6 +80,8 @@ function aPantalla(fila: FilaPedido): PedidoPantalla {
       variacion: detalle.variacion?.nombre ?? null,
       extras: detalle.extras.map(({ extra }) => extra.nombre),
     })),
+    subtotal: fila.subtotal,
+    recargoDelivery: fila.recargoDelivery,
     total: fila.total,
   }
 }
@@ -142,6 +144,11 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
   }
 
   return {
+    cotizarDelivery: (request: Request) => proteger(request, true, async ({ idSucursal }) => {
+      const datos = validarCotizacionDelivery(await leerCuerpo(request), false)
+      const cobertura = await prepararCoberturaDelivery(db, { idSucursal }, datos.direccion, datos.idLocalidad)
+      return responder({ cotizacion: cobertura.cotizacion })
+    }),
     listar: (request: Request) => proteger(request, false, async ({ idSucursal }) => {
       const desde = new Date(Date.now() - VENTANA_ENTREGADOS_MS)
       const [filas, zonas] = await db.$transaction([
@@ -174,15 +181,17 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
       const creado = await db.$transaction(async (tx) => {
         const sucursal = await tx.sucursal.findUnique({
           where: { idSucursal },
-          select: { ...camposCobertura, localidadesDelivery: { select: { idLocalidad: true } } },
+          select: camposCobertura,
         })
         if (!sucursal?.activa) throw new ErrorPedido(404, 'La sucursal asignada no está disponible.')
-        // El radio y las zonas se respetan también en los pedidos que carga el personal.
+        // La tarifa y la ubicación también se verifican en los pedidos del personal.
         if (pedido.tipoEntrega === 'delivery') {
-          await verificarLocalidadDelivery(tx, sucursal.localidadesDelivery.map((zona) => zona.idLocalidad), pedido.idLocalidad)
+          await verificarLocalidadDelivery(tx, pedido.idLocalidad)
           verificarCoberturaActual(sucursal, cobertura)
         }
-        const { lineas, total } = await calcularLineas(tx, idSucursal, pedido.items)
+        const recargoDelivery = pedido.tipoEntrega === 'delivery' ? exigirRecargoAceptado(cobertura, pedido.recargoDeliveryAceptado) : 0
+        const { lineas, total: subtotal } = await calcularLineas(tx, idSucursal, pedido.items)
+        const total = Math.round((subtotal + recargoDelivery) * 100) / 100
         const idTipoEntrega = await buscarTipoEntrega(tx, pedido.tipoEntrega)
         const cliente = await tx.cliente.create({
           data: { nombre: pedido.cliente.nombre, telefono: pedido.cliente.telefono },
@@ -197,7 +206,8 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
             direccion: pedido.direccion,
             referencias: pedido.referencias,
             aclaracion: pedido.aclaracion,
-            subtotal: total,
+            subtotal,
+            recargoDelivery,
             total,
             idCliente: cliente.idCliente,
             idSucursal,
@@ -228,18 +238,22 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
         let telefonoNuevo: string | null = null
         if (accion.accion === 'cambiarTipoEntrega') {
           if (!puedeCambiarEntrega(actual) || actual.tipoEntrega === accion.tipoEntrega) throw conflicto()
+          const recargoDelivery = accion.tipoEntrega === 'delivery' ? exigirRecargoAceptado(cobertura, accion.recargoDeliveryAceptado) : 0
+          if (fila.estadoPago === 'pagado' && fila.recargoDelivery !== recargoDelivery) {
+            throw new ErrorPedido(409, 'Este pedido ya está pagado. No se puede cambiar la entrega si modifica el importe cobrado. Consultá al administrador.')
+          }
+          const importeEntrega = { recargoDelivery, total: Math.round((fila.total - fila.recargoDelivery + recargoDelivery) * 100) / 100 }
           const idTipoEntrega = await buscarTipoEntrega(tx, accion.tipoEntrega)
           if (accion.tipoEntrega === 'retiro') {
             // El celular queda en el cliente: puede servir para avisarle.
-            cambios = { idTipoEntrega, direccion: null, referencias: null, idLocalidad: null }
+            cambios = { ...importeEntrega, idTipoEntrega, direccion: null, referencias: null, idLocalidad: null }
           } else {
             const sucursal = await tx.sucursal.findUnique({ where: { idSucursal }, select: camposCobertura })
             if (!sucursal) throw new ErrorPedido(404, 'La sucursal no está disponible.')
             verificarCoberturaActual(sucursal, cobertura)
-            const zonas = await tx.sucursalLocalidad.findMany({ where: { idSucursal }, select: { idLocalidad: true } })
-            await verificarLocalidadDelivery(tx, zonas.map((zona) => zona.idLocalidad), accion.idLocalidad)
+            await verificarLocalidadDelivery(tx, accion.idLocalidad)
             cambios = {
-              idTipoEntrega, direccion: accion.direccion, referencias: accion.referencias, idLocalidad: accion.idLocalidad,
+              ...importeEntrega, idTipoEntrega, direccion: accion.direccion, referencias: accion.referencias, idLocalidad: accion.idLocalidad,
             }
             telefonoNuevo = accion.telefono
           }
@@ -257,6 +271,7 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
           where: {
             idPedido, idSucursal,
             estadoPedido: fila.estadoPedido, estadoPago: fila.estadoPago, idTipoEntrega: fila.idTipoEntrega,
+            total: fila.total, recargoDelivery: fila.recargoDelivery,
           },
           data: cambios,
         })
