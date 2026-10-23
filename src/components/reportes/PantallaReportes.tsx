@@ -4,6 +4,8 @@
 // Arranca en "Hoy" y en la sucursal de la barra superior; si esa cambia, se reinicia.
 
 import { useEffect, useRef, useState } from 'react'
+import { Search, X } from '@/components/icons'
+import { buscarPedidos } from '@/lib/reportes/buscar-pedidos'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import { Aviso } from '@/components/ui/Aviso'
 import { EVENTO_PEDIDOS_ACTUALIZADOS, INTERVALO_ACTUALIZACION_MS } from '@/lib/pedidos/pedidos-pantallas'
@@ -198,25 +200,67 @@ interface PestanasProps {
 
 function Pestanas({ datos, agrupacion, contexto, descargasHabilitadas }: PestanasProps) {
   const [elegida, setElegida] = useState<IdPestana>('periodo')
+  const [busqueda, setBusqueda] = useState('')
   const panel = useRef<HTMLDivElement>(null)
   const visibles = PESTANAS.filter((pestana) => !pestana.disponible || pestana.disponible(datos))
   // "Por sucursal" desaparece al elegir una sucursal: se vuelve a la primera.
   const actual = visibles.find((pestana) => pestana.id === elegida) ?? visibles[0]
-  const filas = actual.filas(datos, agrupacion)
+  const pedidosVisibles = buscarPedidos(datos.pedidos, busqueda)
+  const datosVisibles = actual.id === 'pedidos' ? { ...datos, pedidos: pedidosVisibles } : datos
+  const busquedaActiva = actual.id === 'pedidos' ? busqueda.trim() : ''
+  const contextoDescarga = busquedaActiva ? { ...contexto, busquedaPedidos: busquedaActiva } : contexto
+  const filas = actual.filas(datosVisibles, agrupacion)
   const grafico = actual.grafico
-  const sinDatos = actual.id === 'pedidos' ? datos.pedidos.length === 0 : datos.resumen.cantidadPedidos === 0
+  const sinDatos = actual.id === 'pedidos' ? pedidosVisibles.length === 0 : datos.resumen.cantidadPedidos === 0
 
   return (
     <section className="flex flex-col gap-5 rounded-3xl bg-surface p-5 shadow-sm">
-      <ExportarReporte
-        datos={datos}
-        pestana={actual}
-        filas={filas}
-        agrupacion={agrupacion}
-        contexto={contexto}
-        deshabilitado={!descargasHabilitadas}
-        obtenerImagenGrafico={() => panel.current?.querySelector('canvas')?.toDataURL('image/png') ?? null}
-      />
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        {actual.id === 'pedidos' && (
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="relative min-w-0 flex-1 sm:max-w-lg">
+              <label className="flex min-w-0 items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 focus-within:border-accent">
+                <Search className="size-4 shrink-0 text-muted" aria-hidden="true" />
+                <span className="sr-only">Buscar pedidos por producto, cliente, empleado, número o sucursal</span>
+                <input
+                  type="search"
+                  value={busqueda}
+                  onChange={(evento) => setBusqueda(evento.target.value)}
+                  placeholder="Producto, cliente, empleado o N.º de pedido"
+                  aria-describedby="alcance-busqueda-pedidos"
+                  className="min-w-0 w-full bg-transparent pr-6 text-sm text-text outline-none placeholder:text-muted [&::-webkit-search-cancel-button]:appearance-none"
+                />
+              </label>
+              {busqueda && (
+                <button
+                  type="button"
+                  onClick={() => setBusqueda('')}
+                  aria-label="Limpiar búsqueda"
+                  title="Limpiar búsqueda"
+                  className="absolute inset-y-0 right-1 my-auto inline-flex size-8 cursor-pointer items-center justify-center rounded-full text-muted hover:bg-bg hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
+                >
+                  <X className="size-4" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <p role="status" className="sr-only shrink-0 text-xs text-muted sm:not-sr-only">
+              {pedidosVisibles.length} de {datos.pedidos.length} pedidos
+            </p>
+            <p id="alcance-busqueda-pedidos" className="sr-only">La búsqueda filtra el detalle y sus descargas. Los totales corresponden al período completo.</p>
+          </div>
+        )}
+        <div className="ml-auto shrink-0">
+          <ExportarReporte
+            datos={datosVisibles}
+            pestana={actual}
+            filas={filas}
+            agrupacion={agrupacion}
+            contexto={contextoDescarga}
+            deshabilitado={!descargasHabilitadas}
+            obtenerImagenGrafico={() => panel.current?.querySelector('canvas')?.toDataURL('image/png') ?? null}
+          />
+        </div>
+      </div>
       <div role="tablist" aria-label="Reportes" className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-border">
         {visibles.map((pestana) => {
           const seleccionada = pestana.id === actual.id
@@ -240,7 +284,9 @@ function Pestanas({ datos, agrupacion, contexto, descargasHabilitadas }: Pestana
       <div ref={panel} role="tabpanel" id="panel-reporte" aria-labelledby={`pestana-${actual.id}`} className="flex flex-col gap-5">
         {sinDatos ? (
           <p className="text-sm text-muted">
-            {actual.id === 'pedidos' ? 'No hay pedidos registrados en este período.' : 'No hay pedidos pagados en este período.'}
+            {actual.id === 'pedidos'
+              ? datos.pedidos.length > 0 ? 'No hay pedidos que coincidan con la búsqueda.' : 'No hay pedidos registrados en este período.'
+              : 'No hay pedidos pagados en este período.'}
           </p>
         ) : (
           <>
@@ -254,7 +300,7 @@ function Pestanas({ datos, agrupacion, contexto, descargasHabilitadas }: Pestana
                 formato={actual.columnas[grafico.valor].formato}
               />
             )}
-            {grafico?.tipo !== 'mapa' && <TablaReporte columnas={actual.columnas} filas={filas} />}
+            {grafico?.tipo !== 'mapa' && <TablaReporte columnas={actual.columnas} filas={filas} compacta={actual.id === 'pedidos'} />}
           </>
         )}
       </div>

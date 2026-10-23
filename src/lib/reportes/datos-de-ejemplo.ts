@@ -100,7 +100,7 @@ function claveDePeriodo(dia: string, agrupacion: Agrupacion) {
 
 type PedidoDeEjemplo = PedidoReporte & {
   idSucursal: number
-  lineas: { idProducto: number; cantidad: number; subtotal: number }[]
+  lineas: { idProducto: number; nombre: string; cantidad: number; subtotal: number }[]
 }
 
 function generarPedidosDelDia(dia: string, sucursal: { idSucursal: number; nombre: string }) {
@@ -118,7 +118,7 @@ function generarPedidosDelDia(dia: string, sucursal: { idSucursal: number; nombr
     const lineas = Array.from({ length: entero(azar, 1, 4) }, () => {
       const producto = elegir(azar, PRODUCTOS)
       const cantidadProducto = entero(azar, 1, 2)
-      return { idProducto: producto.idProducto, cantidad: cantidadProducto, subtotal: producto.precio * cantidadProducto }
+      return { idProducto: producto.idProducto, nombre: producto.nombre, cantidad: cantidadProducto, subtotal: producto.precio * cantidadProducto }
     })
     const subtotal = lineas.reduce((suma, linea) => suma + linea.subtotal, 0)
 
@@ -133,6 +133,7 @@ function generarPedidosDelDia(dia: string, sucursal: { idSucursal: number; nombr
       vendido: true,
       tipoEntrega: origen === 'online' && azar() < 0.5 ? 'delivery' : 'retiro',
       metodoPago: origen === 'online' && azar() < 0.6 ? 'transferencia' : 'efectivo',
+      productos: [...new Set(lineas.map((linea) => linea.nombre))],
       cantidadProductos: lineas.reduce((suma, linea) => suma + linea.cantidad, 0),
       subtotal,
       recargoDelivery: 0,
@@ -236,7 +237,7 @@ export function generarDatosDeEjemplo(filtros: FiltrosReportes): DatosReportes {
       .map((p): PedidoReporte => ({
         idPedido: p.idPedido, fecha: p.fecha, sucursal: p.sucursal, cliente: p.cliente, origen: p.origen,
         registradoPor: p.registradoPor, estadoPago: p.estadoPago, vendido: p.vendido,
-        tipoEntrega: p.tipoEntrega, metodoPago: p.metodoPago, cantidadProductos: p.cantidadProductos,
+        tipoEntrega: p.tipoEntrega, metodoPago: p.metodoPago, productos: p.productos, cantidadProductos: p.cantidadProductos,
         subtotal: p.subtotal, recargoDelivery: 0, total: p.total,
       }))
       .reverse(),

@@ -53,6 +53,7 @@ export type PedidoReporte = {
   metodoPago: MetodoPago
   estadoPago: EstadoPago
   vendido: boolean
+  productos: string[] // nombres sin repetir, incluidos también en pedidos pendientes
   cantidadProductos: number // suma de las cantidades de sus detalles
   recargoDelivery: number
   subtotal: number

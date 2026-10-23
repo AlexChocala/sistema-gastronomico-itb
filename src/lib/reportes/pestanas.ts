@@ -10,7 +10,7 @@ export type IdPestana = 'periodo' | 'horario' | 'productos' | 'sucursales' | 'pa
 export type TipoGrafico = 'linea' | 'barras' | 'barrasHorizontales' | 'torta' | 'mapa'
 export type Formato = 'texto' | 'numero' | 'precio'
 export type Valor = string | number
-export type Columna = { titulo: string; formato: Formato }
+export type Columna = { titulo: string; formato: Formato; multilinea?: boolean }
 
 export type Pestana = {
   id: IdPestana
@@ -126,18 +126,19 @@ export const PESTANAS: Pestana[] = [
     titulo: 'Detalle de pedidos',
     columnas: [
       { titulo: 'N.º', formato: 'texto' },
-      { titulo: 'Fecha', formato: 'texto' },
+      { titulo: 'Fecha', formato: 'texto', multilinea: true },
       { titulo: 'Sucursal', formato: 'texto' },
-      { titulo: 'Cliente', formato: 'texto' },
-      { titulo: 'Registrado por', formato: 'texto' },
+      { titulo: 'Cliente', formato: 'texto', multilinea: true },
+      { titulo: 'Registrado por', formato: 'texto', multilinea: true },
       { titulo: 'Canal', formato: 'texto' },
       { titulo: 'Entrega', formato: 'texto' },
       { titulo: 'Pago', formato: 'texto' },
-      { titulo: 'Estado de pago', formato: 'texto' },
+      { titulo: 'Estado de pago', formato: 'texto', multilinea: true },
       { titulo: 'Vendido', formato: 'texto' },
-      { titulo: 'Productos', formato: 'numero' },
+      { titulo: 'Productos', formato: 'texto', multilinea: true },
+      { titulo: 'Cantidad', formato: 'numero' },
       { titulo: 'Subtotal', formato: 'precio' },
-      { titulo: 'Recargo delivery', formato: 'precio' },
+      { titulo: 'Recargo delivery', formato: 'precio', multilinea: true },
       { titulo: 'Total', formato: 'precio' },
     ],
     filas: (datos) =>
@@ -145,7 +146,7 @@ export const PESTANAS: Pestana[] = [
         p.idPedido, fechaYHora(p.fecha), p.sucursal, p.cliente,
         p.registradoPor ?? (p.origen === 'online' ? 'Pedido online' : 'Sin registro'),
         NOMBRES_ORIGEN[p.origen], NOMBRES_ENTREGA[p.tipoEntrega], NOMBRES_METODO_PAGO[p.metodoPago],
-        NOMBRES_ESTADO_PAGO[p.estadoPago], p.vendido ? 'Sí' : 'No', p.cantidadProductos, p.subtotal, p.recargoDelivery, p.total,
+        NOMBRES_ESTADO_PAGO[p.estadoPago], p.vendido ? 'Sí' : 'No', (p.productos ?? []).join(', '), p.cantidadProductos, p.subtotal, p.recargoDelivery, p.total,
       ]),
     grafico: null,
   },

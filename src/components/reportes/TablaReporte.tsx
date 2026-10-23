@@ -3,7 +3,9 @@
 
 import { formatear, type Columna, type Valor } from '@/lib/reportes/pestanas'
 
-export function TablaReporte({ columnas, filas }: { columnas: Columna[]; filas: Valor[][] }) {
+export function TablaReporte({ columnas, filas, compacta = false }: { columnas: Columna[]; filas: Valor[][]; compacta?: boolean }) {
+  const espaciado = compacta ? 'px-2.5 py-2' : 'px-4 py-2'
+  const ajuste = (columna: Columna) => columna.multilinea ? 'max-w-44 whitespace-normal break-words' : 'whitespace-nowrap'
   const alineacion = (columna: Columna) => (columna.formato === 'texto' ? 'text-left' : 'text-right tabular-nums')
 
   return (
@@ -12,7 +14,7 @@ export function TablaReporte({ columnas, filas }: { columnas: Columna[]; filas: 
         <thead className="sticky top-0 bg-surface-muted text-muted">
           <tr>
             {columnas.map((columna) => (
-              <th key={columna.titulo} scope="col" className={`whitespace-nowrap px-4 py-2 font-medium ${alineacion(columna)}`}>
+              <th key={columna.titulo} scope="col" className={`${ajuste(columna)} ${espaciado} font-medium ${alineacion(columna)}`}>
                 {columna.titulo}
               </th>
             ))}
@@ -22,7 +24,7 @@ export function TablaReporte({ columnas, filas }: { columnas: Columna[]; filas: 
           {filas.map((fila, i) => (
             <tr key={i} className="border-t border-border">
               {fila.map((valor, j) => (
-                <td key={j} className={`whitespace-nowrap px-4 py-2 text-text ${alineacion(columnas[j])}`}>
+                <td key={j} className={`${ajuste(columnas[j])} ${espaciado} text-text ${alineacion(columnas[j])}`}>
                   {formatear(valor, columnas[j].formato)}
                 </td>
               ))}

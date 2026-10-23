@@ -14,11 +14,12 @@ type OpcionesExcel = {
   periodo: string
   sucursal: string
   nombreArchivo: string
+  busquedaPedidos?: string
 }
 
 const FORMATO_PESOS = '"$" #,##0'
 
-export async function exportarExcel({ negocio, datos, agrupacion, periodo, sucursal, nombreArchivo }: OpcionesExcel) {
+export async function exportarExcel({ negocio, datos, agrupacion, periodo, sucursal, nombreArchivo, busquedaPedidos }: OpcionesExcel) {
   const XLSX = await import('xlsx')
   const libro = XLSX.utils.book_new()
 
@@ -31,6 +32,7 @@ export async function exportarExcel({ negocio, datos, agrupacion, periodo, sucur
     ['Total vendido', totalVendido],
     ['Pedidos pagados', cantidadPedidos],
     ['Ticket promedio', ticketPromedio],
+    ...(busquedaPedidos ? [['Búsqueda en detalle de pedidos', busquedaPedidos]] : []),
   ])
   resumen.B5.z = FORMATO_PESOS
   resumen.B7.z = FORMATO_PESOS

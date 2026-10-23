@@ -138,6 +138,7 @@ export function calcularReportes(
       cliente: [pedido.cliente.nombre, pedido.cliente.apellido].filter(Boolean).join(' '),
       registradoPor: pedido.usuario ? [pedido.usuario.nombre, pedido.usuario.apellido].filter(Boolean).join(' ') : null,
       origen, metodoPago, estadoPago, vendido, tipoEntrega,
+      productos: [...new Set(pedido.detalles.map((detalle) => detalle.producto.nombre))],
       cantidadProductos: pedido.detalles.reduce((suma, d) => suma + d.cantidad, 0),
       recargoDelivery: dinero(pedido.recargoDelivery),
       subtotal: dinero(pedido.subtotal), total: dinero(pedido.total),
