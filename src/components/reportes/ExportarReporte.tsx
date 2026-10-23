@@ -17,6 +17,8 @@ export type ContextoDescarga = {
   sucursal: string
   // Final de los nombres de archivo, ej. "2026-09-01_2026-09-28".
   sufijoArchivo: string
+  // Solo se aplica al detalle; los otros reportes conservan el período completo.
+  busquedaPedidos?: string
 }
 
 interface ExportarReporteProps {
@@ -35,7 +37,9 @@ function aNombreDeArchivo(texto: string) {
 }
 
 export function ExportarReporte({ datos, pestana, filas, agrupacion, contexto, deshabilitado, obtenerImagenGrafico }: ExportarReporteProps) {
-  const { negocio, periodo, sucursal, sufijoArchivo } = contexto
+  const { negocio, periodo, sucursal, sufijoArchivo, busquedaPedidos } = contexto
+  const sufijoDescarga = busquedaPedidos ? `${sufijoArchivo}_filtrado` : sufijoArchivo
+  const periodoPdf = busquedaPedidos ? `${periodo} · Búsqueda en detalle: ${busquedaPedidos}` : periodo
   const sinDatos = deshabilitado || (pestana.id === 'pedidos' ? datos.pedidos.length === 0 : datos.resumen.cantidadPedidos === 0)
 
   const grupos: GrupoExportar[] = [
@@ -46,14 +50,14 @@ export function ExportarReporte({ datos, pestana, filas, agrupacion, contexto, d
           texto: 'PDF de esta pestaña',
           generar: () =>
             exportarPdf({
-              negocio, pestana, filas, resumen: datos.resumen, periodo, sucursal,
+              negocio, pestana, filas, resumen: datos.resumen, periodo: periodoPdf, sucursal,
               imagenGrafico: obtenerImagenGrafico(),
-              nombreArchivo: `reporte-${aNombreDeArchivo(pestana.titulo)}_${sufijoArchivo}.pdf`,
+              nombreArchivo: `reporte-${aNombreDeArchivo(pestana.titulo)}_${sufijoDescarga}.pdf`,
             }),
         },
         {
           texto: 'Excel con todos los reportes',
-          generar: () => exportarExcel({ negocio, datos, agrupacion, periodo, sucursal, nombreArchivo: `reportes_${sufijoArchivo}.xlsx` }),
+          generar: () => exportarExcel({ negocio, datos, agrupacion, periodo, sucursal, busquedaPedidos, nombreArchivo: `reportes_${sufijoDescarga}.xlsx` }),
         },
       ],
     },
@@ -61,7 +65,7 @@ export function ExportarReporte({ datos, pestana, filas, agrupacion, contexto, d
 
   if (pestana.id === 'pedidos') {
     grupos.push(...gruposDatosDelListado(
-      `pedidos_${sufijoArchivo}`,
+      `pedidos_${sufijoDescarga}`,
       pestana.columnas.map((columna) => columna.titulo),
       () => ({ filas, json: datos.pedidos }),
     ))
