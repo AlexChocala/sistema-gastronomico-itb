@@ -212,3 +212,56 @@ export async function buscarDireccionesParecidas(
   }
   return encontradas
 }
+
+// La localidad de Georef con ese nombre en esa provincia (con su partido y su centro).
+async function buscarLocalidadGeoref(nombre: string, provincia: string): Promise<LocalidadGeoref | null> {
+  const enCapital = normalizarLugar(provincia) === normalizarLugar('CABA')
+  const datos = await pedir('localidades', { nombre, provincia: enCapital ? PROVINCIAS_AMBA[0] : provincia, exacto: 'true', max: '20' })
+  for (const l of (Array.isArray(datos.localidades) ? datos.localidades : []) as Record<string, unknown>[]) {
+    const centro = l?.centroide as { lat?: unknown; lon?: unknown } | undefined
+    const prov = division(l?.provincia)
+    const departamento = division(l?.departamento)
+    if (typeof l?.nombre !== 'string' || !prov || !departamento || !coordenadasValidas(centro?.lat, centro?.lon)) continue
+    if (normalizarLugar(l.nombre) !== normalizarLugar(nombre) || normalizarLugar(prov.nombre) !== normalizarLugar(provincia)) continue
+    return { nombre: l.nombre, provincia: prov, departamento, latitud: centro!.lat as number, longitud: centro!.lon as number }
+  }
+  return null
+}
+
+export type DireccionEnLocalidad = DireccionEncontrada & { localidad: string; provincia: string }
+
+// Direcciones que se parecen a lo que escribe el cliente, solo dentro de la localidad que
+// eligió. Se busca en el partido de esa localidad y se queda con las que caen en ella
+// (la de centro más cercano, igual que al cotizar). El texto lleva el nombre de la
+// localidad elegida: "Av Bartolome Mitre 350, Avellaneda, Buenos Aires".
+export async function buscarDireccionesEnLocalidad(
+  texto: string, localidad: { nombre: string; provincia: string },
+): Promise<DireccionEnLocalidad[]> {
+  if (!/^.{2,}\s+\d{1,6}$/.test(texto.trim())) return []
+  const referencia = await buscarLocalidadGeoref(localidad.nombre, localidad.provincia)
+  if (!referencia?.departamento) return []
+  const [datos, lista] = await Promise.all([
+    pedir('direcciones', { direccion: texto.trim(), provincia: referencia.provincia.id, departamento: referencia.departamento.id, max: '100' }),
+    localidadesDeProvincia(referencia.provincia.id),
+  ])
+  const delPartido = lista.filter((l) => l.departamento?.id === referencia.departamento!.id)
+  const encontradas: DireccionEnLocalidad[] = []
+  for (const d of (Array.isArray(datos.direcciones) ? datos.direcciones : []) as DireccionGeoref[]) {
+    const calle = d?.calle?.nombre
+    const altura = d?.altura?.valor
+    if (typeof calle !== 'string' || calle.includes(',') || !Number.isSafeInteger(altura) || !coordenadasValidas(d.ubicacion?.lat, d.ubicacion?.lon)) continue
+    const punto = { latitud: d.ubicacion!.lat!, longitud: d.ubicacion!.lon! }
+    let masCercana: LocalidadGeoref | null = null
+    let menor = Infinity
+    for (const l of delPartido) {
+      const km = distanciaEnKm(punto, l)
+      if (km < menor) { menor = km; masCercana = l }
+    }
+    if (delPartido.length && (!masCercana || normalizarLugar(masCercana.nombre) !== normalizarLugar(referencia.nombre))) continue
+    encontradas.push({
+      ...punto, localidad: referencia.nombre, provincia: referencia.provincia.nombre,
+      direccion: `${nombrePropio(calle)} ${altura}, ${referencia.nombre}, ${referencia.provincia.nombre}`,
+    })
+  }
+  return encontradas
+}

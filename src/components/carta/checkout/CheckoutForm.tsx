@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/Input'
 import { detalleLinea, useCarrito, useHidratado, type ItemCarrito, type ProductoCarrito } from '@/lib/pedidos/carrito'
 import {
   DIGITOS_TELEFONO, ErrorPedido, MAX_DIRECCION, MAX_NOMBRE_CLIENTE, MAX_REFERENCIAS, MENSAJE_DIRECCION,
-  MENSAJE_NOMBRE, MENSAJE_REFERENCIAS, MENSAJE_TELEFONO, MIN_DIRECCION,
+  MENSAJE_ELEGIR_DIRECCION, MENSAJE_NOMBRE, MENSAJE_REFERENCIAS, MENSAJE_TELEFONO, MIN_DIRECCION,
   filtrarNombreEscrito, filtrarTelefonoEscrito, limpiarReferencias, nombreClienteValido, validarPedidoOnline,
   type MetodoPagoOnline, type TipoEntregaOnline,
 } from '@/lib/pedidos/pedidos-validacion'
@@ -134,8 +134,8 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
       const direccionLimpia = direccion.trim()
       if (direccionLimpia.length < MIN_DIRECCION || direccionLimpia.length > MAX_DIRECCION) {
         encontrados.direccion = MENSAJE_DIRECCION
-      } else if (!separarDireccion(direccionLimpia)) {
-        encontrados.direccion = 'Elegí tu dirección de la lista que aparece mientras escribís.'
+      } else if (!cotizador.ubicacion && !separarDireccion(direccionLimpia)) {
+        encontrados.direccion = MENSAJE_ELEGIR_DIRECCION
       }
       if (!sucursal.deliveryConfigurado) encontrados.tipoEntrega = 'Esta sucursal todavía no configuró su cobertura de delivery. Consultá al local o elegí retiro si está disponible.'
       if (limpiarReferencias(referencias) === undefined) encontrados.referencias = MENSAJE_REFERENCIAS
@@ -171,6 +171,7 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
       ...(tipoEntrega === 'delivery'
         ? {
             direccion: direccion.trim(),
+            ...(cotizador.ubicacion ? { ubicacion: cotizador.ubicacion } : {}),
             recargoDeliveryAceptado: recargoDelivery,
             // Opcionales: vacías no se mandan.
             ...(referencias.trim() ? { referencias: referencias.trim() } : {}),
@@ -331,7 +332,7 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
                 error={errores.direccion}
                 maxLength={MAX_DIRECCION}
                 onCambiar={(texto) => { setDireccion(texto); limpiarError('direccion') }}
-                onElegir={(elegida) => void cotizador.calcular(elegida)}
+                onElegir={(elegida, ubicacion) => void cotizador.calcular(elegida, ubicacion)}
               />
               <CotizadorDelivery cotizador={cotizador} disabled={enviando || !direccion.trim()} />
               <div className="flex flex-col gap-1">

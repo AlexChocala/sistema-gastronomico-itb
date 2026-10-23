@@ -183,10 +183,12 @@ export type NuevoPedidoMostrador = {
   telefono?: string
   direccion?: string
   idLocalidad?: number | null
+  // Ubicación firmada de la sugerencia elegida.
+  ubicacion?: string | null
   referencias?: string
 }
 
-export type DatosDelivery = { recargoDeliveryAceptado?: number; telefono: string; direccion: string; idLocalidad: number | null; referencias: string }
+export type DatosDelivery = { recargoDeliveryAceptado?: number; telefono: string; direccion: string; idLocalidad: number | null; ubicacion?: string | null; referencias: string }
 
 export type ResultadoAccion =
   | { ok: true; pedido: PedidoPantalla }
@@ -215,6 +217,7 @@ export function cuerpoPedidoCaja(datos: NuevoPedidoMostrador) {
           direccion: datos.direccion ?? '',
           recargoDeliveryAceptado: datos.recargoDeliveryAceptado,
           ...(datos.idLocalidad ? { idLocalidad: datos.idLocalidad } : {}),
+          ...(datos.ubicacion ? { ubicacion: datos.ubicacion } : {}),
           ...(datos.referencias?.trim() ? { referencias: datos.referencias.trim() } : {}),
         }
       : {}),
@@ -339,6 +342,7 @@ export function usePedidosPantalla(idSucursal: number | null) {
               direccion: entrega.direccion,
               recargoDeliveryAceptado: entrega.recargoDeliveryAceptado,
               ...(entrega.idLocalidad ? { idLocalidad: entrega.idLocalidad } : {}),
+              ...(entrega.ubicacion ? { ubicacion: entrega.ubicacion } : {}),
               ...(entrega.referencias.trim() ? { referencias: entrega.referencias.trim() } : {}),
             },
         (pedido) => tipoEntrega === 'retiro'

@@ -10,13 +10,13 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { ErrorSucursal, leerCuerpo } from '@/lib/sucursales/sucursales-validacion'
 import {
-  ErrorPedido, validarBusquedaDireccion, validarCotizacionDelivery, MENSAJE_SUCURSAL_NO_DISPONIBLE, validarPedidoOnline,
+  ErrorPedido, validarBusquedaDireccion, validarConsultaZonas, validarCotizacionDelivery, MENSAJE_SUCURSAL_NO_DISPONIBLE, validarPedidoOnline,
   type ItemPedidoOnline, type PedidoOnlineValidado, type TipoEntregaOnline,
 } from './pedidos-validacion'
 import { datosTransferencia } from '@/lib/negocio/negocio'
 import {
   camposCobertura, exigirRecargoAceptado, prepararCoberturaDelivery, sugerirDireccionesDelivery, verificarCoberturaActual,
-  type CoberturaVerificada,
+  zonasDeliveryDe, type CoberturaVerificada,
 } from '@/lib/sucursales/cobertura-delivery'
 
 // Límite de pedidos por IP. Vive en la memoria del proceso: si la aplicación corre en
@@ -313,7 +313,7 @@ export function crearControladorPedidosOnline(db: PrismaClient) {
         if ((origen && origen !== new URL(request.url).origin) || request.headers.get('sec-fetch-site') === 'cross-site') throw new ErrorPedido(403, 'La solicitud debe realizarse desde esta aplicación.')
         limitarCotizaciones(ipDe(request))
         const datos = validarCotizacionDelivery(await leerCuerpo(request), true)
-        const cobertura = await prepararCoberturaDelivery(db, { slug: datos.slugSucursal }, datos.direccion, datos.idLocalidad)
+        const cobertura = await prepararCoberturaDelivery(db, { slug: datos.slugSucursal }, datos.direccion, datos.idLocalidad, datos.ubicacion)
         return responder({ cotizacion: cobertura.cotizacion })
       } catch (error) { return responderError(error) }
     },
@@ -323,7 +323,16 @@ export function crearControladorPedidosOnline(db: PrismaClient) {
         if ((origen && origen !== new URL(request.url).origin) || request.headers.get('sec-fetch-site') === 'cross-site') throw new ErrorPedido(403, 'La solicitud debe realizarse desde esta aplicación.')
         limitarBusquedas(ipDe(request))
         const datos = validarBusquedaDireccion(await leerCuerpo(request), true)
-        return responder({ sugerencias: await sugerirDireccionesDelivery(db, { slug: datos.slugSucursal }, datos.texto) })
+        return responder({ sugerencias: await sugerirDireccionesDelivery(db, { slug: datos.slugSucursal }, datos.texto, datos.localidad) })
+      } catch (error) { return responderError(error) }
+    },
+    zonasDelivery: async (request: Request) => {
+      try {
+        const origen = request.headers.get('origin')
+        if ((origen && origen !== new URL(request.url).origin) || request.headers.get('sec-fetch-site') === 'cross-site') throw new ErrorPedido(403, 'La solicitud debe realizarse desde esta aplicación.')
+        limitarBusquedas(ipDe(request))
+        const datos = validarConsultaZonas(await leerCuerpo(request))
+        return responder({ zonas: await zonasDeliveryDe(db, { slug: datos.slugSucursal }) })
       } catch (error) { return responderError(error) }
     },
     crear: async (request: Request) => {
@@ -338,7 +347,7 @@ export function crearControladorPedidosOnline(db: PrismaClient) {
         try {
           const pedido = validarPedidoOnline(await leerCuerpo(request))
           const cobertura = pedido.tipoEntrega === 'delivery'
-            ? await prepararCoberturaDelivery(db, { slug: pedido.slugSucursal }, pedido.direccion, pedido.idLocalidad)
+            ? await prepararCoberturaDelivery(db, { slug: pedido.slugSucursal }, pedido.direccion, pedido.idLocalidad, pedido.ubicacion)
             : null
           // Dos pedidos al mismo tiempo pueden chocar en la transacción serializable: se
           // reintenta una vez antes de pedirle al cliente que vuelva a enviarlo.

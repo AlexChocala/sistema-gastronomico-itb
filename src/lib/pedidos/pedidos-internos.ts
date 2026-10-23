@@ -26,6 +26,7 @@ import {
 import { buscarTipoEntrega, calcularLineas, detallesDe, verificarLocalidadDelivery } from './pedidos-online'
 import {
   camposCobertura, exigirRecargoAceptado, prepararCoberturaDelivery, sugerirDireccionesDelivery, verificarCoberturaActual,
+  zonasDeliveryDe,
 } from '@/lib/sucursales/cobertura-delivery'
 
 type SesionPersonal = { user: { idUsuario: number } }
@@ -176,13 +177,15 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
     }),
     cotizarDelivery: (request: Request) => proteger(request, true, async ({ idSucursal }) => {
       const datos = validarCotizacionDelivery(await leerCuerpo(request), false)
-      const cobertura = await prepararCoberturaDelivery(db, { idSucursal }, datos.direccion, datos.idLocalidad)
+      const cobertura = await prepararCoberturaDelivery(db, { idSucursal }, datos.direccion, datos.idLocalidad, datos.ubicacion)
       return responder({ cotizacion: cobertura.cotizacion })
     }),
     sugerirDirecciones: (request: Request) => proteger(request, true, async ({ idSucursal }) => {
       const datos = validarBusquedaDireccion(await leerCuerpo(request), false)
-      return responder({ sugerencias: await sugerirDireccionesDelivery(db, { idSucursal }, datos.texto) })
+      return responder({ sugerencias: await sugerirDireccionesDelivery(db, { idSucursal }, datos.texto, datos.localidad) })
     }),
+    zonasDelivery: (request: Request) => proteger(request, true, async ({ idSucursal }) =>
+      responder({ zonas: await zonasDeliveryDe(db, { idSucursal }) })),
     listar: (request: Request) => proteger(request, false, async ({ idSucursal }) => {
       const desde = new Date(Date.now() - VENTANA_ENTREGADOS_MS)
       const [filas, zonas] = await db.$transaction([
@@ -210,7 +213,7 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
     crearCaja: (request: Request) => proteger(request, true, async ({ idUsuario, idSucursal }) => {
       const pedido = validarPedidoCaja(await leerCuerpo(request))
       const cobertura = pedido.tipoEntrega === 'delivery'
-        ? await prepararCoberturaDelivery(db, { idSucursal }, pedido.direccion, pedido.idLocalidad)
+        ? await prepararCoberturaDelivery(db, { idSucursal }, pedido.direccion, pedido.idLocalidad, pedido.ubicacion)
         : null
       const creado = await db.$transaction(async (tx) => {
         const permiso = await permisoParaCrearPedido(tx, idUsuario, idSucursal, reloj(), true)
@@ -262,7 +265,7 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
       const idPedido = leerId(id)
       const accion = validarAccionPedido(await leerCuerpo(request))
       const cobertura = accion.accion === 'cambiarTipoEntrega' && accion.tipoEntrega === 'delivery'
-        ? await prepararCoberturaDelivery(db, { idSucursal }, accion.direccion, accion.idLocalidad)
+        ? await prepararCoberturaDelivery(db, { idSucursal }, accion.direccion, accion.idLocalidad, accion.ubicacion)
         : null
 
       const actualizado = await db.$transaction(async (tx) => {
