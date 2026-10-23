@@ -90,6 +90,7 @@ model Sucursal {
   pedidos            Pedido[]
   localidadesDelivery SucursalLocalidad[]
   slugsAnteriores     SlugAnterior[]
+  asistencias        AsistenciaUsuario[]
 }
 
 model SucursalLocalidad {
@@ -120,6 +121,8 @@ model Usuario {
   sucursal   Sucursal? @relation(fields: [idSucursal], references: [idSucursal])
 
   pedidosCargados   Pedido[]
+  horarios         HorarioUsuario[]
+  asistencias      AsistenciaUsuario[]
 }
 
 model Categoria {
@@ -328,4 +331,37 @@ model SlugAnterior {
   sucursal Sucursal @relation(fields: [idSucursal], references: [idSucursal])
 
   @@index([idSucursal])
+}
+
+// Un turno por día de la semana. Los turnos nocturnos salen al día siguiente.
+model HorarioUsuario {
+  idHorario Int @id @default(autoincrement())
+  idUsuario Int
+  diaSemana Int
+  entradaMinutos Int
+  salidaMinutos Int
+  toleranciaMinutos Int @default(10)
+  usuario Usuario @relation(fields: [idUsuario], references: [idUsuario], onDelete: Restrict)
+
+  @@unique([idUsuario, diaSemana])
+}
+
+// Horario y sucursal se copian al fichar; no dependen de futuras ediciones del usuario.
+model AsistenciaUsuario {
+  idAsistencia Int @id @default(autoincrement())
+  idUsuario Int
+  idSucursal Int?
+  sucursalNombre String?
+  fechaJornada DateTime @db.Date
+  entradaPrevista DateTime @db.Timestamptz(3)
+  salidaPrevista DateTime @db.Timestamptz(3)
+  toleranciaMinutos Int
+  entrada DateTime @default(now()) @db.Timestamptz(3)
+  salida DateTime? @db.Timestamptz(3)
+  usuario Usuario @relation(fields: [idUsuario], references: [idUsuario], onDelete: Restrict)
+  sucursal Sucursal? @relation(fields: [idSucursal], references: [idSucursal], onDelete: SetNull)
+
+  @@unique([idUsuario, fechaJornada])
+  @@index([idSucursal, fechaJornada])
+  // SQL agrega un índice único parcial por idUsuario WHERE salida IS NULL.
 }

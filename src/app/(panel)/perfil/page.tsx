@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { Mail, ShieldCheck, Store, User, type LucideIcon } from '@/components/icons'
@@ -76,6 +77,7 @@ export default async function PerfilPage() {
           </Dato>
         </div>
       </section>
+      <Link href="/perfil/asistencia" className="self-start rounded-full border border-border bg-surface px-5 py-2.5 text-sm hover:bg-surface-muted">Ver mi horario e historial de asistencia</Link>
     </main>
   )
 }

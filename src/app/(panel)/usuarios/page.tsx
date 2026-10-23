@@ -588,7 +588,7 @@ export default function UsuariosPage() {
                           </span>
                         )}
                         <div className="min-w-0">
-                          <p className="truncate">{u.nombre} {u.apellido}</p>
+                          <Link href={`/usuarios/asistencia/${u.idUsuario}`} className="block truncate rounded-md font-medium hover:text-accent hover:underline" title="Ver horario e historial de asistencia">{u.nombre} {u.apellido}</Link>
                           <p className="truncate text-xs text-muted">{u.email}</p>
                         </div>
                       </div>

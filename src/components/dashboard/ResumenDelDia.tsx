@@ -10,6 +10,7 @@ import {
   Banknote, Bike, CalendarDays, CheckCheck, ChefHat, CircleCheck, Clock, ClipboardList, ExternalLink, Flame,
   Globe, Landmark, Receipt, ShoppingBag, Store, Wallet, type LucideIcon,
 } from '@/components/icons'
+import { MiTurno } from '@/components/asistencia/MiTurno'
 import { EstadoConexion } from '@/components/pedidos/EstadoConexion'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import {
@@ -168,6 +169,7 @@ export function ResumenDelDia({ nombre, puedeAbrirCaja }: { nombre: string; pued
         )}
       </header>
 
+      <MiTurno />
       <EstadoConexion error={error} onReintentar={() => void recargar()} />
 
       <section aria-label="Indicadores del día" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
