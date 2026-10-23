@@ -24,7 +24,7 @@ const tramosBase = [{ hastaKm: 5, costo: 0 }, { hastaKm: 100, costo: 2500 }]
 const contexto = { localidad: 'Avellaneda', provincia: 'Buenos Aires' }
 const sucursalBase = {
   idSucursal: 1, nombre: 'Avellaneda', slug: 'avellaneda', activa: true, ofreceDelivery: true, ofreceRetiro: true,
-  direccion: 'Olavarría 65', idLocalidad: 1, tramosDelivery: tramosBase as unknown, ...origen,
+  direccion: 'Olavarría 65', idLocalidad: 1, tramosDelivery: tramosBase as { hastaKm: number; costo: number }[], ...origen,
   whatsapp: '1123456789', localidadesDelivery: [] as { idLocalidad: number }[],
 }
 function direccionGeoref(punto = cerca, calle = 'OLAVARRIA', id = 'calle-1') {
