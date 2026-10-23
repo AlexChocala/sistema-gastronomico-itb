@@ -15,6 +15,7 @@
 // ya no se leen ni se borran, simplemente se ignoran.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { PermisoRegistroPedidos } from '@/lib/asistencia/permiso-pedidos'
 import {
   aplicarAccion, deshacerA, puedeIrACocina,
   type AccionEstado, type EstadoPago, type EstadoPedido, type ItemPedidoPantalla, type MetodoPago,
@@ -151,6 +152,18 @@ function useConsultaPeriodica<T>(url: string | null, clave: string) {
     recargar,
     invalidar,
     modificar,
+  }
+}
+
+// Se actualiza cada 5 s y al volver de Mi asistencia. Un fallo de conexión bloquea
+// el cobro aunque antes hubiera permiso; POST siempre decide en el servidor.
+export function usePermisoRegistroPedidos() {
+  const consulta = useConsultaPeriodica<PermisoRegistroPedidos>('/api/pedidos/caja', 'permiso-caja')
+  return {
+    puedeRegistrar: !consulta.cargando && !consulta.error && consulta.datos?.habilitado === true,
+    cargando: consulta.cargando,
+    mensaje: consulta.error ?? consulta.datos?.mensaje ?? null,
+    recargar: consulta.recargar,
   }
 }
 
