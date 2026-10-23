@@ -58,6 +58,8 @@ export function CotizadorDelivery({ cotizador, disabled = false }: {
   disabled?: boolean
 }) {
   const { cotizacion, error, consultando } = cotizador
+  // Sin dirección escrita todavía no hay nada que mostrar.
+  if (!consultando && !error && !cotizacion && disabled) return null
   return (
     <div aria-live="polite" className="flex items-center justify-between gap-3 rounded-2xl border border-border p-3 text-sm">
       {consultando ? <p className="text-muted">Calculando envío…</p>
