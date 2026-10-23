@@ -1,19 +1,16 @@
 'use client'
 
-// Datos de entrega de un delivery cargado por el personal: celular, dirección, localidad
-// (solo si la sucursal tiene zonas de delivery) e indicaciones opcionales. Lo usan Caja
+// Datos de entrega de un delivery cargado por el personal: celular, dirección (con
+// sugerencias de direcciones cercanas al local) e indicaciones opcionales. Lo usan Caja
 // (alta) y Pedidos ("Cambiar a delivery"). Los errores son los de erroresDatosDelivery
 // (los mismos mensajes que la API) y se muestran recién cuando se sale del campo, para
 // no retar mientras se escribe.
 
 import { useState } from 'react'
-import { MapPin } from '@/components/icons'
-import { Desplegable } from '@/components/ui/Desplegable'
+import { CampoDireccionDelivery } from './CampoDireccionDelivery'
 import {
   DIGITOS_TELEFONO, MAX_DIRECCION, MAX_REFERENCIAS, filtrarTelefonoEscrito, type CampoDelivery,
 } from '@/lib/pedidos/pedidos-validacion'
-import type { ZonaDelivery } from '@/lib/pedidos/pedidos-pantallas'
-import { MENSAJE_DIRECCION_COMPLETA } from '@/lib/sucursales/radio-delivery'
 
 export type ValoresDelivery = { telefono: string; direccion: string; idLocalidad: string; referencias: string }
 
@@ -26,15 +23,16 @@ export function CamposDelivery({
   id,
   valores,
   errores,
-  zonas,
   onCambiar,
+  onElegirDireccion,
 }: {
   // Prefijo para los ids de los campos (puede haber varios formularios en la página).
   id: string
   valores: ValoresDelivery
   errores: Partial<Record<CampoDelivery, string>>
-  zonas: ZonaDelivery[]
   onCambiar: (campo: keyof ValoresDelivery, valor: string) => void
+  // Al elegir una dirección de la lista: se usa para calcular el envío en el momento.
+  onElegirDireccion: (direccion: string) => void
 }) {
   const [tocados, setTocados] = useState<Partial<Record<CampoDelivery, boolean>>>({})
   const tocar = (campo: CampoDelivery) => setTocados((previos) => ({ ...previos, [campo]: true }))
@@ -70,34 +68,16 @@ export function CamposDelivery({
         {mensaje('telefono')}
       </div>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor={`${id}-direccion`} className="text-sm">Dirección de entrega</label>
-        <input
-          {...atributos('direccion')}
-          autoComplete="off"
-          placeholder={valores.idLocalidad ? 'Calle y número' : 'Calle y número, localidad, provincia'}
+      <div onBlur={() => tocar('direccion')}>
+        <CampoDireccionDelivery
+          id={`${id}-direccion`}
+          valor={valores.direccion}
+          error={error('direccion')}
           maxLength={MAX_DIRECCION}
-          value={valores.direccion}
-          onChange={(e) => onCambiar('direccion', e.target.value)}
+          onCambiar={(texto) => onCambiar('direccion', texto)}
+          onElegir={onElegirDireccion}
         />
-        {mensaje('direccion')}
-        {!valores.idLocalidad && <p className="text-xs text-muted">{MENSAJE_DIRECCION_COMPLETA}</p>}
       </div>
-
-      {zonas.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <span className="text-sm">Localidad</span>
-          <Desplegable
-            etiqueta="Localidad de entrega"
-            icono={MapPin}
-            opciones={[{ valor: '', texto: 'Otra localidad (completar dirección)' }, ...zonas.map((zona) => ({ valor: String(zona.idLocalidad), texto: zona.nombre }))]}
-            valor={valores.idLocalidad || null}
-            onElegir={(valor) => { onCambiar('idLocalidad', valor); tocar('idLocalidad') }}
-            textoVacio="Otra localidad / dirección completa"
-          />
-          {mensaje('idLocalidad')}
-        </div>
-      )}
 
       <div className="flex flex-col gap-1">
         <label htmlFor={`${id}-referencias`} className="text-sm">Indicaciones para el repartidor (opcional)</label>

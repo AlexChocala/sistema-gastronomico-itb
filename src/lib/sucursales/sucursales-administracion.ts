@@ -4,7 +4,7 @@ import {
   validarSucursal,
 } from './sucursales-validacion'
 import { validarLocalidadNueva } from './localidades-validacion'
-import { coberturaConfigurada, coordenadasValidas, MENSAJE_RADIO_DELIVERY, radioDeliveryValido } from './radio-delivery'
+import { coberturaConfigurada, coordenadasValidas, leerTramos, MENSAJE_TRAMOS } from './radio-delivery'
 import { geocodificarDireccion } from './geocodificacion'
 
 type Sesion = { user: { idUsuario: number } } | null
@@ -12,7 +12,7 @@ type Sesion = { user: { idUsuario: number } } | null
 const camposSucursal = {
   idSucursal: true, nombre: true, slug: true, direccion: true, whatsapp: true, horario: true, linkMaps: true, activa: true,
   ofreceRetiro: true, ofreceDelivery: true, idLocalidad: true,
-  radioDeliveryKm: true, recargoFueraRadio: true, latitud: true, longitud: true,
+  tramosDelivery: true, latitud: true, longitud: true,
   localidad: { select: { idLocalidad: true, nombre: true, provincia: { select: { idProvincia: true, nombre: true } } } },
 } satisfies Prisma.SucursalSelect
 
@@ -59,14 +59,14 @@ export async function crearSucursalEnTransaccion(tx: Prisma.TransactionClient, c
   if (!idLocalidad && localidadNueva) idLocalidad = await crearLocalidad(tx, localidadNueva)
   const datos = validarSucursal({ ...campos, idLocalidad }, false)
   if (datos.ofreceDelivery && !coberturaConfigurada(datos)) {
-    throw new ErrorSucursal(400, 'Configurá el radio y la ubicación de la sucursal antes de ofrecer delivery.')
+    throw new ErrorSucursal(400, 'Configurá los costos de envío y la ubicación de la sucursal antes de ofrecer delivery.')
   }
   return tx.sucursal.create({ data: { ...datos, slug: await slugLibre(tx, datos.nombre) }, select: camposSucursal })
 }
 
 type SucursalAnterior = {
   direccion: string; idLocalidad: number; ofreceDelivery: boolean
-  radioDeliveryKm: number | null; latitud: number | null; longitud: number | null
+  tramosDelivery: unknown; latitud: number | null; longitud: number | null
 }
 
 // Georef se consulta fuera de la transacción. La configuración inicial usa el mismo
@@ -76,9 +76,9 @@ export async function prepararSucursal(db: PrismaClient, cuerpo: unknown, anteri
   const nuevaLocalidad = localidadNueva ? validarLocalidadNueva(localidadNueva) : null
   const datos = validarSucursal({ ...campos, ...(!anterior && nuevaLocalidad ? { idLocalidad: 1 } : {}) }, !!anterior)
   const ofreceDelivery = datos.ofreceDelivery ?? anterior?.ofreceDelivery ?? true
-  if (!ofreceDelivery) return { ...campos, ...(nuevaLocalidad ? { localidadNueva } : {}), radioDeliveryKm: null, latitud: null, longitud: null }
-  const radioDeliveryKm = datos.radioDeliveryKm === undefined ? anterior?.radioDeliveryKm : datos.radioDeliveryKm
-  if (!radioDeliveryValido(radioDeliveryKm)) throw new ErrorSucursal(400, MENSAJE_RADIO_DELIVERY)
+  if (!ofreceDelivery) return { ...campos, ...(nuevaLocalidad ? { localidadNueva } : {}), tramosDelivery: [], latitud: null, longitud: null }
+  const tramosDelivery = leerTramos(datos.tramosDelivery === undefined ? anterior?.tramosDelivery : datos.tramosDelivery)
+  if (!tramosDelivery) throw new ErrorSucursal(400, MENSAJE_TRAMOS)
   const direccion = datos.direccion ?? anterior?.direccion
   const idLocalidad = datos.idLocalidad ?? anterior?.idLocalidad
   if (!direccion) throw new ErrorSucursal(400, 'Indicá la dirección de la sucursal.')
@@ -99,7 +99,7 @@ export async function prepararSucursal(db: PrismaClient, cuerpo: unknown, anteri
     latitud = punto.latitud
     longitud = punto.longitud
   }
-  return { ...campos, ...(nuevaLocalidad ? { localidadNueva } : {}), radioDeliveryKm, latitud, longitud }
+  return { ...campos, ...(nuevaLocalidad ? { localidadNueva } : {}), tramosDelivery, latitud, longitud }
 }
 
 // El formulario puede mandar "localidadNueva" (nombre + provincia) en vez de idLocalidad,
@@ -228,8 +228,8 @@ export function crearControladorSucursales(db: PrismaClient, leerSesion: () => P
       const sucursal = await db.$transaction(async (tx) => {
         const actual = await tx.sucursal.findUnique({ where: { idSucursal } })
         if (!actual) throw new ErrorSucursal(404, 'Sucursal no encontrada.')
-        if ((['direccion', 'idLocalidad', 'ofreceDelivery', 'radioDeliveryKm', 'recargoFueraRadio', 'latitud', 'longitud'] as const)
-          .some(campo => actual[campo] !== anterior[campo])) {
+        if ((['direccion', 'idLocalidad', 'ofreceDelivery', 'latitud', 'longitud'] as const).some(campo => actual[campo] !== anterior[campo])
+          || JSON.stringify(actual.tramosDelivery) !== JSON.stringify(anterior.tramosDelivery)) {
           throw new ErrorSucursal(409, 'La ubicación o la cobertura cambió. Actualizá la sucursal e intentá nuevamente.')
         }
         const datos = !datosValidados.idLocalidad && localidadNueva

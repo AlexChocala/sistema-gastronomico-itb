@@ -15,7 +15,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { ErrorSucursal, idValido, leerCuerpo, leerId } from '@/lib/sucursales/sucursales-validacion'
 import {
-  ErrorPedido, MENSAJE_SUCURSAL_NO_DISPONIBLE, validarAccionPedido, validarPedidoCaja, validarCotizacionDelivery,
+  ErrorPedido, MENSAJE_SUCURSAL_NO_DISPONIBLE, validarAccionPedido, validarPedidoCaja, validarCotizacionDelivery, validarBusquedaDireccion,
 } from './pedidos-validacion'
 import {
   MENSAJE_CONFLICTO_ESTADO, aplicarAccion, deshacerA, puedeCambiarEntrega,
@@ -23,7 +23,9 @@ import {
   type PedidoPantalla, type TipoEntrega,
 } from './pedidos-estados'
 import { buscarTipoEntrega, calcularLineas, detallesDe, verificarLocalidadDelivery } from './pedidos-online'
-import { camposCobertura, exigirRecargoAceptado, prepararCoberturaDelivery, verificarCoberturaActual } from '@/lib/sucursales/cobertura-delivery'
+import {
+  camposCobertura, exigirRecargoAceptado, prepararCoberturaDelivery, sugerirDireccionesDelivery, verificarCoberturaActual,
+} from '@/lib/sucursales/cobertura-delivery'
 
 type SesionPersonal = { user: { idUsuario: number } }
 
@@ -148,6 +150,10 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
       const datos = validarCotizacionDelivery(await leerCuerpo(request), false)
       const cobertura = await prepararCoberturaDelivery(db, { idSucursal }, datos.direccion, datos.idLocalidad)
       return responder({ cotizacion: cobertura.cotizacion })
+    }),
+    sugerirDirecciones: (request: Request) => proteger(request, true, async ({ idSucursal }) => {
+      const datos = validarBusquedaDireccion(await leerCuerpo(request), false)
+      return responder({ sugerencias: await sugerirDireccionesDelivery(db, { idSucursal }, datos.texto) })
     }),
     listar: (request: Request) => proteger(request, false, async ({ idSucursal }) => {
       const desde = new Date(Date.now() - VENTANA_ENTREGADOS_MS)

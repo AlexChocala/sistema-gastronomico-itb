@@ -1,6 +1,7 @@
 'use client'
 
 import { CotizadorDelivery, useCotizacionDelivery } from '@/components/pedidos/CotizadorDelivery'
+import { CampoDireccionDelivery } from '@/components/pedidos/CampoDireccionDelivery'
 
 // Checkout del menú digital: datos de contacto, entrega y pago, y envío a POST /api/pedidos.
 // Las reglas de los campos son las mismas que valida el servidor (lib/pedidos/pedidos-validacion),
@@ -10,9 +11,8 @@ import { CotizadorDelivery, useCotizacionDelivery } from '@/components/pedidos/C
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { Banknote, Bike, Info, Landmark, MapPin, ShoppingBag } from '@/components/icons'
+import { Banknote, Bike, Info, Landmark, ShoppingBag } from '@/components/icons'
 import { Button } from '@/components/ui/Button'
-import { Desplegable } from '@/components/ui/Desplegable'
 import { Input } from '@/components/ui/Input'
 import { detalleLinea, useCarrito, useHidratado, type ItemCarrito, type ProductoCarrito } from '@/lib/pedidos/carrito'
 import {
@@ -23,7 +23,7 @@ import {
 } from '@/lib/pedidos/pedidos-validacion'
 import { formatearPrecio } from '@/lib/utils/precio'
 import { whatsappValido } from '@/lib/sucursales/sucursales-validacion'
-import { MENSAJE_DIRECCION_COMPLETA, radioDeliveryValido, separarDireccion } from '@/lib/sucursales/radio-delivery'
+import { separarDireccion } from '@/lib/sucursales/radio-delivery'
 import { textoProductos } from '@/components/carta/compartidos/BarraCarrito'
 import { PedidoConfirmado, type PedidoCreado } from './PedidoConfirmado'
 
@@ -35,7 +35,7 @@ export type SucursalCheckout = {
   whatsapp: string | null
   ofreceRetiro: boolean
   ofreceDelivery: boolean
-  radioDeliveryKm: number | null
+  deliveryConfigurado: boolean
   localidadesDelivery: { idLocalidad: number; nombre: string }[]
 }
 
@@ -63,7 +63,6 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
     ...(sucursal.ofreceRetiro ? ['retiro' as const] : []),
     ...(sucursal.ofreceDelivery ? ['delivery' as const] : []),
   ]
-  const hayZonas = sucursal.localidadesDelivery.length > 0
   // Dónde se retira: "Belgrano 123, Avellaneda, Buenos Aires".
   const direccionRetiro = [sucursal.direccion, sucursal.localidad, sucursal.provincia].filter(Boolean).join(', ')
 
@@ -74,9 +73,8 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
     entregasOfrecidas.length === 1 ? entregasOfrecidas[0] : null,
   )
   const [direccion, setDireccion] = useState('')
-  const [idLocalidad, setIdLocalidad] = useState('')
   const [referencias, setReferencias] = useState('')
-  const cotizador = useCotizacionDelivery(direccion, idLocalidad, slug)
+  const cotizador = useCotizacionDelivery(direccion, slug)
   const recargoDelivery = tipoEntrega === 'delivery' ? cotizador.cotizacion?.recargoDelivery ?? null : 0
   const totalConEnvio = Math.round((carrito.total + (recargoDelivery ?? 0)) * 100) / 100
   const [metodoPago, setMetodoPago] = useState<MetodoPagoOnline | null>(aceptaTransferencia ? null : 'efectivo')
@@ -136,10 +134,10 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
       const direccionLimpia = direccion.trim()
       if (direccionLimpia.length < MIN_DIRECCION || direccionLimpia.length > MAX_DIRECCION) {
         encontrados.direccion = MENSAJE_DIRECCION
-      } else if (!idLocalidad && !separarDireccion(direccionLimpia)) {
-        encontrados.direccion = MENSAJE_DIRECCION_COMPLETA
+      } else if (!separarDireccion(direccionLimpia)) {
+        encontrados.direccion = 'Elegí tu dirección de la lista que aparece mientras escribís.'
       }
-      if (!radioDeliveryValido(sucursal.radioDeliveryKm)) encontrados.tipoEntrega = 'Esta sucursal todavía no configuró su cobertura de delivery. Consultá al local o elegí retiro si está disponible.'
+      if (!sucursal.deliveryConfigurado) encontrados.tipoEntrega = 'Esta sucursal todavía no configuró su cobertura de delivery. Consultá al local o elegí retiro si está disponible.'
       if (limpiarReferencias(referencias) === undefined) encontrados.referencias = MENSAJE_REFERENCIAS
     }
     if (!metodoPago) encontrados.metodoPago = 'Elegí cómo vas a pagar: efectivo o transferencia.'
@@ -174,7 +172,6 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
         ? {
             direccion: direccion.trim(),
             recargoDeliveryAceptado: recargoDelivery,
-            ...(idLocalidad ? { idLocalidad: Number(idLocalidad) } : {}),
             // Opcionales: vacías no se mandan.
             ...(referencias.trim() ? { referencias: referencias.trim() } : {}),
           }
@@ -324,47 +321,18 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
 
           {tipoEntrega === 'delivery' && (
             <div className="flex flex-col gap-4 pt-1">
-              <p className="text-sm text-muted">
-                {radioDeliveryValido(sucursal.radioDeliveryKm)
-                  ? `Dentro de ${sucursal.radioDeliveryKm.toLocaleString('es-AR')} km no hay adicional. Fuera del radio se aplica el recargo fijo del local. Calculá el envío para ver el importe.`
-                  : 'Esta sucursal todavía no tiene configurada su cobertura de delivery. Consultá al local o elegí retiro si está disponible.'}
-              </p>
-              <Input
-                id="checkout-direccion"
-                data-campo="direccion"
-                label="Dirección de entrega"
-                autoComplete="street-address"
-                placeholder={idLocalidad ? 'Calle y número' : 'Calle y número, localidad, provincia'}
-                maxLength={MAX_DIRECCION}
-                value={direccion}
-                onChange={(evento) => { setDireccion(evento.target.value); limpiarError('direccion') }}
-                error={errores.direccion}
-                className="min-h-12 rounded-xl"
-              />
-              {!idLocalidad && <p className="text-xs text-muted">{MENSAJE_DIRECCION_COMPLETA}</p>}
-              {hayZonas && (
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm font-medium text-text">Localidad</span>
-                  {/* data-campo en el contenedor: el foco del error va al botón del desplegable. */}
-                  <div data-campo="idLocalidad">
-                    <Desplegable
-                      etiqueta="Localidad de entrega"
-                      icono={MapPin}
-                      opciones={[{ valor: '', texto: 'Otra localidad (completar dirección)' }, ...sucursal.localidadesDelivery.map((localidad) => ({
-                        valor: String(localidad.idLocalidad), texto: localidad.nombre,
-                      }))]}
-                      valor={idLocalidad || null}
-                      onElegir={(valor) => { setIdLocalidad(valor); limpiarError('idLocalidad') }}
-                      textoVacio="Otra localidad / dirección completa"
-                    />
-                  </div>
-                  {errores.idLocalidad ? (
-                    <span id="checkout-localidad-error" className="text-sm text-danger">{errores.idLocalidad}</span>
-                  ) : (
-                    <span className="text-xs font-normal text-muted">Podés elegir una localidad guardada o escribir otra en la dirección completa.</span>
-                  )}
-                </div>
+              {!sucursal.deliveryConfigurado && (
+                <p className="text-sm text-muted">Esta sucursal todavía no tiene configurada su cobertura de delivery. Consultá al local o elegí retiro si está disponible.</p>
               )}
+              <CampoDireccionDelivery
+                id="checkout-direccion"
+                slug={slug}
+                valor={direccion}
+                error={errores.direccion}
+                maxLength={MAX_DIRECCION}
+                onCambiar={(texto) => { setDireccion(texto); limpiarError('direccion') }}
+                onElegir={(elegida) => void cotizador.calcular(elegida)}
+              />
               <CotizadorDelivery cotizador={cotizador} disabled={enviando || !direccion.trim()} />
               <div className="flex flex-col gap-1">
                 <label htmlFor="checkout-referencias" className="text-sm font-medium text-text">
@@ -445,7 +413,7 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
           </div>
         )}
 
-        <Button type="submit" variant="acento" tamano="grande" disabled={enviando || (tipoEntrega === 'delivery' && (!radioDeliveryValido(sucursal.radioDeliveryKm) || recargoDelivery === null))} className="shadow-lg">
+        <Button type="submit" variant="acento" tamano="grande" disabled={enviando || (tipoEntrega === 'delivery' && (!sucursal.deliveryConfigurado || recargoDelivery === null))} className="shadow-lg">
           {enviando ? 'Enviando tu pedido…' : recargoDelivery === null ? 'Calculá el envío para confirmar' : `Confirmar pedido · ${formatearPrecio(totalConEnvio)}`}
         </Button>
         <p className="-mt-2 text-center text-xs font-normal text-muted">

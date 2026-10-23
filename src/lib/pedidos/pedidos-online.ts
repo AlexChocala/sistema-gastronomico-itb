@@ -10,11 +10,14 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { ErrorSucursal, leerCuerpo } from '@/lib/sucursales/sucursales-validacion'
 import {
-  ErrorPedido, validarCotizacionDelivery, MENSAJE_SUCURSAL_NO_DISPONIBLE, validarPedidoOnline,
+  ErrorPedido, validarBusquedaDireccion, validarCotizacionDelivery, MENSAJE_SUCURSAL_NO_DISPONIBLE, validarPedidoOnline,
   type ItemPedidoOnline, type PedidoOnlineValidado, type TipoEntregaOnline,
 } from './pedidos-validacion'
 import { datosTransferencia } from '@/lib/negocio/negocio'
-import { camposCobertura, exigirRecargoAceptado, prepararCoberturaDelivery, verificarCoberturaActual, type CoberturaVerificada } from '@/lib/sucursales/cobertura-delivery'
+import {
+  camposCobertura, exigirRecargoAceptado, prepararCoberturaDelivery, sugerirDireccionesDelivery, verificarCoberturaActual,
+  type CoberturaVerificada,
+} from '@/lib/sucursales/cobertura-delivery'
 
 // Límite de pedidos por IP. Vive en la memoria del proceso: si la aplicación corre en
 // varias instancias (o serverless), cada una lleva su propia cuenta. Al desplegar hay que
@@ -315,6 +318,15 @@ export function crearControladorPedidosOnline(db: PrismaClient) {
         return responder({ cotizacion: cobertura.cotizacion })
       } catch (error) { return responderError(error) }
     },
+    sugerirDirecciones: async (request: Request) => {
+      try {
+        const origen = request.headers.get('origin')
+        if ((origen && origen !== new URL(request.url).origin) || request.headers.get('sec-fetch-site') === 'cross-site') throw new ErrorPedido(403, 'La solicitud debe realizarse desde esta aplicación.')
+        limitarBusquedas(ipDe(request))
+        const datos = validarBusquedaDireccion(await leerCuerpo(request), true)
+        return responder({ sugerencias: await sugerirDireccionesDelivery(db, { slug: datos.slugSucursal }, datos.texto) })
+      } catch (error) { return responderError(error) }
+    },
     crear: async (request: Request) => {
       try {
         // Solo desde el propio menú: se rechaza si el navegador indica otro origen.
@@ -360,4 +372,17 @@ function limitarCotizaciones(ip: string) {
   const actuales = (cotizacionesPorIp.get(ip) ?? []).filter(t => ahora - t < VENTANA_LIMITE_MS)
   if (actuales.length >= 30) throw new ErrorPedido(429, 'Calculaste varios envíos seguidos. Esperá unos minutos e intentá nuevamente.')
   cotizacionesPorIp.set(ip, [...actuales, ahora])
+}
+
+// Las sugerencias se piden mientras se escribe (con una pausa entre teclas), así que el
+// límite es más alto que el de cotizaciones.
+const busquedasPorIp = new Map<string, number[]>()
+function limitarBusquedas(ip: string) {
+  const ahora = Date.now()
+  if (busquedasPorIp.size > 10000) {
+    for (const [clave, momentos] of busquedasPorIp) if (!momentos.some(t => ahora - t < VENTANA_LIMITE_MS)) busquedasPorIp.delete(clave)
+  }
+  const actuales = (busquedasPorIp.get(ip) ?? []).filter(t => ahora - t < VENTANA_LIMITE_MS)
+  if (actuales.length >= 150) throw new ErrorPedido(429, 'Buscaste muchas direcciones seguidas. Esperá unos minutos e intentá nuevamente.')
+  busquedasPorIp.set(ip, [...actuales, ahora])
 }
