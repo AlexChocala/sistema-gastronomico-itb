@@ -1,4 +1,4 @@
-import { coordenadasValidas, leerTramos, MENSAJE_TRAMOS, type TramoDelivery } from './radio-delivery'
+import { coordenadasValidas, leerZonas, MENSAJE_ZONAS, type ZonaDelivery } from './radio-delivery'
 
 export class ErrorSucursal extends Error {
   constructor(public estado: number, mensaje: string) {
@@ -114,8 +114,9 @@ type DatosSucursal = {
   activa?: boolean
   ofreceRetiro?: boolean
   ofreceDelivery?: boolean
-  // [] = sin tramos (solo cuando la sucursal no hace delivery).
-  tramosDelivery?: TramoDelivery[]
+  // Localidades a las que entrega y su costo. [] solo cuando la sucursal no hace delivery.
+  // No es una columna de Sucursal: se guarda en SucursalLocalidad (ver guardarZonas).
+  zonasDelivery?: ZonaDelivery[]
   latitud?: number | null
   longitud?: number | null
 }
@@ -142,7 +143,7 @@ export function validarSucursal(cuerpo: unknown, parcial: boolean): DatosSucursa
   // el admin lo puede cambiar (el anterior queda redirigiendo, ver cambiarSlug).
   const permitidos = [
     'nombre', 'direccion', 'whatsapp', 'horario', 'linkMaps', 'idLocalidad', 'ofreceRetiro', 'ofreceDelivery',
-    'tramosDelivery', 'latitud', 'longitud',
+    'zonasDelivery', 'latitud', 'longitud',
     ...(parcial ? ['activa', 'slug'] : []),
   ]
   if (Object.keys(datos).length === 0 || Object.keys(datos).some((c) => !permitidos.includes(c))) {
@@ -223,11 +224,10 @@ export function validarSucursal(cuerpo: unknown, parcial: boolean): DatosSucursa
   if (salida.ofreceRetiro === false && salida.ofreceDelivery === false) {
     throw new ErrorSucursal(400, MENSAJE_SIN_ENTREGA)
   }
-  if ('tramosDelivery' in datos) {
-    const vacia = Array.isArray(datos.tramosDelivery) && datos.tramosDelivery.length === 0
-    const tramos = vacia ? [] : leerTramos(datos.tramosDelivery)
-    if (!tramos) throw new ErrorSucursal(400, MENSAJE_TRAMOS)
-    salida.tramosDelivery = tramos
+  if ('zonasDelivery' in datos) {
+    const zonas = leerZonas(datos.zonasDelivery)
+    if (!zonas) throw new ErrorSucursal(400, MENSAJE_ZONAS)
+    salida.zonasDelivery = zonas
   }
   if ('latitud' in datos || 'longitud' in datos) {
     const vacias = datos.latitud === null && datos.longitud === null
@@ -237,8 +237,8 @@ export function validarSucursal(cuerpo: unknown, parcial: boolean): DatosSucursa
     salida.latitud = datos.latitud as number | null
     salida.longitud = datos.longitud as number | null
   }
-  if (!parcial && salida.ofreceDelivery && !leerTramos(salida.tramosDelivery)) {
-    throw new ErrorSucursal(400, MENSAJE_TRAMOS)
+  if (!parcial && salida.ofreceDelivery && !salida.zonasDelivery?.length) {
+    throw new ErrorSucursal(400, MENSAJE_ZONAS)
   }
   return salida
 }

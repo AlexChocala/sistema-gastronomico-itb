@@ -55,7 +55,11 @@ export async function geocodificarDireccion(direccion: string, contexto: Context
     d && typeof d.calle?.id === 'string' && typeof d.calle?.nombre === 'string' && calleNormalizada(d.calle.nombre) === calle
     && Number(d.altura?.valor) === altura && d.altura?.valor !== null && d.altura?.valor !== undefined
     && d.provincia?.id === referencia.provincia!.id
+    // Las direcciones vienen con la localidad censal, que puede tener otro nombre: "Lanús Este"
+    // está dentro de la localidad censal "Lanús". Se acepta la misma localidad censal que
+    // corresponde a la localidad elegida (con ella se filtró la consulta).
     && (normalizarLugar(d.localidad?.nombre ?? '') === localidad
+      || d.localidad_censal?.id === referencia.localidad_censal!.id
       || (!d.localidad?.nombre && normalizarLugar(d.localidad_censal?.nombre ?? '') === localidad)))
   if (!candidatas.length || new Set(candidatas.map(d => d.calle?.id)).size !== 1
     || candidatas.some(d => !coordenadasValidas(d.ubicacion?.lat, d.ubicacion?.lon))) throw errorDireccion()
@@ -79,15 +83,116 @@ const PROVINCIAS_AMBA = ['02', '06']
 
 export type DireccionEncontrada = Punto & { direccion: string }
 
+type Division = { id: string; nombre: string }
+export type UbicacionGeoref = { provincia: Division; departamento: Division | null }
+
+function division(valor: unknown): Division | null {
+  const d = valor as Lugar | undefined
+  return typeof d?.id === 'string' && typeof d?.nombre === 'string' ? { id: d.id, nombre: d.nombre } : null
+}
+
+// Provincia y partido (departamento) de un punto. El del local se guarda en memoria: no se
+// mueve, y así no se consulta en cada letra que escribe el cliente.
+const ubicacionesDeLocales = new Map<string, UbicacionGeoref>()
+
+export async function ubicarPunto(punto: Punto, recordar = false): Promise<UbicacionGeoref> {
+  const clave = `${punto.latitud},${punto.longitud}`
+  const guardada = ubicacionesDeLocales.get(clave)
+  if (guardada) return guardada
+  const datos = await pedir('ubicacion', { lat: String(punto.latitud), lon: String(punto.longitud) })
+  const ubicacion = datos.ubicacion as { provincia?: unknown; departamento?: unknown } | undefined
+  const provincia = division(ubicacion?.provincia)
+  if (!provincia) throw new ErrorSucursal(400, 'Esa dirección no está dentro de Argentina.')
+  const resultado = { provincia, departamento: division(ubicacion?.departamento) }
+  if (recordar) ubicacionesDeLocales.set(clave, resultado)
+  return resultado
+}
+
+type LocalidadGeoref = Punto & { nombre: string; provincia: Division; departamento: Division | null }
+
+// Localidades de una provincia con su centro. Cambian muy poco: se guardan un día en memoria.
+const DURACION_LOCALIDADES_MS = 24 * 60 * 60 * 1000
+const localidadesPorProvincia = new Map<string, { vence: number; lista: LocalidadGeoref[] }>()
+
+async function localidadesDeProvincia(idProvincia: string): Promise<LocalidadGeoref[]> {
+  const guardadas = localidadesPorProvincia.get(idProvincia)
+  if (guardadas && guardadas.vence > Date.now()) return guardadas.lista
+  const datos = await pedir('localidades', { provincia: idProvincia, max: '5000' })
+  const lista: LocalidadGeoref[] = []
+  for (const l of (Array.isArray(datos.localidades) ? datos.localidades : []) as Record<string, unknown>[]) {
+    const centro = l?.centroide as { lat?: unknown; lon?: unknown } | undefined
+    const provincia = division(l?.provincia)
+    if (typeof l?.nombre !== 'string' || !provincia || !coordenadasValidas(centro?.lat, centro?.lon)) continue
+    lista.push({
+      nombre: l.nombre, provincia, departamento: division(l.departamento),
+      latitud: centro!.lat as number, longitud: centro!.lon as number,
+    })
+  }
+  localidadesPorProvincia.set(idProvincia, { vence: Date.now() + DURACION_LOCALIDADES_MS, lista })
+  return lista
+}
+
+// En el AMBA se listan las dos (Capital y Provincia), así el admin ve, por ejemplo, que
+// Barracas queda cerca de Avellaneda y decide si entrega o no.
+function provinciasVecinas(idProvincia: string) {
+  return PROVINCIAS_AMBA.includes(idProvincia) ? PROVINCIAS_AMBA : [idProvincia]
+}
+
+export type LocalidadCercana = { nombre: string; provincia: string; partido: string | null; distanciaKm: number }
+
+// Localidades alrededor del local, de la más cercana a la más lejana (por su centro).
+export async function localidadesCercanas(local: Punto, maximoKm = 15, limite = 60): Promise<LocalidadCercana[]> {
+  const ubicacion = await ubicarPunto(local, true)
+  const listas = await Promise.all(provinciasVecinas(ubicacion.provincia.id).map(localidadesDeProvincia))
+  const vistas = new Set<string>()
+  return listas.flat()
+    .map((l) => ({ nombre: l.nombre, provincia: l.provincia.nombre, partido: l.departamento?.nombre ?? null, distanciaKm: distanciaEnKm(local, l) }))
+    .filter((l) => l.distanciaKm <= maximoKm)
+    .sort((a, b) => a.distanciaKm - b.distanciaKm)
+    .filter((l) => {
+      const clave = `${normalizarLugar(l.nombre)}|${normalizarLugar(l.provincia)}`
+      return !vistas.has(clave) && vistas.add(clave)
+    })
+    .slice(0, limite)
+}
+
+// Localidad en la que cae un punto: la de centro más cercano dentro del mismo partido (el
+// partido y la provincia son exactos; dentro del partido, la localidad es aproximada).
+export async function localidadDelPunto(punto: Punto): Promise<{ nombre: string; provincia: string } | null> {
+  const ubicacion = await ubicarPunto(punto)
+  const lista = await localidadesDeProvincia(ubicacion.provincia.id)
+  const delPartido = ubicacion.departamento ? lista.filter((l) => l.departamento?.id === ubicacion.departamento!.id) : []
+  const candidatas = delPartido.length ? delPartido : lista
+  let masCercana: LocalidadGeoref | null = null
+  let menor = Infinity
+  for (const l of candidatas) {
+    const km = distanciaEnKm(punto, l)
+    if (km < menor) { menor = km; masCercana = l }
+  }
+  return masCercana ? { nombre: masCercana.nombre, provincia: ubicacion.provincia.nombre } : null
+}
+
 // Direcciones de Georef que se parecen a lo que el cliente va escribiendo. Devuelve el
 // texto en el formato que acepta separarDireccion ("Calle 123, Localidad, Provincia").
 // Si Georef falla devuelve una lista vacía: el campo sigue funcionando sin sugerencias.
-export async function buscarDireccionesParecidas(texto: string, provinciaSucursal: string): Promise<DireccionEncontrada[]> {
+//
+// Georef devuelve como mucho una parte de las coincidencias de toda la provincia, y una
+// calle como "Mitre" existe en casi todos los partidos: la del barrio del local puede no
+// venir. Por eso se busca primero en el partido del local y después en la provincia (y en
+// el AMBA, también en la otra). Quien llama ordena por distancia y filtra por cobertura.
+export async function buscarDireccionesParecidas(
+  texto: string, provinciaSucursal: string, local: Punto,
+): Promise<DireccionEncontrada[]> {
   if (!/^.{2,}\s+\d{1,6}$/.test(texto.trim())) return []
   const provincia = normalizarLugar(provinciaSucursal)
   const provincias = ['buenos aires', 'ciudad autonoma de buenos aires'].includes(provincia) ? PROVINCIAS_AMBA : [provinciaSucursal]
-  const respuestas = await Promise.all(provincias.map((p) =>
-    pedir('direcciones', { direccion: texto.trim(), provincia: p, max: '30' }).catch(() => null)))
+  const partido = await ubicarPunto(local, true).catch(() => null)
+  const consultas: Record<string, string>[] = [
+    ...(partido?.departamento ? [{ provincia: partido.provincia.id, departamento: partido.departamento.id, max: '50' }] : []),
+    ...provincias.map((p) => ({ provincia: p, max: '100' })),
+  ]
+  const respuestas = await Promise.all(consultas.map((filtros) =>
+    pedir('direcciones', { direccion: texto.trim(), ...filtros }).catch(() => null)))
   const encontradas: DireccionEncontrada[] = []
   for (const datos of respuestas) {
     if (!datos || !Array.isArray(datos.direcciones)) continue

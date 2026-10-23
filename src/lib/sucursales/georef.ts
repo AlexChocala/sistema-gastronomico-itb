@@ -10,6 +10,8 @@ const MAXIMO_RESULTADOS = 8
 export interface LocalidadGeoref {
   nombre: string
   provincia: string
+  // Partido (o comuna, en Capital), para distinguir localidades del mismo nombre.
+  partido?: string | null
 }
 
 export interface Sugerencia {
@@ -46,23 +48,23 @@ export function aTitulo(texto: string) {
 
 export async function buscarLocalidades(texto: string, signal?: AbortSignal): Promise<(Sugerencia & LocalidadGeoref)[]> {
   const { localidades } = await pedir<{
-    localidades: { nombre: string; provincia: { nombre: string } }[]
+    localidades: { nombre: string; provincia: { nombre: string }; departamento?: { nombre?: string | null } | null }[]
   }>('localidades', {
     nombre: texto,
     max: '15',
     orden: 'nombre',
-    campos: 'nombre,provincia.nombre',
+    campos: 'nombre,provincia.nombre,departamento.nombre',
   }, signal)
 
   // Georef repite una misma localidad (por ejemplo como "entidad" y como "componente").
   // En la base se identifica por nombre + provincia, así que se muestra una sola vez.
   const vistas = new Set<string>()
   const resultado: (Sugerencia & LocalidadGeoref)[] = []
-  for (const { nombre, provincia } of localidades) {
+  for (const { nombre, provincia, departamento } of localidades) {
     const clave = `${nombre}|${provincia.nombre}`
     if (vistas.has(clave)) continue
     vistas.add(clave)
-    resultado.push({ clave, texto: `${nombre}, ${provincia.nombre}`, nombre, provincia: provincia.nombre })
+    resultado.push({ clave, texto: `${nombre}, ${provincia.nombre}`, nombre, provincia: provincia.nombre, partido: departamento?.nombre ?? null })
   }
   return resultado.slice(0, MAXIMO_RESULTADOS)
 }

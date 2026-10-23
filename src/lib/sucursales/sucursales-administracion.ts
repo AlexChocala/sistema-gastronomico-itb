@@ -4,15 +4,16 @@ import {
   validarSucursal,
 } from './sucursales-validacion'
 import { validarLocalidadNueva } from './localidades-validacion'
-import { coberturaConfigurada, coordenadasValidas, leerTramos, MENSAJE_TRAMOS } from './radio-delivery'
-import { geocodificarDireccion } from './geocodificacion'
+import { coberturaConfigurada, coordenadasValidas, MENSAJE_ZONAS, type ZonaDelivery } from './radio-delivery'
+import { geocodificarDireccion, localidadesCercanas } from './geocodificacion'
+import { camposZonas } from './cobertura-delivery'
 
 type Sesion = { user: { idUsuario: number } } | null
 
 const camposSucursal = {
   idSucursal: true, nombre: true, slug: true, direccion: true, whatsapp: true, horario: true, linkMaps: true, activa: true,
   ofreceRetiro: true, ofreceDelivery: true, idLocalidad: true,
-  tramosDelivery: true, latitud: true, longitud: true,
+  latitud: true, longitud: true, localidadesDelivery: camposZonas,
   localidad: { select: { idLocalidad: true, nombre: true, provincia: { select: { idProvincia: true, nombre: true } } } },
 } satisfies Prisma.SucursalSelect
 
@@ -57,16 +58,33 @@ export async function crearSucursalEnTransaccion(tx: Prisma.TransactionClient, c
   const { campos, localidadNueva } = separarLocalidadNueva(cuerpo)
   let idLocalidad = campos.idLocalidad
   if (!idLocalidad && localidadNueva) idLocalidad = await crearLocalidad(tx, localidadNueva)
-  const datos = validarSucursal({ ...campos, idLocalidad }, false)
-  if (datos.ofreceDelivery && !coberturaConfigurada(datos)) {
-    throw new ErrorSucursal(400, 'Configurá los costos de envío y la ubicación de la sucursal antes de ofrecer delivery.')
+  const { zonasDelivery = [], ...datos } = validarSucursal({ ...campos, idLocalidad }, false)
+  if (datos.ofreceDelivery && !coberturaConfigurada({ ...datos, cantidadZonas: zonasDelivery.length })) {
+    throw new ErrorSucursal(400, 'Elegí las localidades de delivery y revisá la dirección de la sucursal antes de ofrecer delivery.')
   }
-  return tx.sucursal.create({ data: { ...datos, slug: await slugLibre(tx, datos.nombre) }, select: camposSucursal })
+  const { idSucursal } = await tx.sucursal.create({ data: { ...datos, slug: await slugLibre(tx, datos.nombre) }, select: { idSucursal: true } })
+  await guardarZonas(tx, idSucursal, zonasDelivery)
+  return tx.sucursal.findUniqueOrThrow({ where: { idSucursal }, select: camposSucursal })
+}
+
+// Reemplaza las localidades de delivery de la sucursal. Las que todavía no existen en la
+// tabla Localidad se crean (con su provincia), igual que la localidad del local.
+async function guardarZonas(tx: Prisma.TransactionClient, idSucursal: number, zonas: ZonaDelivery[]) {
+  await tx.sucursalLocalidad.deleteMany({ where: { idSucursal } })
+  for (const zona of zonas) {
+    const idLocalidad = await crearLocalidad(tx, { nombre: zona.nombre, nombreProvincia: zona.provincia })
+    await tx.sucursalLocalidad.create({ data: { idSucursal, idLocalidad, costoEnvio: zona.costo } })
+  }
+}
+
+// Las zonas guardadas, en el formato que reciben prepararSucursal y el formulario.
+function zonasDe(filas: { costoEnvio: number; localidad: { nombre: string; provincia: { nombre: string } } }[]): ZonaDelivery[] {
+  return filas.map((z) => ({ nombre: z.localidad.nombre, provincia: z.localidad.provincia.nombre, costo: z.costoEnvio }))
 }
 
 type SucursalAnterior = {
   direccion: string; idLocalidad: number; ofreceDelivery: boolean
-  tramosDelivery: unknown; latitud: number | null; longitud: number | null
+  zonasDelivery: ZonaDelivery[]; latitud: number | null; longitud: number | null
 }
 
 // Georef se consulta fuera de la transacción. La configuración inicial usa el mismo
@@ -76,9 +94,9 @@ export async function prepararSucursal(db: PrismaClient, cuerpo: unknown, anteri
   const nuevaLocalidad = localidadNueva ? validarLocalidadNueva(localidadNueva) : null
   const datos = validarSucursal({ ...campos, ...(!anterior && nuevaLocalidad ? { idLocalidad: 1 } : {}) }, !!anterior)
   const ofreceDelivery = datos.ofreceDelivery ?? anterior?.ofreceDelivery ?? true
-  if (!ofreceDelivery) return { ...campos, ...(nuevaLocalidad ? { localidadNueva } : {}), tramosDelivery: [], latitud: null, longitud: null }
-  const tramosDelivery = leerTramos(datos.tramosDelivery === undefined ? anterior?.tramosDelivery : datos.tramosDelivery)
-  if (!tramosDelivery) throw new ErrorSucursal(400, MENSAJE_TRAMOS)
+  if (!ofreceDelivery) return { ...campos, ...(nuevaLocalidad ? { localidadNueva } : {}), zonasDelivery: [], latitud: null, longitud: null }
+  const zonasDelivery = datos.zonasDelivery ?? anterior?.zonasDelivery ?? []
+  if (!zonasDelivery.length) throw new ErrorSucursal(400, MENSAJE_ZONAS)
   const direccion = datos.direccion ?? anterior?.direccion
   const idLocalidad = datos.idLocalidad ?? anterior?.idLocalidad
   if (!direccion) throw new ErrorSucursal(400, 'Indicá la dirección de la sucursal.')
@@ -99,7 +117,7 @@ export async function prepararSucursal(db: PrismaClient, cuerpo: unknown, anteri
     latitud = punto.latitud
     longitud = punto.longitud
   }
-  return { ...campos, ...(nuevaLocalidad ? { localidadNueva } : {}), tramosDelivery, latitud, longitud }
+  return { ...campos, ...(nuevaLocalidad ? { localidadNueva } : {}), zonasDelivery, latitud, longitud }
 }
 
 // El formulario puede mandar "localidadNueva" (nombre + provincia) en vez de idLocalidad,
@@ -204,6 +222,22 @@ export function crearControladorSucursales(db: PrismaClient, leerSesion: () => P
       return responder({ sucursales, localidades })
     }),
 
+    // Localidades cercanas a la dirección del local, para elegir a cuáles hacer delivery.
+    // Se usa mientras se carga el formulario: la sucursal puede no estar guardada todavía.
+    localidadesCercanas: (request: Request) => proteger(request, true, async () => {
+      const cuerpo = await leerCuerpo(request)
+      const datos = (typeof cuerpo === 'object' && cuerpo !== null && !Array.isArray(cuerpo) ? cuerpo : {}) as Record<string, unknown>
+      const texto = (valor: unknown) => (typeof valor === 'string' && valor.trim().length <= 200 ? valor.trim() : '')
+      let punto = coordenadasValidas(datos.latitud, datos.longitud)
+        ? { latitud: datos.latitud as number, longitud: datos.longitud as number } : null
+      if (!punto) {
+        const [direccion, localidad, provincia] = [texto(datos.direccion), texto(datos.localidad), texto(datos.provincia)]
+        if (!direccion || !localidad || !provincia) throw new ErrorSucursal(400, 'Completá la localidad y la dirección del local para ver las localidades cercanas.')
+        punto = await geocodificarDireccion(direccion, { localidad, provincia })
+      }
+      return responder({ localidades: await localidadesCercanas(punto) })
+    }),
+
     crear: (request: Request) => proteger(request, true, async () => {
       const cuerpo = await prepararSucursal(db, await leerCuerpo(request))
 
@@ -219,17 +253,18 @@ export function crearControladorSucursales(db: PrismaClient, leerSesion: () => P
 
     editar: (request: Request, id: string) => proteger(request, true, async () => {
       const idSucursal = leerId(id)
-      const anterior = await db.sucursal.findUnique({ where: { idSucursal } })
-      if (!anterior) throw new ErrorSucursal(404, 'Sucursal no encontrada.')
+      const fila = await db.sucursal.findUnique({ where: { idSucursal }, include: { localidadesDelivery: camposZonas } })
+      if (!fila) throw new ErrorSucursal(404, 'Sucursal no encontrada.')
+      const anterior = { ...fila, zonasDelivery: zonasDe(fila.localidadesDelivery) }
       // Igual que en el alta: al editar también se puede cargar una localidad nueva.
       const preparado = await prepararSucursal(db, await leerCuerpo(request), anterior)
       const { campos, localidadNueva } = separarLocalidadNueva(preparado)
       const datosValidados = validarSucursal(campos, true)
       const sucursal = await db.$transaction(async (tx) => {
-        const actual = await tx.sucursal.findUnique({ where: { idSucursal } })
+        const actual = await tx.sucursal.findUnique({ where: { idSucursal }, include: { localidadesDelivery: camposZonas } })
         if (!actual) throw new ErrorSucursal(404, 'Sucursal no encontrada.')
         if ((['direccion', 'idLocalidad', 'ofreceDelivery', 'latitud', 'longitud'] as const).some(campo => actual[campo] !== anterior[campo])
-          || JSON.stringify(actual.tramosDelivery) !== JSON.stringify(anterior.tramosDelivery)) {
+          || JSON.stringify(actual.localidadesDelivery) !== JSON.stringify(fila.localidadesDelivery)) {
           throw new ErrorSucursal(409, 'La ubicación o la cobertura cambió. Actualizá la sucursal e intentá nuevamente.')
         }
         const datos = !datosValidados.idLocalidad && localidadNueva
@@ -241,12 +276,11 @@ export function crearControladorSucursales(db: PrismaClient, leerSesion: () => P
         const delivery = datos.ofreceDelivery ?? actual.ofreceDelivery
         if (!retiro && !delivery) throw new ErrorSucursal(400, MENSAJE_SIN_ENTREGA)
 
-        const { slug, ...cambios } = datos
-        if (slug !== undefined && slug !== actual.slug) {
-          await cambiarSlug(tx, idSucursal, actual.slug, slug)
-          return tx.sucursal.update({ where: { idSucursal }, data: { ...cambios, slug }, select: camposSucursal })
-        }
-        return tx.sucursal.update({ where: { idSucursal }, data: cambios, select: camposSucursal })
+        const { slug, zonasDelivery, ...cambios } = datos
+        if (slug !== undefined && slug !== actual.slug) await cambiarSlug(tx, idSucursal, actual.slug, slug)
+        await tx.sucursal.update({ where: { idSucursal }, data: { ...cambios, ...(slug !== undefined ? { slug } : {}) } })
+        if (zonasDelivery !== undefined) await guardarZonas(tx, idSucursal, zonasDelivery)
+        return tx.sucursal.findUniqueOrThrow({ where: { idSucursal }, select: camposSucursal })
       }, { isolationLevel: 'Serializable' })
       return responder({ sucursal })
     }),

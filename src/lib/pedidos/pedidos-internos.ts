@@ -249,7 +249,7 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
             idSucursal,
             idUsuario,
             idTipoEntrega,
-            idLocalidad: pedido.idLocalidad,
+            idLocalidad: pedido.tipoEntrega === 'delivery' ? cobertura?.idLocalidad ?? null : null,
             detalles: { create: detallesDe(lineas) },
           },
           select: camposPedido,
@@ -289,7 +289,7 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
             verificarCoberturaActual(sucursal, cobertura)
             await verificarLocalidadDelivery(tx, accion.idLocalidad)
             cambios = {
-              ...importeEntrega, idTipoEntrega, direccion: accion.direccion, referencias: accion.referencias, idLocalidad: accion.idLocalidad,
+              ...importeEntrega, idTipoEntrega, direccion: accion.direccion, referencias: accion.referencias, idLocalidad: cobertura?.idLocalidad ?? null,
             }
             telefonoNuevo = accion.telefono
           }

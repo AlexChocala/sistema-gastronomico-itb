@@ -69,16 +69,14 @@ model Sucursal {
   // Formas de entrega que ofrece en el menú digital (siempre al menos una).
   ofreceRetiro   Boolean @default(true)
   ofreceDelivery Boolean @default(true)
-  // Costo del envío por distancia (en línea recta desde latitud/longitud del local).
-  // Lista ordenada de tramos: [{ "hastaKm": 2, "costo": 0 }, { "hastaKm": 5, "costo": 1000 }].
-  // Más lejos que el último tramo no se hace delivery. [] = pendiente de configurar.
-  // Formato y reglas en lib/sucursales/radio-delivery.ts (leerTramos).
-  tramosDelivery Json @default("[]")
-  // En desuso: reemplazados por tramosDelivery (la migración tramos_delivery pasó sus datos).
+  // En desuso: el costo del envío ahora va por localidad (SucursalLocalidad.costoEnvio).
   // Se borran en una migración aparte cuando este cambio esté en producción.
+  tramosDelivery Json @default("[]")
   radioDeliveryKm Float?
   recargoFueraRadio Float?
   radioMaximoKm   Float?
+  // latitud/longitud: ubicación del local (Georef). Se usa para listar las localidades
+  // cercanas al configurar el delivery y para sugerir direcciones al cliente.
   latitud         Float?
   longitud        Float?
 
@@ -93,9 +91,12 @@ model Sucursal {
   asistencias        AsistenciaUsuario[]
 }
 
+// Zonas de delivery: a qué localidades entrega cada sucursal y cuánto cobra el envío en
+// cada una (pesos enteros). Una dirección fuera de estas localidades no puede pedir delivery.
 model SucursalLocalidad {
   idSucursal  Int
   idLocalidad Int
+  costoEnvio  Float
 
   sucursal  Sucursal  @relation(fields: [idSucursal], references: [idSucursal])
   localidad Localidad @relation(fields: [idLocalidad], references: [idLocalidad])
