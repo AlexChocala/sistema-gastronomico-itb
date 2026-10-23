@@ -32,7 +32,7 @@ export function CamposDelivery({
   errores: Partial<Record<CampoDelivery, string>>
   onCambiar: (campo: keyof ValoresDelivery, valor: string) => void
   // Al elegir una dirección de la lista: se usa para calcular el envío en el momento.
-  onElegirDireccion: (direccion: string) => void
+  onElegirDireccion: (direccion: string, ubicacion: string | null) => void
 }) {
   const [tocados, setTocados] = useState<Partial<Record<CampoDelivery, boolean>>>({})
   const tocar = (campo: CampoDelivery) => setTocados((previos) => ({ ...previos, [campo]: true }))

@@ -611,7 +611,7 @@ export default function CajaPage() {
   const recargoDelivery = tipoEntrega === 'delivery' ? cotizador.cotizacion?.recargoDelivery ?? null : 0
   const total = Math.round((subtotal + (recargoDelivery ?? 0)) * 100) / 100
   const faltaCliente = cliente.trim() === ''
-  const erroresEntrega = tipoEntrega === 'delivery' ? erroresDatosDelivery(entrega) : {}
+  const erroresEntrega = tipoEntrega === 'delivery' ? erroresDatosDelivery({ ...entrega, ubicacion: cotizador.ubicacion ?? undefined }) : {}
   const entregaValida = Object.keys(erroresEntrega).length === 0
   const puedeCobrar = permiso.puedeRegistrar && carrito.length > 0 && !faltaCliente && entregaValida && recargoDelivery !== null
   // Por qué no se puede cobrar todavía (se muestra debajo del botón).
@@ -688,6 +688,7 @@ export default function CajaPage() {
             direccion: entrega.direccion,
             recargoDeliveryAceptado: recargoDelivery,
             idLocalidad: entrega.idLocalidad ? Number(entrega.idLocalidad) : null,
+            ubicacion: cotizador.ubicacion,
             referencias: entrega.referencias,
           }
         : {}),
@@ -859,7 +860,7 @@ export default function CajaPage() {
                     valores={entrega}
                     errores={erroresEntrega}
                     onCambiar={(campo, valor) => setEntrega((previos) => ({ ...previos, [campo]: valor }))}
-                    onElegirDireccion={(direccion) => void cotizador.calcular(direccion)}
+                    onElegirDireccion={(direccion, ubicacion) => void cotizador.calcular(direccion, ubicacion)}
                   />
                 )}
               </div>

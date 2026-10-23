@@ -202,7 +202,7 @@ function FormularioDelivery({
     referencias: '',
   })
   const cotizador = useCotizacionDelivery(valores.direccion)
-  const errores = erroresDatosDelivery(valores)
+  const errores = erroresDatosDelivery({ ...valores, ubicacion: cotizador.ubicacion ?? undefined })
   const cambiaPago = cotizador.cotizacion !== null && pedido.estadoPago === 'pagado' && cotizador.cotizacion.recargoDelivery !== pedido.recargoDelivery
   const valido = Object.keys(errores).length === 0 && cotizador.cotizacion !== null && !cambiaPago
 
@@ -217,6 +217,7 @@ function FormularioDelivery({
           telefono: valores.telefono,
           direccion: valores.direccion,
           idLocalidad: valores.idLocalidad ? Number(valores.idLocalidad) : null,
+          ubicacion: cotizador.ubicacion,
           referencias: valores.referencias,
         })
       }}
@@ -229,7 +230,7 @@ function FormularioDelivery({
         valores={valores}
         errores={errores}
         onCambiar={(campo, valor) => setValores((previos) => ({ ...previos, [campo]: valor }))}
-        onElegirDireccion={(direccion) => void cotizador.calcular(direccion)}
+        onElegirDireccion={(direccion, ubicacion) => void cotizador.calcular(direccion, ubicacion)}
       />
       <CotizadorDelivery cotizador={cotizador} disabled={guardando || !valores.direccion.trim()} />
       {cotizador.cotizacion && <p className="text-sm">Nuevo total: {formatoPrecio.format(pedido.total - pedido.recargoDelivery + cotizador.cotizacion.recargoDelivery)}</p>}

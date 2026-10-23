@@ -11,6 +11,9 @@ export function useCotizacionDelivery(direccion: string, slug?: string) {
   const [consultando, setConsultando] = useState(false)
   const generacion = useRef(0)
   const vigente = resultado?.clave === clave(direccion) ? resultado : null
+  // Ubicación firmada de la última sugerencia elegida; vale solo mientras no se edite el texto.
+  const [elegida, setElegida] = useState<{ direccion: string; ubicacion: string } | null>(null)
+  const ubicacion = elegida && elegida.direccion.trim() === direccion.trim() ? elegida.ubicacion : null
 
   function invalidar() {
     generacion.current++
@@ -19,15 +22,20 @@ export function useCotizacionDelivery(direccion: string, slug?: string) {
   }
 
   // Se llama con la dirección recién elegida: el estado todavía no se actualizó.
-  async function calcular(direccionElegida = direccion) {
+  async function calcular(direccionElegida = direccion, ubicacionElegida: string | null = direccionElegida === direccion ? ubicacion : null) {
     const actual = ++generacion.current
     const claveActual = clave(direccionElegida)
+    setElegida(ubicacionElegida ? { direccion: direccionElegida, ubicacion: ubicacionElegida } : null)
     setConsultando(true)
     setResultado(null)
     try {
       const respuesta = await fetch(slug ? '/api/pedidos/cotizacion-delivery' : '/api/pedidos/caja/cotizacion-delivery', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
-        body: JSON.stringify({ direccion: direccionElegida.trim(), ...(slug ? { slugSucursal: slug } : {}) }),
+        body: JSON.stringify({
+          direccion: direccionElegida.trim(),
+          ...(ubicacionElegida ? { ubicacion: ubicacionElegida } : {}),
+          ...(slug ? { slugSucursal: slug } : {}),
+        }),
       })
       const datos = await respuesta.json().catch(() => null)
       if (!respuesta.ok || !datos?.cotizacion || !recargoDeliveryValido(datos.cotizacion.recargoDelivery)) {
@@ -41,7 +49,7 @@ export function useCotizacionDelivery(direccion: string, slug?: string) {
     }
   }
 
-  return { cotizacion: vigente?.cotizacion ?? null, error: vigente?.error ?? null, consultando, calcular, invalidar }
+  return { cotizacion: vigente?.cotizacion ?? null, error: vigente?.error ?? null, consultando, ubicacion, calcular, invalidar }
 }
 
 // El costo aparece solo al elegir una dirección de la lista. "Calcular envío" queda como

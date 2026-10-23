@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict'
+// Clave de prueba para firmar la ubicación elegida (no es la real).
+process.env.NEXTAUTH_SECRET ??= 'secreto-de-prueba'
 import { afterEach, test } from 'node:test'
 import type { PrismaClient } from '@prisma/client'
 import {
   recargoDeliveryValido, coordenadasValidas, dentroDelRadio, distanciaEnKm, leerZonas, separarDireccion,
 } from '../src/lib/sucursales/radio-delivery'
 import { geocodificarDireccion, localidadesCercanas } from '../src/lib/sucursales/geocodificacion'
-import { prepararCoberturaDelivery, sugerirDireccionesDelivery, verificarCoberturaActual } from '../src/lib/sucursales/cobertura-delivery'
+import { prepararCoberturaDelivery, sugerirDireccionesDelivery, verificarCoberturaActual, zonasDeliveryDe } from '../src/lib/sucursales/cobertura-delivery'
+import { firmarUbicacion } from '../src/lib/sucursales/ubicacion-firmada'
 import { prepararSucursal } from '../src/lib/sucursales/sucursales-administracion'
 import { validarSucursal, ErrorSucursal } from '../src/lib/sucursales/sucursales-validacion'
 import { validarPedidoCaja, validarPedidoOnline } from '../src/lib/pedidos/pedidos-validacion'
@@ -514,4 +517,69 @@ test('Georef: una localidad dentro de otra localidad censal (Lanús Este en Lan�
       localidad: { nombre: null }, localidad_censal: { id: '06434010', nombre: 'Lanús' } }] })
   }
   assert.deepEqual(await geocodificarDireccion('Almeyra 2117', { localidad: 'Lanús Este', provincia: 'Buenos Aires' }), cerca)
+})
+
+// Doble de Georef para buscar dentro de una localidad elegida (Avellaneda o Wilde).
+function mockGeorefLocalidad(direcciones: unknown[]) {
+  const consultas: string[] = []
+  globalThis.fetch = async (entrada) => {
+    const url = new URL(String(entrada))
+    const nombre = url.searchParams.get('nombre')
+    if (url.pathname.endsWith('/localidades') && nombre) {
+      const l = (localidadesGeoref['06'] as { nombre: string }[]).find((x) => x.nombre === nombre)
+      return Response.json({ localidades: l ? [l] : [] })
+    }
+    if (url.pathname.endsWith('/localidades')) return Response.json({ localidades: localidadesGeoref[url.searchParams.get('provincia') ?? ''] ?? [] })
+    consultas.push(`${url.pathname.split('/').pop()}|${url.searchParams.get('provincia')}|${url.searchParams.get('departamento')}`)
+    return Response.json({ total: direcciones.length, direcciones })
+  }
+  return consultas
+}
+test('zonas para el cliente: localidades con su costo, ordenadas; sin delivery no hay ninguna', async () => {
+  const e = escenario()
+  globalThis.fetch = async () => { assert.fail('No debe consultar Georef') }
+  assert.deepEqual(await zonasDeliveryDe(e.db, { idSucursal: 1 }), zonasFormulario)
+  e.sucursal.ofreceDelivery = false
+  assert.deepEqual(await zonasDeliveryDe(e.db, { idSucursal: 1 }), [])
+})
+test('sugerencias dentro de la localidad elegida: solo de esa localidad, y con ubicación firmada', async () => {
+  const e = sucursalConProvincia()
+  // Una en Avellaneda (cerca del local) y otra en Wilde (mismo partido).
+  const consultas = mockGeorefLocalidad([direccionGeoref(cerca), direccionGeoref(lejos)])
+  const enWilde = await sugerirDireccionesDelivery(e.db, { idSucursal: 1 }, 'olavarria 100', { nombre: 'Wilde', provincia: 'Buenos Aires' })
+  assert.deepEqual(consultas, ['direcciones|06|06035'])
+  assert.deepEqual(enWilde.map((s) => s.direccion), ['Olavarria 100, Wilde, Buenos Aires'])
+  assert.ok(enWilde[0].ubicacion)
+  // Con la ubicación firmada se cotiza sin volver a buscar la dirección.
+  globalThis.fetch = async () => { assert.fail('Con ubicación firmada no consulta Georef') }
+  const cobertura = await prepararCoberturaDelivery(e.db, { idSucursal: 1 }, enWilde[0].direccion, null, enWilde[0].ubicacion)
+  assert.deepEqual(cobertura.cotizacion, { localidad: 'Wilde', recargoDelivery: 2500 })
+  // Una localidad a la que no entrega no sugiere nada.
+  assert.deepEqual(await sugerirDireccionesDelivery(e.db, { idSucursal: 1 }, 'olavarria 100', { nombre: 'Barracas', provincia: 'CABA' }), [])
+})
+test('ubicación firmada: si se cambia la dirección, la localidad o la sucursal se rechaza', async () => {
+  const e = escenario()
+  globalThis.fetch = async () => { assert.fail('No debe consultar Georef') }
+  const datos = { idSucursal: 1, direccion: 'Olavarria 100, Avellaneda, Buenos Aires', ...cerca, localidad: 'Avellaneda', provincia: 'Buenos Aires' }
+  const token = firmarUbicacion(datos)
+  const [cuerpo, firma] = token.split('.')
+  const alterado = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(cuerpo, 'base64url').toString()), localidad: 'Wilde' })).toString('base64url')
+  for (const [direccion, ubicacion] of [
+    ['Otra 1, Avellaneda, Buenos Aires', token],
+    [datos.direccion, `${alterado}.${firma}`],
+    [datos.direccion, firmarUbicacion({ ...datos, idSucursal: 2 })],
+    [datos.direccion, firmarUbicacion(datos, Date.now() - 25 * 60 * 60 * 1000)],
+  ]) {
+    await assert.rejects(prepararCoberturaDelivery(e.db, { idSucursal: 1 }, direccion, null, ubicacion), esError(400))
+  }
+  assert.equal((await prepararCoberturaDelivery(e.db, { idSucursal: 1 }, datos.direccion, null, token)).cotizacion.recargoDelivery, 0)
+})
+test('pedido online con la ubicación elegida se crea sin volver a buscar la dirección', async () => {
+  const e = escenario()
+  globalThis.fetch = async () => { assert.fail('No debe consultar Georef') }
+  const direccion = 'Olavarria 100, Wilde, Buenos Aires'
+  const ubicacion = firmarUbicacion({ idSucursal: 1, direccion, ...lejos, localidad: 'Wilde', provincia: 'Buenos Aires' })
+  const respuesta = await e.online.crear(request({ ...cuerpoDelivery, direccion, ubicacion, recargoDeliveryAceptado: 2500, slugSucursal: 'avellaneda' }))
+  assert.equal(respuesta.status, 201)
+  assert.equal((e.estado.guardados[0] as unknown as { idLocalidad: number }).idLocalidad, 2)
 })
