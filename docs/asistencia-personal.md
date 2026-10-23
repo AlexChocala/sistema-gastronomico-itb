@@ -15,6 +15,16 @@ La entrada y salida se marcan expresamente: iniciar sesión o cerrar el navegado
 - Admin consulta todo; supervisor, personal y registros de su sucursal; empleado, solo lo propio. Los usuarios archivados conservan su historial.
 - No se generan ausencias automáticamente. No incluye pausas, liquidación salarial, correcciones manuales ni auditoría de inicio de sesión.
 
+## Turno requerido para registrar pedidos
+
+El rol empleado necesita una asistencia abierta de su jornada y sucursal para crear pedidos desde Caja. Se deshabilitan Cobrar y Confirmar pago mientras no exista permiso o falle su verificación. El aviso abre Mi asistencia en otra pestaña, conservando el carrito.
+
+La API comprueba la identidad y la hora del servidor al guardar; no acepta una marca cerrada, de otra sucursal o de otra jornada. Los turnos nocturnos sirven al día siguiente según la copia del horario original; una marca abierta durante 24 horas o más debe finalizarse. Se permite compensar minutos después de la salida prevista dentro de esa jornada. El bloqueo compartido de la marca evita cerrarla mientras se guarda el pedido.
+
+Se aplica al rol empleado. El supervisor conserva su permiso operativo, el administrador sigue sin poder cargar pedidos y la carta online mantiene su funcionamiento. No restringe consultar pedidos ni actuar sobre los existentes. No necesita otra migración.
+
+La consulta previa es GET /api/pedidos/caja; POST vuelve a verificar en su transacción y responde 403 con código ASISTENCIA_REQUERIDA si falta la asistencia. La pantalla consulta periódicamente y al recuperar el foco, incluyendo después de iniciar o finalizar el turno en otra pestaña.
+
 ## Supabase
 
 Migración `20261023180000_asistencia_personal` **aplicada en Supabase el 23/10/2026 con autorización del responsable**. Se verificaron las tablas, RLS, índices, claves foráneas y las consultas desde el cliente Prisma.

@@ -8,6 +8,9 @@
 //      número que le da la base, y se imprime el ticket del cliente.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import { Aviso } from '@/components/ui/Aviso'
+import { CODIGO_ASISTENCIA_REQUERIDA } from '@/lib/asistencia/permiso-pedidos'
 import {
   ArrowLeft, Banknote, Bike, CircleCheck, Landmark, Minus, Plus, Printer, Search, ShoppingBag, Trash2, X,
 } from '@/components/icons'
@@ -21,6 +24,7 @@ import { DatosEntrega } from '@/components/pedidos/DatosEntrega'
 import { PastillaSucursal } from '@/components/sucursal/SucursalActiva'
 import {
   crearPedidoMostrador,
+  usePermisoRegistroPedidos,
   cuerpoPedidoCaja,
   type MetodoPagoPantalla,
   type PedidoPantalla,
@@ -408,6 +412,7 @@ function PanelCobro({
   metodoPago,
   pagaCon,
   enviando,
+  habilitado,
   error,
   onCambiarMetodo,
   onCambiarPagaCon,
@@ -418,6 +423,7 @@ function PanelCobro({
   metodoPago: MetodoPagoPantalla
   pagaCon: string
   enviando: boolean
+  habilitado: boolean
   error: string | null
   onCambiarMetodo: (metodo: MetodoPagoPantalla) => void
   onCambiarPagaCon: (valor: string) => void
@@ -500,7 +506,7 @@ function PanelCobro({
         <button
           type="button"
           onClick={onConfirmar}
-          disabled={!pagoValido || enviando}
+          disabled={!pagoValido || enviando || !habilitado}
           className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-accent py-3.5 text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
         >
           <CircleCheck className="size-5" />
@@ -518,6 +524,7 @@ const MENSAJE_PRODUCTOS_NO_DISPONIBLES =
   'Algunos productos ya no están disponibles y los sacamos del pedido. Revisá el carrito antes de cobrar.'
 
 export default function CajaPage() {
+  const permiso = usePermisoRegistroPedidos()
   const [productos, setProductos] = useState<ProductoCaja[]>([])
   // Zonas de delivery de la sucursal: si hay, en un delivery hay que elegir una.
   const [cargandoProductos, setCargandoProductos] = useState(true)
@@ -606,7 +613,7 @@ export default function CajaPage() {
   const faltaCliente = cliente.trim() === ''
   const erroresEntrega = tipoEntrega === 'delivery' ? erroresDatosDelivery(entrega) : {}
   const entregaValida = Object.keys(erroresEntrega).length === 0
-  const puedeCobrar = carrito.length > 0 && !faltaCliente && entregaValida && recargoDelivery !== null
+  const puedeCobrar = permiso.puedeRegistrar && carrito.length > 0 && !faltaCliente && entregaValida && recargoDelivery !== null
   // Por qué no se puede cobrar todavía (se muestra debajo del botón).
   const pistaCobro = carrito.length === 0
     ? ''
@@ -663,7 +670,7 @@ export default function CajaPage() {
   }
 
   async function confirmarPago() {
-    if (enviando || recargoDelivery === null) return
+    if (enviando || recargoDelivery === null || !permiso.puedeRegistrar) return
     const datos = {
       cliente,
       tipoEntrega,
@@ -699,6 +706,11 @@ export default function CajaPage() {
     setEnviando(false)
 
     if (!resultado.ok) {
+      if (resultado.datos.codigo === CODIGO_ASISTENCIA_REQUERIDA) {
+        setErrorCobro(resultado.error)
+        void permiso.recargar()
+        return
+      }
       if (tipoEntrega === 'delivery') { cotizador.invalidar(); setCobrando(false) }
       const noDisponibles = resultado.datos.productosNoDisponibles
       if (resultado.estado === 409 && Array.isArray(noDisponibles)) {
@@ -792,12 +804,22 @@ export default function CajaPage() {
             {cobrando && <span className="text-muted"> · {cliente.trim()}</span>}
           </h2>
 
+          {!permiso.puedeRegistrar && (
+            <Aviso tipo={permiso.cargando ? 'info' : 'advertencia'}>
+              <p>{permiso.cargando ? 'Verificando permiso para registrar pedidos…' : permiso.mensaje ?? 'No estás habilitado para registrar pedidos.'}</p>
+              {!permiso.cargando && <div className="mt-2 flex flex-wrap items-center gap-3">
+                <Link href="/perfil/asistencia" target="_blank" rel="noopener noreferrer" className="rounded-md text-accent underline">Abrir Mi asistencia</Link>
+                <button type="button" onClick={() => void permiso.recargar()} className="cursor-pointer rounded-md text-sm underline">Volver a verificar</button>
+              </div>}
+            </Aviso>
+          )}
           {cobrando ? (
             <PanelCobro
               total={total}
               metodoPago={metodoPago}
               pagaCon={pagaCon}
               enviando={enviando}
+              habilitado={permiso.puedeRegistrar}
               error={errorCobro}
               onCambiarMetodo={setMetodoPago}
               onCambiarPagaCon={setPagaCon}
