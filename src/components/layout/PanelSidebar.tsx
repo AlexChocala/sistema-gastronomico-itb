@@ -64,6 +64,12 @@ const secciones: Seccion[] = [
     pendientes: [],
   },
   {
+    titulo: 'Personal',
+    roles: ['supervisor'],
+    enlaces: [{ href: '/usuarios/asistencia', texto: 'Usuarios', icono: Users }],
+    pendientes: [],
+  },
+  {
     titulo: 'Preferencias',
     roles: ['supervisor', 'empleado'],
     enlaces: [{ href: '/configuracion', texto: 'Configuración', icono: Settings }],
