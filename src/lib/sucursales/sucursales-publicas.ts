@@ -10,14 +10,14 @@ import { coberturaConfigurada } from './radio-delivery'
 const camposSucursalPublica = {
   idSucursal: true, nombre: true, slug: true, direccion: true, horario: true, whatsapp: true, linkMaps: true,
   ofreceRetiro: true, ofreceDelivery: true,
-  tramosDelivery: true, latitud: true, longitud: true,
+  latitud: true, longitud: true, _count: { select: { localidadesDelivery: true } },
   localidad: { select: { nombre: true, provincia: { select: { nombre: true } } } },
 } satisfies Prisma.SucursalSelect
 
 type FilaSucursalPublica = Prisma.SucursalGetPayload<{ select: typeof camposSucursalPublica }>
 
-// Los tramos y la ubicación no viajan al navegador: solo si el delivery está configurado.
-export type SucursalPublica = Omit<FilaSucursalPublica, 'localidad' | 'tramosDelivery' | 'latitud' | 'longitud'> & {
+// Las zonas y la ubicación no viajan al navegador: solo si el delivery está configurado.
+export type SucursalPublica = Omit<FilaSucursalPublica, 'localidad' | '_count' | 'latitud' | 'longitud'> & {
   localidad: string; provincia: string; deliveryConfigurado: boolean
 }
 
@@ -26,10 +26,10 @@ export type SucursalPublicaDetalle = SucursalPublica & {
   localidadesDelivery: { idLocalidad: number; nombre: string }[]
 }
 
-function aPublica({ localidad, tramosDelivery, latitud, longitud, ...resto }: FilaSucursalPublica): SucursalPublica {
+function aPublica({ localidad, _count, latitud, longitud, ...resto }: FilaSucursalPublica): SucursalPublica {
   return {
     ...resto, localidad: localidad.nombre, provincia: localidad.provincia.nombre,
-    deliveryConfigurado: coberturaConfigurada({ tramosDelivery, latitud, longitud }),
+    deliveryConfigurado: coberturaConfigurada({ cantidadZonas: _count.localidadesDelivery, latitud, longitud }),
   }
 }
 

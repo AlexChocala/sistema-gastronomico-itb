@@ -8,9 +8,9 @@ import { usePathname, useRouter } from 'next/navigation'
 import { ExternalLink, Globe, MapPin, Pencil, Plus, Power, Search, Store, X } from '@/components/icons'
 import { MAX_SUCURSALES, generarSlug, linkGoogleMaps } from '@/lib/sucursales/sucursales-validacion'
 import {
-  CamposSucursal, SeccionFormulario, localidadNuevaVacia, tramosParaEditar, tramosParaEnviar, valoresSucursalVacios,
+  CamposSucursal, SeccionFormulario, localidadNuevaVacia, valoresSucursalVacios,
 } from '@/components/sucursal/CamposSucursal'
-import { leerTramos } from '@/lib/sucursales/radio-delivery'
+import { zonasParaEditar, zonasParaEnviar } from '@/components/sucursal/ZonasDelivery'
 import { formatearPrecio } from '@/lib/utils/precio'
 
 interface Localidad {
@@ -30,7 +30,7 @@ interface Sucursal {
   activa: boolean
   ofreceRetiro: boolean
   ofreceDelivery: boolean
-  tramosDelivery: unknown
+  localidadesDelivery: { costoEnvio: number; localidad: { nombre: string; provincia: { nombre: string } } }[]
   latitud: number | null
   longitud: number | null
   idLocalidad: number
@@ -127,7 +127,7 @@ export default function SucursalesPage() {
       idLocalidad: String(s.idLocalidad),
       ofreceRetiro: s.ofreceRetiro,
       ofreceDelivery: s.ofreceDelivery,
-      tramos: tramosParaEditar(s.tramosDelivery),
+      zonas: zonasParaEditar(s.localidadesDelivery),
       latitud: s.latitud === null ? '' : String(s.latitud),
       longitud: s.longitud === null ? '' : String(s.longitud),
     })
@@ -189,7 +189,7 @@ export default function SucursalesPage() {
       linkMaps: form.linkMaps || null,
       ofreceRetiro: form.ofreceRetiro,
       ofreceDelivery: form.ofreceDelivery,
-      tramosDelivery: form.ofreceDelivery ? tramosParaEnviar(form.tramos) : [],
+      zonasDelivery: form.ofreceDelivery ? zonasParaEnviar(form.zonas) : [],
       latitud: form.ofreceDelivery && form.latitud.trim() ? Number(form.latitud) : null,
       longitud: form.ofreceDelivery && form.longitud.trim() ? Number(form.longitud) : null,
     }
@@ -403,7 +403,7 @@ export default function SucursalesPage() {
                   {s.whatsapp && <p>{s.whatsapp}</p>}
                   {s.horario && <p>{s.horario}</p>}
                   <p>{[s.ofreceRetiro && 'Retiro en el local', s.ofreceDelivery && 'Delivery'].filter(Boolean).join(' · ')}</p>
-                  {s.ofreceDelivery && <p>{textoTramos(s.tramosDelivery)}</p>}
+                  {s.ofreceDelivery && <p>{textoZonas(s.localidadesDelivery)}</p>}
                   {/* URL pública del menú. Se edita desde el formulario; los links viejos redirigen a este. */}
                   <a
                     href={`/${s.slug}`} target="_blank" rel="noopener noreferrer"
@@ -442,8 +442,9 @@ export default function SucursalesPage() {
 }
 
 // "Envío: hasta 2 km gratis · hasta 5 km $ 1.000"
-function textoTramos(tramosDelivery: unknown) {
-  const tramos = leerTramos(tramosDelivery)
-  if (!tramos) return 'Costos de envío pendientes de configurar'
-  return 'Envío: ' + tramos.map((t) => `hasta ${t.hastaKm.toLocaleString('es-AR')} km ${t.costo === 0 ? 'gratis' : formatearPrecio(t.costo)}`).join(' · ')
+function textoZonas(zonas: Sucursal['localidadesDelivery']) {
+  if (!zonas.length) return 'Localidades de delivery pendientes de configurar'
+  return 'Envío: ' + zonas
+    .map((z) => `${z.localidad.nombre} ${z.costoEnvio === 0 ? 'gratis' : formatearPrecio(z.costoEnvio)}`)
+    .join(' · ')
 }

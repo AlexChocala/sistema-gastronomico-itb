@@ -82,13 +82,11 @@ function redondear(valor: number) {
 
 // ---- Reglas compartidas con el alta de Caja (lib/pedidos/pedidos-internos.ts) ----
 
-// Una localidad seleccionada debe existir. Sin selección se usa la dirección completa;
-// el destino puede estar fuera de las localidades guardadas y del radio sin recargo.
+// Una localidad enviada por el formulario debe existir. Sin ella se usa la dirección completa.
 export async function verificarLocalidadDelivery(
   tx: Prisma.TransactionClient,
   idLocalidad: number | null,
 ) {
-  // Se puede enviar a otras localidades; el radio determina el adicional.
   if (idLocalidad !== null) {
     const existe = await tx.localidad.findUnique({ where: { idLocalidad }, select: { idLocalidad: true } })
     if (!existe) throw new ErrorPedido(400, 'La localidad elegida no existe.')
@@ -274,7 +272,8 @@ async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineVali
         idCliente: cliente.idCliente,
         idSucursal: sucursal.idSucursal,
         idTipoEntrega,
-        idLocalidad: pedido.tipoEntrega === 'delivery' ? pedido.idLocalidad : null,
+        // La localidad de la zona donde cayó la dirección (la calcula el servidor).
+        idLocalidad: pedido.tipoEntrega === 'delivery' ? cobertura?.idLocalidad ?? null : null,
         detalles: { create: detallesDe(lineas) },
       },
       select: { idPedido: true, metodoPago: true, estadoPedido: true, estadoPago: true },

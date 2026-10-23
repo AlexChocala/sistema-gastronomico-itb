@@ -14,12 +14,12 @@ import { AvisoError } from '@/components/acceso/ElementosAcceso'
 import {
   CamposSucursal,
   localidadNuevaVacia,
-  tramosParaEnviar,
   valoresSucursalVacios,
   type LocalidadOpcion,
   type ValoresLocalidadNueva,
   type ValoresSucursal,
 } from '@/components/sucursal/CamposSucursal'
+import { zonasParaEnviar } from '@/components/sucursal/ZonasDelivery'
 import { ArrowLeft, ArrowRight, Plus, Store, X } from '@/components/icons'
 import { MAX_DESCRIPCION_NEGOCIO, MAX_NOMBRE_NEGOCIO, validarNegocioInicial } from '@/lib/negocio/negocio-validacion'
 import { validarLocalidadNueva } from '@/lib/sucursales/localidades-validacion'
@@ -48,7 +48,7 @@ function cuerpoSucursal(bloque: BloqueSucursal) {
     linkMaps: linkMaps || null,
     ofreceRetiro,
     ofreceDelivery,
-    tramosDelivery: ofreceDelivery ? tramosParaEnviar(bloque.valores.tramos) : [],
+    zonasDelivery: ofreceDelivery ? zonasParaEnviar(bloque.valores.zonas) : [],
     latitud: ofreceDelivery && bloque.valores.latitud.trim() ? Number(bloque.valores.latitud) : null,
     longitud: ofreceDelivery && bloque.valores.longitud.trim() ? Number(bloque.valores.longitud) : null,
     ...(bloque.usarLocalidadNueva
@@ -65,10 +65,10 @@ function mensajeDe(error: unknown) {
 function errorDeSucursal(bloque: BloqueSucursal): string | null {
   try {
     if (bloque.usarLocalidadNueva) validarLocalidadNueva(bloque.localidadNueva)
-    const { nombre, direccion, whatsapp, horario, linkMaps, ofreceRetiro, ofreceDelivery, tramosDelivery, latitud, longitud } = cuerpoSucursal(bloque)
+    const { nombre, direccion, whatsapp, horario, linkMaps, ofreceRetiro, ofreceDelivery, zonasDelivery, latitud, longitud } = cuerpoSucursal(bloque)
     // Con localidad nueva el id lo genera la API; acá el 1 solo sirve para validar el resto.
     const idLocalidad = bloque.usarLocalidadNueva ? 1 : Number(bloque.valores.idLocalidad)
-    validarSucursal({ nombre, direccion, whatsapp, horario, linkMaps, idLocalidad, ofreceRetiro, ofreceDelivery, tramosDelivery, latitud, longitud }, false)
+    validarSucursal({ nombre, direccion, whatsapp, horario, linkMaps, idLocalidad, ofreceRetiro, ofreceDelivery, zonasDelivery, latitud, longitud }, false)
     return null
   } catch (error) {
     return mensajeDe(error)

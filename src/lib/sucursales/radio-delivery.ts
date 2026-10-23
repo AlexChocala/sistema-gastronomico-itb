@@ -1,46 +1,40 @@
-// Reglas compartidas por formularios y servidor. Las distancias se miden en línea recta
-// desde la ubicación del local (latitud/longitud de la sucursal).
+// Reglas compartidas por formularios y servidor para el delivery.
 //
-// El costo del envío se configura por tramos de distancia, de menor a mayor:
-//   [{ hastaKm: 2, costo: 0 }, { hastaKm: 5, costo: 1000 }, { hastaKm: 8, costo: 1500 }]
-// = hasta 2 km gratis, hasta 5 km $1000, hasta 8 km $1500 y más lejos no hay delivery.
-export const MIN_KM_TRAMO = 0.1
-export const MAX_KM_TRAMO = 100
-export const MAX_TRAMOS = 10
+// Cada sucursal elige a qué localidades entrega y cuánto cobra el envío en cada una:
+//   [{ nombre: 'Avellaneda', provincia: 'Buenos Aires', costo: 800 },
+//    { nombre: 'Wilde', provincia: 'Buenos Aires', costo: 1500 }]
+// Una dirección de una localidad que no está en la lista no puede pedir delivery.
+// La ubicación del local (latitud/longitud) se usa para listar las localidades cercanas
+// al configurar y para sugerir direcciones al cliente; las distancias son en línea recta.
+export const MAX_ZONAS = 60
 export const MENSAJE_DIRECCION_COMPLETA = 'Ingresá calle y número, localidad y provincia, separados por comas. Ej: Olavarría 65, Avellaneda, Buenos Aires.'
-export const MENSAJE_TRAMOS = `Cargá al menos un tramo de envío (hasta ${MAX_TRAMOS}). Cada uno con una distancia de 0,1 a 100 km, sin repetir, y un costo en pesos sin centavos.`
+export const MENSAJE_ZONAS = 'Elegí al menos una localidad a la que hacés delivery y poné el costo del envío de cada una (en pesos, sin centavos).'
 
-export type TramoDelivery = { hastaKm: number; costo: number }
+export type ZonaDelivery = { nombre: string; provincia: string; costo: number }
 
-export function kmTramoValido(valor: unknown): valor is number {
-  return typeof valor === 'number' && Number.isFinite(valor)
-    && valor >= MIN_KM_TRAMO && valor <= MAX_KM_TRAMO
-    && Math.abs(valor * 10 - Math.round(valor * 10)) < 1e-8
-}
-
-// Devuelve los tramos ordenados por distancia, o null si la lista no es válida
-// (vacía, más de MAX_TRAMOS, distancias repetidas o algún valor fuera de rango).
-export function leerTramos(valor: unknown): TramoDelivery[] | null {
-  if (!Array.isArray(valor) || valor.length === 0 || valor.length > MAX_TRAMOS) return null
-  const tramos: TramoDelivery[] = []
-  for (const tramo of valor) {
-    if (typeof tramo !== 'object' || tramo === null || Array.isArray(tramo)) return null
-    const { hastaKm, costo, ...otros } = tramo as Record<string, unknown>
-    if (Object.keys(otros).length > 0 || !kmTramoValido(hastaKm) || !recargoDeliveryValido(costo)) return null
-    tramos.push({ hastaKm, costo })
+// Devuelve las zonas validadas (sin repetir localidad), o null si algo no es válido. Una
+// lista vacía es válida: la usa una sucursal que no hace delivery.
+export function leerZonas(valor: unknown): ZonaDelivery[] | null {
+  if (!Array.isArray(valor) || valor.length > MAX_ZONAS) return null
+  const zonas: ZonaDelivery[] = []
+  const vistas = new Set<string>()
+  for (const zona of valor) {
+    if (typeof zona !== 'object' || zona === null || Array.isArray(zona)) return null
+    const { nombre, provincia, costo, ...otros } = zona as Record<string, unknown>
+    if (Object.keys(otros).length > 0 || !recargoDeliveryValido(costo)) return null
+    if (typeof nombre !== 'string' || !nombre.trim() || nombre.trim().length > 100) return null
+    if (typeof provincia !== 'string' || !provincia.trim() || provincia.trim().length > 100) return null
+    const clave = claveLugar(nombre, provincia)
+    if (vistas.has(clave)) return null
+    vistas.add(clave)
+    zonas.push({ nombre: nombre.trim(), provincia: provincia.trim(), costo })
   }
-  tramos.sort((a, b) => a.hastaKm - b.hastaKm)
-  if (tramos.some((tramo, i) => i > 0 && tramo.hastaKm === tramos[i - 1].hastaKm)) return null
-  return tramos
+  return zonas
 }
 
-export function distanciaMaxima(tramos: TramoDelivery[]) {
-  return tramos[tramos.length - 1].hastaKm
-}
-
-export function mensajeFueraDeCobertura(distanciaKm: number, maximoKm: number) {
-  const formato = (km: number) => km.toLocaleString('es-AR', { maximumFractionDigits: 1 })
-  return `No llegamos a esa dirección: está a ${formato(distanciaKm)} km del local y entregamos hasta ${formato(maximoKm)} km.`
+// Misma localidad aunque cambien tildes, mayúsculas o la forma de escribir CABA.
+export function claveLugar(nombre: string, provincia: string) {
+  return `${normalizarLugar(nombre)}|${normalizarLugar(provincia)}`
 }
 
 export function coordenadasValidas(latitud: unknown, longitud: unknown) {
@@ -48,8 +42,9 @@ export function coordenadasValidas(latitud: unknown, longitud: unknown) {
     && typeof longitud === 'number' && Number.isFinite(longitud) && longitud >= -180 && longitud <= 180
 }
 
-export function coberturaConfigurada(datos: { tramosDelivery?: unknown; latitud?: unknown; longitud?: unknown }) {
-  return leerTramos(datos.tramosDelivery) !== null && coordenadasValidas(datos.latitud, datos.longitud)
+// Delivery listo para recibir pedidos: ubicación del local y al menos una localidad.
+export function coberturaConfigurada(datos: { cantidadZonas: number; latitud?: unknown; longitud?: unknown }) {
+  return datos.cantidadZonas > 0 && coordenadasValidas(datos.latitud, datos.longitud)
 }
 
 export type Punto = { latitud: number; longitud: number }
@@ -68,7 +63,7 @@ export function distanciaEnKm(origen: Punto, destino: Punto) {
 
 export function dentroDelRadio(distanciaKm: number, radioKm: number) {
   // Solo tolerancia numérica (una millonésima de metro), sin redondear para aceptar pedidos.
-  return Number.isFinite(distanciaKm) && distanciaKm >= 0 && kmTramoValido(radioKm) && distanciaKm <= radioKm + 1e-9
+  return Number.isFinite(distanciaKm) && distanciaKm >= 0 && Number.isFinite(radioKm) && distanciaKm <= radioKm + 1e-9
 }
 
 export function normalizarLugar(texto: string) {
@@ -97,14 +92,5 @@ export function recargoDeliveryValido(valor: unknown): valor is number {
   return typeof valor === 'number' && Number.isSafeInteger(valor) && valor >= 0 && valor <= MAX_RECARGO_DELIVERY
 }
 
-export type CotizacionDelivery = { distanciaKm: number; recargoDelivery: number }
-
-// Costo del primer tramo que alcanza la distancia. Más lejos que el último tramo no se
-// cotiza (quien llama muestra mensajeFueraDeCobertura antes de llegar acá).
-export function cotizarDistancia(distanciaKm: number, tramos: TramoDelivery[]): CotizacionDelivery {
-  const ordenados = leerTramos(tramos)
-  if (!Number.isFinite(distanciaKm) || distanciaKm < 0 || !ordenados) throw new Error('Distancia o tramos inválidos.')
-  const tramo = ordenados.find((t) => dentroDelRadio(distanciaKm, t.hastaKm))
-  if (!tramo) throw new Error('Dirección fuera de la distancia máxima de entrega.')
-  return { distanciaKm, recargoDelivery: tramo.costo }
-}
+// Lo que se le muestra al cliente: la localidad en la que cayó su dirección y el costo.
+export type CotizacionDelivery = { localidad: string; recargoDelivery: number }

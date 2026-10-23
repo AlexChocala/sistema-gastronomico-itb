@@ -55,7 +55,7 @@ export function CotizadorDelivery({ cotizador, disabled = false }: {
     <div aria-live="polite" className="flex items-center justify-between gap-3 rounded-2xl border border-border p-3 text-sm">
       {consultando ? <p className="text-muted">Calculando envío…</p>
         : error ? <p role="alert" className="text-danger">{error}</p>
-        : cotizacion ? <p className="font-semibold">{cotizacion.recargoDelivery === 0 ? 'Envío gratis' : `Envío: ${formatearPrecio(cotizacion.recargoDelivery)}`}</p>
+        : cotizacion ? <p className="font-semibold">{cotizacion.recargoDelivery === 0 ? `Envío gratis a ${cotizacion.localidad}` : `Envío a ${cotizacion.localidad}: ${formatearPrecio(cotizacion.recargoDelivery)}`}</p>
         : <p className="text-muted">Elegí tu dirección de la lista para ver el costo del envío.</p>}
       {!consultando && !cotizacion && (
         <button type="button" onClick={() => void cotizador.calcular()} disabled={disabled}
