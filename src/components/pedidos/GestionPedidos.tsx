@@ -8,7 +8,7 @@
 //   Delivery  listo → "Enviar con cadete" → "Marcar entregado"
 // Si el cliente cambia de idea, "Cambiar a delivery / retiro" es una acción secundaria
 // (solo antes de que salga el pedido), para que un click de más no ensucie los datos.
-// Pasar a delivery pide celular, dirección (y localidad si la sucursal tiene zonas) en
+// Pasar a delivery pide celular y dirección (con sugerencias) en
 // la misma tarjeta; pasar a retiro borra dirección, localidad e indicaciones.
 //
 // Las acciones se ven al instante y el servidor las confirma (ver lib/pedidos/pedidos-pantallas).
@@ -32,7 +32,6 @@ import {
   type EstadoPedidoPantalla,
   type PedidoPantalla,
   type ResultadoAccion,
-  type ZonaDelivery,
 } from '@/lib/pedidos/pedidos-pantallas'
 import { puedeCambiarEntrega, textoOpciones } from '@/lib/pedidos/pedidos-estados'
 import { erroresDatosDelivery } from '@/lib/pedidos/pedidos-validacion'
@@ -187,13 +186,11 @@ function accionPrincipal(
 // viene cargado si el cliente ya lo había dejado (pedidos online).
 function FormularioDelivery({
   pedido,
-  zonas,
   guardando,
   onGuardar,
   onCancelar,
 }: {
   pedido: PedidoPantalla
-  zonas: ZonaDelivery[]
   guardando: boolean
   onGuardar: (datos: DatosDelivery) => void
   onCancelar: () => void
@@ -204,7 +201,7 @@ function FormularioDelivery({
     idLocalidad: '',
     referencias: '',
   })
-  const cotizador = useCotizacionDelivery(valores.direccion, valores.idLocalidad)
+  const cotizador = useCotizacionDelivery(valores.direccion)
   const errores = erroresDatosDelivery(valores)
   const cambiaPago = cotizador.cotizacion !== null && pedido.estadoPago === 'pagado' && cotizador.cotizacion.recargoDelivery !== pedido.recargoDelivery
   const valido = Object.keys(errores).length === 0 && cotizador.cotizacion !== null && !cambiaPago
@@ -231,8 +228,8 @@ function FormularioDelivery({
         id={`delivery-${pedido.idPedido}`}
         valores={valores}
         errores={errores}
-        zonas={zonas}
         onCambiar={(campo, valor) => setValores((previos) => ({ ...previos, [campo]: valor }))}
+        onElegirDireccion={(direccion) => void cotizador.calcular(direccion)}
       />
       <CotizadorDelivery cotizador={cotizador} disabled={guardando || !valores.direccion.trim()} />
       {cotizador.cotizacion && <p className="text-sm">Nuevo total: {formatoPrecio.format(pedido.total - pedido.recargoDelivery + cotizador.cotizacion.recargoDelivery)}</p>}
@@ -264,7 +261,6 @@ function TarjetaPedido({
   acciones,
   ocupado,
   editandoEntrega,
-  zonas,
   onCambiarEntrega,
   onGuardarDelivery,
   onCancelarEdicion,
@@ -278,7 +274,6 @@ function TarjetaPedido({
   // Hay una acción de este pedido esperando respuesta del servidor.
   ocupado: boolean
   editandoEntrega: boolean
-  zonas: ZonaDelivery[]
   onCambiarEntrega: () => void
   onGuardarDelivery: (datos: DatosDelivery) => void
   onCancelarEdicion: () => void
@@ -388,7 +383,6 @@ function TarjetaPedido({
         {soloLectura ? null : editandoEntrega ? (
           <FormularioDelivery
             pedido={pedido}
-            zonas={zonas}
             guardando={ocupado}
             onGuardar={onGuardarDelivery}
             onCancelar={onCancelarEdicion}
@@ -416,7 +410,7 @@ export function GestionPedidos({ soloLectura }: { soloLectura: boolean }) {
   const { sucursal } = useSucursalActiva()
   const pedidosPantalla = usePedidosPantalla(sucursal?.idSucursal ?? null)
   const {
-    pedidos, localidadesDelivery, cargando, error, recargar, errorAccion, limpiarErrorAccion,
+    pedidos, cargando, error, recargar, errorAccion, limpiarErrorAccion,
     cambiarTipoEntrega, deshacer: deshacerEstado,
   } = pedidosPantalla
   // Las horas dependen de la zona horaria del navegador: se muestran solo en el cliente.
@@ -595,7 +589,6 @@ export function GestionPedidos({ soloLectura }: { soloLectura: boolean }) {
               acciones={pedidosPantalla}
               ocupado={ocupados.has(pedido.idPedido)}
               editandoEntrega={editandoEntrega === pedido.idPedido && pedido.tipoEntrega === 'retiro'}
-              zonas={localidadesDelivery}
               onAccion={(accion) => ejecutar(pedido, accion)}
               onCambiarEntrega={() => cambiarEntrega(pedido)}
               onGuardarDelivery={(datos) => void guardarDelivery(pedido, datos)}

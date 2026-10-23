@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import type { PrismaClient } from '@prisma/client'
 import {
-  cotizarDistancia, recargoDeliveryValido, coordenadasValidas, dentroDelRadio, distanciaEnKm, radioDeliveryValido, separarDireccion,
+  cotizarDistancia, recargoDeliveryValido, coordenadasValidas, dentroDelRadio, distanciaEnKm, kmTramoValido, leerTramos, separarDireccion,
 } from '../src/lib/sucursales/radio-delivery'
 import { geocodificarDireccion } from '../src/lib/sucursales/geocodificacion'
-import { prepararCoberturaDelivery, verificarCoberturaActual } from '../src/lib/sucursales/cobertura-delivery'
+import { prepararCoberturaDelivery, sugerirDireccionesDelivery, verificarCoberturaActual } from '../src/lib/sucursales/cobertura-delivery'
 import { prepararSucursal } from '../src/lib/sucursales/sucursales-administracion'
 import { validarSucursal, ErrorSucursal } from '../src/lib/sucursales/sucursales-validacion'
 import { validarPedidoCaja, validarPedidoOnline } from '../src/lib/pedidos/pedidos-validacion'
@@ -17,11 +17,14 @@ const fetchOriginal = globalThis.fetch
 afterEach(() => { globalThis.fetch = fetchOriginal })
 const origen = { latitud: -34.6652, longitud: -58.3576 }
 const cerca = { latitud: -34.666, longitud: -58.3576 }
-const lejos = { latitud: -37.9994, longitud: -57.5469 }
+// Unos 19,5 km al sur del local.
+const lejos = { latitud: -34.84, longitud: -58.3576 }
+// Como la configuración vieja: gratis hasta 5 km y $2500 más lejos (hasta 100 km).
+const tramosBase = [{ hastaKm: 5, costo: 0 }, { hastaKm: 100, costo: 2500 }]
 const contexto = { localidad: 'Avellaneda', provincia: 'Buenos Aires' }
 const sucursalBase = {
   idSucursal: 1, nombre: 'Avellaneda', slug: 'avellaneda', activa: true, ofreceDelivery: true, ofreceRetiro: true,
-  direccion: 'Olavarría 65', idLocalidad: 1, radioDeliveryKm: 5, recargoFueraRadio: 2500 as number | null, ...origen,
+  direccion: 'Olavarría 65', idLocalidad: 1, tramosDelivery: tramosBase as { hastaKm: number; costo: number }[], ...origen,
   whatsapp: '1123456789', localidadesDelivery: [] as { idLocalidad: number }[],
 }
 function direccionGeoref(punto = cerca, calle = 'OLAVARRIA', id = 'calle-1') {
@@ -52,8 +55,8 @@ function esError(estado: number) {
 }
 
 test('radio: acepta extremos y un decimal; rechaza cero, negativos, infinitos, texto y precisión extra', () => {
-  for (const valor of [0.1, 0.3, 5, 100]) assert.equal(radioDeliveryValido(valor), true)
-  for (const valor of [0, -1, 100.1, 1.01, Infinity, NaN, '5', null]) assert.equal(radioDeliveryValido(valor), false)
+  for (const valor of [0.1, 0.3, 5, 100]) assert.equal(kmTramoValido(valor), true)
+  for (const valor of [0, -1, 100.1, 1.01, Infinity, NaN, '5', null]) assert.equal(kmTramoValido(valor), false)
 })
 test('coordenadas y distancia: límites, identidad, simetría y distancia conocida de un grado', () => {
   assert.equal(coordenadasValidas(0, 0), true)
@@ -61,7 +64,7 @@ test('coordenadas y distancia: límites, identidad, simetría y distancia conoci
   assert.equal(distanciaEnKm(origen, origen), 0)
   assert.ok(Math.abs(distanciaEnKm({ latitud: 0, longitud: 0 }, { latitud: 0, longitud: 1 }) - 111.195) < 0.001)
   assert.equal(distanciaEnKm(origen, lejos), distanciaEnKm(lejos, origen))
-  assert.ok(distanciaEnKm(origen, lejos) > 350)
+  assert.ok(distanciaEnKm(origen, lejos) > 15)
 })
 test('el límite incluye la frontera y no redondea una dirección fuera del radio', () => {
   assert.equal(dentroDelRadio(5, 5), true)
@@ -139,8 +142,8 @@ function escenario() {
     },
     $transaction: async <T>(operacion: (tx: PrismaClient) => Promise<T>) => {
       estado.enTransaccion = true
-      if (estado.cambiarRadio) sucursal.radioDeliveryKm = 1
-      if (estado.cambiarTarifa) sucursal.recargoFueraRadio = 9000
+      if (estado.cambiarRadio) sucursal.tramosDelivery = [{ hastaKm: 1, costo: 0 }, { hastaKm: 100, costo: 2500 }]
+      if (estado.cambiarTarifa) sucursal.tramosDelivery = [{ hastaKm: 5, costo: 0 }, { hastaKm: 100, costo: 9000 }]
       try { return await operacion(dbDoble as unknown as PrismaClient) } finally { estado.enTransaccion = false }
     },
   }
@@ -190,7 +193,7 @@ for (const canal of ['online', 'caja', 'cambiarEntrega'] as const) {
 }
 test('retiro funciona sin cobertura ni acceso a Georef, tanto online como Caja', async () => {
   const e = escenario()
-  e.sucursal.radioDeliveryKm = 0
+  e.sucursal.tramosDelivery = []
   globalThis.fetch = async () => { assert.fail('Retiro no consulta Georef') }
   const cuerpo = { cliente: { nombre: 'Juan' }, tipoEntrega: 'retiro', metodoPago: 'efectivo', items: cuerpoDelivery.items }
   assert.equal((await e.interno.crearCaja(request(cuerpo))).status, 201)
@@ -202,22 +205,22 @@ test('no se aceptan coordenadas ni radio enviados por el comprador para evitar l
 })
 test('sucursal sin cobertura se rechaza; las localidades guardadas no limitan otras direcciones', async () => {
   const e = escenario()
-  e.sucursal.radioDeliveryKm = 0
+  e.sucursal.tramosDelivery = []
   globalThis.fetch = async () => { assert.fail('No debe consultar Georef') }
   await assert.rejects(prepararCoberturaDelivery(e.db, { idSucursal: 1 }, cuerpoDelivery.direccion, null), esError(409))
-  e.sucursal.radioDeliveryKm = 5
+  e.sucursal.tramosDelivery = tramosBase
   e.sucursal.localidadesDelivery = [{ idLocalidad: 2 }]
   mockGeoref()
   assert.equal((await prepararCoberturaDelivery(e.db, { idSucursal: 1 }, 'Olavarría 100', 1)).cotizacion.recargoDelivery, 0)
 })
 
 test('la comparación de cobertura detecta el cambio de ubicación', () => {
-  assert.throws(() => verificarCoberturaActual({ ...sucursalBase, latitud: 0 }, { sucursal: sucursalBase, distanciaKm: 1, cotizacion: cotizarDistancia(1, 5, 2500) }), esError(409))
+  assert.throws(() => verificarCoberturaActual({ ...sucursalBase, latitud: 0 }, { sucursal: sucursalBase, distanciaKm: 1, cotizacion: cotizarDistancia(1, tramosBase) }), esError(409))
 })
 test('editar radio conserva coordenadas; cambiar dirección geocodifica nuevamente', async () => {
   const e = escenario()
   let consultas = mockGeoref()
-  const radio = await prepararSucursal(e.db, { radioDeliveryKm: 3 }, e.sucursal)
+  const radio = await prepararSucursal(e.db, { tramosDelivery: [{ hastaKm: 3, costo: 0 }] }, e.sucursal)
   assert.equal(radio.latitud, origen.latitud)
   assert.equal(consultas(), 0)
   consultas = mockGeoref()
@@ -228,7 +231,7 @@ test('editar radio conserva coordenadas; cambiar dirección geocodifica nuevamen
 test('deshabilitar delivery limpia cobertura; coordenadas manuales válidas no consultan Georef', async () => {
   const e = escenario()
   globalThis.fetch = async () => { assert.fail('No debe consultar Georef') }
-  assert.deepEqual(await prepararSucursal(e.db, { ofreceDelivery: false }, e.sucursal), { ofreceDelivery: false, radioDeliveryKm: null, latitud: null, longitud: null })
+  assert.deepEqual(await prepararSucursal(e.db, { ofreceDelivery: false }, e.sucursal), { ofreceDelivery: false, tramosDelivery: [], latitud: null, longitud: null })
   const preparada = await prepararSucursal(e.db, { latitud: cerca.latitud, longitud: cerca.longitud }, e.sucursal)
   assert.equal(preparada.latitud, cerca.latitud)
 })
@@ -275,11 +278,11 @@ test('las direcciones incompletas se rechazan en los tres puntos de entrada sin 
 test('alta con localidad nueva prepara ubicación sin crear registros; exige radio y coordenadas coherentes', async () => {
   const e = escenario()
   mockGeoref()
-  const datos = { nombre: 'Local nuevo', direccion: 'Olavarría 100', radioDeliveryKm: 5, localidadNueva: { nombre: 'Avellaneda', nombreProvincia: 'Buenos Aires' } }
+  const datos = { nombre: 'Local nuevo', direccion: 'Olavarría 100', tramosDelivery: tramosBase, localidadNueva: { nombre: 'Avellaneda', nombreProvincia: 'Buenos Aires' } }
   const preparada = await prepararSucursal(e.db, datos)
   assert.equal(preparada.latitud, cerca.latitud)
   assert.equal(e.estado.clientes + e.estado.pedidos + e.estado.cambios, 0)
-  for (const cambio of [{ radioDeliveryKm: 0 }, { radioDeliveryKm: null }, { latitud: 0 }, { latitud: 91, longitud: 0 }]) {
+  for (const cambio of [{ tramosDelivery: [] }, { tramosDelivery: [{ hastaKm: 0, costo: 0 }] }, { latitud: 0 }, { latitud: 91, longitud: 0 }]) {
     await assert.rejects(prepararSucursal(e.db, { ...datos, ...cambio }), esError(400))
   }
 })
@@ -295,16 +298,15 @@ test('la provincia CABA se consulta con su identificador oficial y se verifica e
   assert.deepEqual(await geocodificarDireccion('Avenida Santa Fe 2000', { localidad: 'Recoleta', provincia: 'CABA' }), cerca)
 })
 
-test('tarifa fija: frontera incluida, distancias lejanas y pesos enteros válidos', () => {
+test('tramos: frontera incluida, distancias lejanas y pesos enteros válidos', () => {
   for (const importe of [0, 1, 2500, 10000000]) assert.equal(recargoDeliveryValido(importe), true)
   for (const importe of [-1, 0.5, 10000001, Infinity, NaN, null, '2500']) assert.equal(recargoDeliveryValido(importe), false)
-  assert.equal(cotizarDistancia(5, 5, 2500).recargoDelivery, 0)
-  assert.equal(cotizarDistancia(5.001, 5, 2500).recargoDelivery, 2500)
-  assert.equal(cotizarDistancia(380, 5, 2500).recargoDelivery, 2500)
-  assert.equal(cotizarDistancia(380, 5, 0).recargoDelivery, 0)
-  assert.throws(() => cotizarDistancia(380, 5, null))
-  assert.equal(validarSucursal({ recargoFueraRadio: 2500 }, true).recargoFueraRadio, 2500)
-  assert.throws(() => validarSucursal({ recargoFueraRadio: -1 }, true))
+  assert.equal(cotizarDistancia(5, tramosBase).recargoDelivery, 0)
+  assert.equal(cotizarDistancia(5.001, tramosBase).recargoDelivery, 2500)
+  assert.equal(cotizarDistancia(80, tramosBase).recargoDelivery, 2500)
+  assert.throws(() => cotizarDistancia(100.1, tramosBase))
+  assert.deepEqual(validarSucursal({ tramosDelivery: tramosBase }, true).tramosDelivery, tramosBase)
+  assert.throws(() => validarSucursal({ tramosDelivery: [{ hastaKm: 5, costo: -1 }] }, true))
 })
 
 for (const canal of ['online', 'caja'] as const) {
@@ -320,7 +322,7 @@ for (const canal of ['online', 'caja'] as const) {
     assert.equal(pedido.total, 3500)
     assert.equal(e.estado.guardados[0].total, 3500)
     assert.equal(e.estado.guardados[0].subtotal, 1000)
-    e.sucursal.recargoFueraRadio = 9000
+    e.sucursal.tramosDelivery = [{ hastaKm: 5, costo: 0 }, { hastaKm: 100, costo: 9000 }]
     assert.equal(e.estado.guardados[0].recargoDelivery, 2500)
   })
   test(canal + ': cambio concurrente de tarifa impide crear pedidos con otro importe', async () => {
@@ -345,7 +347,6 @@ test('cotizaciones pública e interna no escriben y no exponen datos del cliente
     const datos = await respuesta.json()
     assert.deepEqual(Object.keys(datos), ['cotizacion'])
     assert.equal(datos.cotizacion.recargoDelivery, 2500)
-    assert.equal(datos.cotizacion.fueraDelRadio, true)
     assert.equal('sucursal' in datos.cotizacion, false)
   }
   assert.equal(e.estado.clientes + e.estado.pedidos + e.estado.cambios, 0)
@@ -369,14 +370,10 @@ test('delivery exige revisar un recargo y no permite enviar su propio total o ta
   assert.throws(() => validarPedidoCaja({ ...cuerpoDelivery, recargoFueraRadio: 0, total: 1 }))
 })
 
-test('recargo pendiente solo bloquea fuera del radio; tarifa cero permite entregar lejos sin adicional', async () => {
+test('un tramo de costo 0 permite entregar lejos sin adicional', async () => {
   const e = escenario()
-  e.sucursal.recargoFueraRadio = null
-  mockGeoref()
-  assert.equal((await prepararCoberturaDelivery(e.db, { idSucursal: 1 }, cuerpoDelivery.direccion, null)).cotizacion.recargoDelivery, 0)
+  e.sucursal.tramosDelivery = [{ hastaKm: 100, costo: 0 }]
   mockGeoref([direccionGeoref(lejos)])
-  await assert.rejects(prepararCoberturaDelivery(e.db, { idSucursal: 1 }, cuerpoDelivery.direccion, null), esError(409))
-  e.sucursal.recargoFueraRadio = 0
   assert.equal((await prepararCoberturaDelivery(e.db, { idSucursal: 1 }, cuerpoDelivery.direccion, null)).cotizacion.recargoDelivery, 0)
 })
 
@@ -404,4 +401,61 @@ test('un cambio de entrega nunca suma ni quita un recargo de un pedido ya pagado
   e.fila.tipoEntrega.nombre = 'delivery'; e.fila.recargoDelivery = 2500; e.fila.total = 3500
   assert.equal((await e.interno.actualizar(request({ accion: 'cambiarTipoEntrega', tipoEntrega: 'retiro' }, 'PATCH'), '20')).status, 409)
   assert.equal(e.fila.total, 3500)
+})
+
+test('tramos: más lejos del último se rechaza con un mensaje claro; cada distancia paga su tramo', async () => {
+  const e = escenario()
+  e.sucursal.tramosDelivery = [{ hastaKm: 5, costo: 0 }, { hastaKm: 10, costo: 1500 }]
+  mockGeoref([direccionGeoref(lejos)])
+  await assert.rejects(prepararCoberturaDelivery(e.db, { idSucursal: 1 }, 'Olavarría 100', 1),
+    (error: unknown) => error instanceof ErrorSucursal && error.estado === 400 && /No llegamos a esa dirección/.test(error.message))
+  mockGeoref()
+  assert.equal((await prepararCoberturaDelivery(e.db, { idSucursal: 1 }, 'Olavarría 100', 1)).cotizacion.recargoDelivery, 0)
+  const tramos = [{ hastaKm: 8, costo: 1500 }, { hastaKm: 2, costo: 0 }, { hastaKm: 5, costo: 1000 }]
+  assert.equal(cotizarDistancia(1, tramos).recargoDelivery, 0)
+  assert.equal(cotizarDistancia(4.5, tramos).recargoDelivery, 1000)
+  assert.equal(cotizarDistancia(6, tramos).recargoDelivery, 1500)
+  assert.throws(() => cotizarDistancia(8.1, tramos))
+})
+test('tramos: se ordenan; se rechazan vacíos, repetidos, de más y con campos extra', () => {
+  assert.deepEqual(leerTramos([{ hastaKm: 5, costo: 1000 }, { hastaKm: 2, costo: 0 }]), [{ hastaKm: 2, costo: 0 }, { hastaKm: 5, costo: 1000 }])
+  for (const invalido of [[], null, 'x', [{ hastaKm: 2, costo: 0 }, { hastaKm: 2, costo: 100 }], [{ hastaKm: 2, costo: 0, extra: 1 }],
+    [{ hastaKm: 2 }], Array.from({ length: 11 }, (_, i) => ({ hastaKm: i + 1, costo: 0 }))]) {
+    assert.equal(leerTramos(invalido), null)
+  }
+  assert.throws(() => validarSucursal({ tramosDelivery: [{ hastaKm: 101, costo: 0 }] }, true), esError(400))
+})
+test('editar sin mandar tramos conserva los guardados; sin tramos no se puede ofrecer delivery', async () => {
+  const e = escenario()
+  globalThis.fetch = async () => { assert.fail('No debe consultar Georef') }
+  assert.deepEqual((await prepararSucursal(e.db, { nombre: 'Otro' }, e.sucursal)).tramosDelivery, tramosBase)
+  e.sucursal.tramosDelivery = []
+  await assert.rejects(prepararSucursal(e.db, { nombre: 'Otro' }, e.sucursal), esError(400))
+})
+function sucursalConProvincia() {
+  const e = escenario()
+  Object.assign(e.sucursal, { localidad: { provincia: { nombre: 'Buenos Aires' } } })
+  return e
+}
+test('sugerencias: solo direcciones cercanas, ordenadas y en el formato que después se cotiza', async () => {
+  const e = sucursalConProvincia()
+  e.sucursal.tramosDelivery = [{ hastaKm: 5, costo: 0 }, { hastaKm: 10, costo: 1500 }]
+  const provincias: string[] = []
+  globalThis.fetch = async (entrada) => {
+    const url = new URL(String(entrada))
+    provincias.push(url.searchParams.get('provincia') ?? '')
+    return Response.json({ total: 2, direcciones: [direccionGeoref(lejos), direccionGeoref(), direccionGeoref()] })
+  }
+  const sugerencias = await sugerirDireccionesDelivery(e.db, { idSucursal: 1 }, 'olavarria 100')
+  assert.deepEqual(sugerencias, [{ direccion: 'Olavarria 100, Avellaneda, Buenos Aires' }])
+  assert.deepEqual(provincias.sort(), ['02', '06'])
+  mockGeoref()
+  assert.equal((await prepararCoberturaDelivery(e.db, { idSucursal: 1 }, sugerencias[0].direccion, null)).cotizacion.recargoDelivery, 0)
+})
+test('sugerencias: sin número no consulta; si Georef falla devuelve lista vacía', async () => {
+  const e = sucursalConProvincia()
+  globalThis.fetch = async () => { assert.fail('No debe consultar Georef') }
+  assert.deepEqual(await sugerirDireccionesDelivery(e.db, { idSucursal: 1 }, 'olavarria'), [])
+  globalThis.fetch = async () => { throw new Error('sin red') }
+  assert.deepEqual(await sugerirDireccionesDelivery(e.db, { idSucursal: 1 }, 'olavarria 100'), [])
 })

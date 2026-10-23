@@ -69,11 +69,16 @@ model Sucursal {
   // Formas de entrega que ofrece en el menú digital (siempre al menos una).
   ofreceRetiro   Boolean @default(true)
   ofreceDelivery Boolean @default(true)
-  // Radio en línea recta y centro del local. Null = pendiente de configuración;
-  // los pedidos de delivery no se aceptan hasta guardar los tres valores.
+  // Costo del envío por distancia (en línea recta desde latitud/longitud del local).
+  // Lista ordenada de tramos: [{ "hastaKm": 2, "costo": 0 }, { "hastaKm": 5, "costo": 1000 }].
+  // Más lejos que el último tramo no se hace delivery. [] = pendiente de configurar.
+  // Formato y reglas en lib/sucursales/radio-delivery.ts (leerTramos).
+  tramosDelivery Json @default("[]")
+  // En desuso: reemplazados por tramosDelivery (la migración tramos_delivery pasó sus datos).
+  // Se borran en una migración aparte cuando este cambio esté en producción.
   radioDeliveryKm Float?
-  // Adicional fijo en pesos fuera del radio. Null = pendiente de configurar.
   recargoFueraRadio Float?
+  radioMaximoKm   Float?
   latitud         Float?
   longitud        Float?
 

@@ -7,10 +7,10 @@
 // (página de Sucursales y configuración inicial).
 
 import { useState } from 'react'
-import { Bike, Check, ExternalLink, MapPin, ShoppingBag, Store, type LucideIcon } from '@/components/icons'
+import { Bike, Check, ExternalLink, MapPin, Plus, ShoppingBag, Store, X, type LucideIcon } from '@/components/icons'
 import { CampoConSugerencias } from '@/components/ui/CampoConSugerencias'
 import { Input } from '@/components/ui/Input'
-import { MAX_RADIO_DELIVERY_KM, MIN_RADIO_DELIVERY_KM, MAX_RECARGO_DELIVERY } from '@/lib/sucursales/radio-delivery'
+import { MAX_KM_TRAMO, MAX_RECARGO_DELIVERY, MAX_TRAMOS, MIN_KM_TRAMO, type TramoDelivery } from '@/lib/sucursales/radio-delivery'
 import { buscarDirecciones, buscarLocalidades } from '@/lib/sucursales/georef'
 import { MENSAJE_LINK_MAPS, MENSAJE_WHATSAPP, linkMapsValido } from '@/lib/sucursales/sucursales-validacion'
 
@@ -29,10 +29,29 @@ export interface ValoresSucursal {
   idLocalidad: string
   ofreceRetiro: boolean
   ofreceDelivery: boolean
-  recargoFueraRadio: string
-  radioDeliveryKm: string
+  // Costo del envío por distancia. Se editan como texto y se convierten al guardar.
+  tramos: TramoFormulario[]
   latitud: string
   longitud: string
+}
+
+export interface TramoFormulario {
+  hastaKm: string
+  costo: string
+}
+
+export const tramoVacio: TramoFormulario = { hastaKm: '', costo: '' }
+
+// Para mandar a la API. Las filas vacías se ignoran; el servidor valida el resto.
+export function tramosParaEnviar(tramos: TramoFormulario[]): TramoDelivery[] {
+  return tramos
+    .filter((t) => t.hastaKm.trim() || t.costo.trim())
+    .map((t) => ({ hastaKm: Number(t.hastaKm), costo: Number(t.costo) }))
+}
+
+export function tramosParaEditar(tramos: unknown): TramoFormulario[] {
+  const lista = Array.isArray(tramos) ? tramos as TramoDelivery[] : []
+  return lista.length ? lista.map((t) => ({ hastaKm: String(t.hastaKm), costo: String(t.costo) })) : [tramoVacio]
 }
 
 export interface ValoresLocalidadNueva {
@@ -49,8 +68,7 @@ export const valoresSucursalVacios: ValoresSucursal = {
   idLocalidad: '',
   ofreceRetiro: true,
   ofreceDelivery: true,
-  radioDeliveryKm: '5',
-  recargoFueraRadio: '0',
+  tramos: [tramoVacio],
   latitud: '',
   longitud: '',
 }
@@ -357,18 +375,47 @@ export function CamposSucursal({
         </fieldset>
         {valores.ofreceDelivery && (
           <div className="flex flex-col gap-3">
-            <Input
-              id={id('radioDeliveryKm')} name="radioDeliveryKm" label="Radio sin recargo (km)"
-              type="number" min={MIN_RADIO_DELIVERY_KM} max={MAX_RADIO_DELIVERY_KM} step="0.1"
-              value={valores.radioDeliveryKm} onChange={cambiar} required className={claseInput}
-            />
-            <p className={claseAyuda}>Dentro del radio no hay adicional. Fuera se cobra una sola vez el recargo fijo, sin importar los kilómetros excedidos. La distancia se mide en línea recta.</p>
-            <Input
-              id={id('recargoFueraRadio')} name="recargoFueraRadio" label="Recargo fijo fuera del radio ($)"
-              type="number" min="0" max={MAX_RECARGO_DELIVERY} step="1"
-              value={valores.recargoFueraRadio} onChange={cambiar} required className={claseInput}
-            />
-            <p className={claseAyuda}>Importe en pesos, sin centavos. Usá 0 si querés permitir envíos sin adicional también fuera del radio.</p>
+            <div className="flex flex-col gap-2">
+              <p className={claseEtiqueta}>Costo del envío según la distancia</p>
+              <p className={claseAyuda}>Ej: hasta 2 km $0 (gratis), hasta 5 km $1000. Más lejos del último tramo no se hace delivery.</p>
+              {valores.tramos.map((tramo, indice) => {
+                const cambiarTramo = (campo: keyof TramoFormulario, valor: string) =>
+                  onCambiar('tramos', valores.tramos.map((t, i) => (i === indice ? { ...t, [campo]: valor } : t)))
+                return (
+                  <div key={indice} className="flex items-center gap-2 text-sm">
+                    <span className="shrink-0 text-muted">Hasta</span>
+                    <input
+                      id={id(`tramo-${indice}-km`)} aria-label={`Tramo ${indice + 1}: distancia en km`}
+                      type="number" min={MIN_KM_TRAMO} max={MAX_KM_TRAMO} step="0.1" placeholder="km"
+                      value={tramo.hastaKm} onChange={(e) => cambiarTramo('hastaKm', e.target.value)}
+                      className={`${claseInput} min-w-0 flex-1`}
+                    />
+                    <span className="shrink-0 text-muted">km&nbsp;&nbsp;$</span>
+                    <input
+                      id={id(`tramo-${indice}-costo`)} aria-label={`Tramo ${indice + 1}: costo del envío en pesos`}
+                      type="number" min="0" max={MAX_RECARGO_DELIVERY} step="1" placeholder="0 = gratis"
+                      value={tramo.costo} onChange={(e) => cambiarTramo('costo', e.target.value)}
+                      className={`${claseInput} min-w-0 flex-1`}
+                    />
+                    <button
+                      type="button" aria-label={`Quitar tramo ${indice + 1}`} disabled={valores.tramos.length === 1}
+                      onClick={() => onCambiar('tramos', valores.tramos.filter((_, i) => i !== indice))}
+                      className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <X className="size-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                )
+              })}
+              {valores.tramos.length < MAX_TRAMOS && (
+                <button
+                  type="button" onClick={() => onCambiar('tramos', [...valores.tramos, tramoVacio])}
+                  className="flex w-fit cursor-pointer items-center gap-1.5 text-sm font-medium text-accent"
+                >
+                  <Plus className="size-4" aria-hidden="true" /> Agregar tramo
+                </button>
+              )}
+            </div>
             <details>
               <summary className="cursor-pointer text-sm text-muted">Ubicación manual del local (opcional)</summary>
               <p className={claseAyuda}>Dejá ambos campos vacíos para ubicar la dirección automáticamente. Si no se encuentra, copiá las coordenadas del punto exacto del local en Google Maps. Al cambiar la dirección se vuelve a calcular la ubicación.</p>

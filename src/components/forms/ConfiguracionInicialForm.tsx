@@ -14,6 +14,7 @@ import { AvisoError } from '@/components/acceso/ElementosAcceso'
 import {
   CamposSucursal,
   localidadNuevaVacia,
+  tramosParaEnviar,
   valoresSucursalVacios,
   type LocalidadOpcion,
   type ValoresLocalidadNueva,
@@ -47,8 +48,7 @@ function cuerpoSucursal(bloque: BloqueSucursal) {
     linkMaps: linkMaps || null,
     ofreceRetiro,
     ofreceDelivery,
-    recargoFueraRadio: bloque.valores.recargoFueraRadio.trim() ? Number(bloque.valores.recargoFueraRadio) : null,
-    radioDeliveryKm: ofreceDelivery && bloque.valores.radioDeliveryKm.trim() ? Number(bloque.valores.radioDeliveryKm) : null,
+    tramosDelivery: ofreceDelivery ? tramosParaEnviar(bloque.valores.tramos) : [],
     latitud: ofreceDelivery && bloque.valores.latitud.trim() ? Number(bloque.valores.latitud) : null,
     longitud: ofreceDelivery && bloque.valores.longitud.trim() ? Number(bloque.valores.longitud) : null,
     ...(bloque.usarLocalidadNueva
@@ -65,10 +65,10 @@ function mensajeDe(error: unknown) {
 function errorDeSucursal(bloque: BloqueSucursal): string | null {
   try {
     if (bloque.usarLocalidadNueva) validarLocalidadNueva(bloque.localidadNueva)
-    const { nombre, direccion, whatsapp, horario, linkMaps, ofreceRetiro, ofreceDelivery, radioDeliveryKm, recargoFueraRadio, latitud, longitud } = cuerpoSucursal(bloque)
+    const { nombre, direccion, whatsapp, horario, linkMaps, ofreceRetiro, ofreceDelivery, tramosDelivery, latitud, longitud } = cuerpoSucursal(bloque)
     // Con localidad nueva el id lo genera la API; acá el 1 solo sirve para validar el resto.
     const idLocalidad = bloque.usarLocalidadNueva ? 1 : Number(bloque.valores.idLocalidad)
-    validarSucursal({ nombre, direccion, whatsapp, horario, linkMaps, idLocalidad, ofreceRetiro, ofreceDelivery, radioDeliveryKm, recargoFueraRadio, latitud, longitud }, false)
+    validarSucursal({ nombre, direccion, whatsapp, horario, linkMaps, idLocalidad, ofreceRetiro, ofreceDelivery, tramosDelivery, latitud, longitud }, false)
     return null
   } catch (error) {
     return mensajeDe(error)

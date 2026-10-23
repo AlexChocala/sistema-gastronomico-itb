@@ -424,3 +424,12 @@ export function validarCotizacionDelivery(cuerpo: unknown, publica: boolean) {
   if (idLocalidad === null && !separarDireccion(datos.direccion.trim())) throw new ErrorPedido(400, MENSAJE_DIRECCION_COMPLETA)
   return { direccion: datos.direccion.trim(), idLocalidad: idLocalidad as number | null, slugSucursal: datos.slugSucursal as string }
 }
+
+// Lo que se va escribiendo en el campo de dirección, para pedir sugerencias.
+export function validarBusquedaDireccion(cuerpo: unknown, publica: boolean) {
+  const datos = objeto(cuerpo, 'Enviá el texto de la dirección.')
+  soloCampos(datos, ['texto', ...(publica ? ['slugSucursal'] : [])], 'La búsqueda tiene campos que no se reconocen.')
+  if (publica && (typeof datos.slugSucursal !== 'string' || !/^[a-z0-9-]{1,80}$/.test(datos.slugSucursal))) throw new ErrorPedido(400, 'Indicá una sucursal válida.')
+  if (typeof datos.texto !== 'string' || datos.texto.trim().length > MAX_DIRECCION) throw new ErrorPedido(400, MENSAJE_DIRECCION)
+  return { texto: datos.texto.trim(), slugSucursal: datos.slugSucursal as string }
+}

@@ -2,7 +2,7 @@
 
 // Pantalla de Caja (pestaña aparte, sin sidebar). Flujo de mostrador:
 //   1. Armar el pedido (productos, cliente, tipo de entrega; en delivery también celular,
-//      dirección, localidad si la sucursal tiene zonas e indicaciones opcionales) → "Cobrar".
+//      dirección con sugerencias e indicaciones opcionales) → "Cobrar".
 //   2. Elegir método de pago (efectivo calcula el vuelto) → "Confirmar pago".
 //   3. POST /api/pedidos/caja: el pedido entra PAGADO a Cocina como "recibido", con el
 //      número que le da la base, y se imprime el ticket del cliente.
@@ -520,7 +520,6 @@ const MENSAJE_PRODUCTOS_NO_DISPONIBLES =
 export default function CajaPage() {
   const [productos, setProductos] = useState<ProductoCaja[]>([])
   // Zonas de delivery de la sucursal: si hay, en un delivery hay que elegir una.
-  const [zonas, setZonas] = useState<ZonaDelivery[]>([])
   const [cargandoProductos, setCargandoProductos] = useState(true)
   const [errorProductos, setErrorProductos] = useState('')
 
@@ -531,7 +530,7 @@ export default function CajaPage() {
   const [tipoEntrega, setTipoEntrega] = useState<TipoEntregaPantalla>('retiro')
   // Solo se mandan en delivery; se conservan si se vuelve a retiro por error.
   const [entrega, setEntrega] = useState<ValoresDelivery>(VALORES_DELIVERY_VACIOS)
-  const cotizador = useCotizacionDelivery(entrega.direccion, entrega.idLocalidad)
+  const cotizador = useCotizacionDelivery(entrega.direccion)
   // Línea (clave) que espera confirmación antes de salir del carrito.
   const [confirmandoQuitar, setConfirmandoQuitar] = useState<string | null>(null)
   // Aclaración para la cocina, de todo el pedido.
@@ -564,7 +563,6 @@ export default function CajaPage() {
         if (!respuesta.ok) throw new Error(datos.error || 'No se pudieron cargar los productos.')
         if (paginaActiva) {
           setProductos(datos.productos ?? [])
-          setZonas(datos.localidadesDelivery ?? [])
         }
       } catch (errorDesconocido) {
         if (paginaActiva) {
@@ -838,8 +836,8 @@ export default function CajaPage() {
                     id="caja-delivery"
                     valores={entrega}
                     errores={erroresEntrega}
-                    zonas={zonas}
                     onCambiar={(campo, valor) => setEntrega((previos) => ({ ...previos, [campo]: valor }))}
+                    onElegirDireccion={(direccion) => void cotizador.calcular(direccion)}
                   />
                 )}
               </div>

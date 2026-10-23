@@ -68,3 +68,42 @@ export async function geocodificarDireccion(direccion: string, contexto: Context
     longitud: puntos.reduce((s, p) => s + p.longitud, 0) / puntos.length,
   }
 }
+
+// "AV SANTA FE" → "Av Santa Fe". Solo es para mostrar: al cotizar se compara normalizado.
+function nombrePropio(texto: string) {
+  return texto.toLowerCase().replace(/(^|[\s.'(-])(\p{L})/gu, (_, antes: string, letra: string) => antes + letra.toUpperCase())
+}
+
+// En el AMBA es común entregar de un lado al otro de la General Paz: se busca en las dos.
+const PROVINCIAS_AMBA = ['02', '06']
+
+export type DireccionEncontrada = Punto & { direccion: string }
+
+// Direcciones de Georef que se parecen a lo que el cliente va escribiendo. Devuelve el
+// texto en el formato que acepta separarDireccion ("Calle 123, Localidad, Provincia").
+// Si Georef falla devuelve una lista vacía: el campo sigue funcionando sin sugerencias.
+export async function buscarDireccionesParecidas(texto: string, provinciaSucursal: string): Promise<DireccionEncontrada[]> {
+  if (!/^.{2,}\s+\d{1,6}$/.test(texto.trim())) return []
+  const provincia = normalizarLugar(provinciaSucursal)
+  const provincias = ['buenos aires', 'ciudad autonoma de buenos aires'].includes(provincia) ? PROVINCIAS_AMBA : [provinciaSucursal]
+  const respuestas = await Promise.all(provincias.map((p) =>
+    pedir('direcciones', { direccion: texto.trim(), provincia: p, max: '30' }).catch(() => null)))
+  const encontradas: DireccionEncontrada[] = []
+  for (const datos of respuestas) {
+    if (!datos || !Array.isArray(datos.direcciones)) continue
+    for (const d of datos.direcciones as DireccionGeoref[]) {
+      const calle = d?.calle?.nombre
+      const altura = d?.altura?.valor
+      const localidad = d?.localidad?.nombre || d?.localidad_censal?.nombre
+      const nombreProvincia = d?.provincia?.nombre
+      if (typeof calle !== 'string' || !Number.isSafeInteger(altura) || typeof localidad !== 'string'
+        || typeof nombreProvincia !== 'string' || !coordenadasValidas(d.ubicacion?.lat, d.ubicacion?.lon)) continue
+      if ([calle, localidad, nombreProvincia].some((parte) => parte.includes(','))) continue
+      encontradas.push({
+        direccion: `${nombrePropio(calle)} ${altura}, ${localidad}, ${nombreProvincia}`,
+        latitud: d.ubicacion!.lat!, longitud: d.ubicacion!.lon!,
+      })
+    }
+  }
+  return encontradas
+}
