@@ -4,13 +4,16 @@
 
 import { formatear, type Columna, type Valor } from '@/lib/reportes/pestanas'
 
-const COLUMNAS_CENTRADAS_DETALLE = new Set(['Registrado por', 'Canal', 'Entrega', 'Pago', 'Vendido', 'Productos'])
+const COLUMNAS_CENTRADAS_DETALLE = new Set([
+  'N.º', 'Fecha', 'Sucursal', 'Registrado por', 'Canal', 'Entrega', 'Estado del pedido',
+  'Pago', 'Estado de pago', 'Vendido', 'Productos',
+])
 
-export function TablaReporte({ columnas, filas, compacta = false }: { columnas: Columna[]; filas: Valor[][]; compacta?: boolean }) {
+export function TablaReporte({ columnas, filas, compacta = false, centrada = false }: { columnas: Columna[]; filas: Valor[][]; compacta?: boolean; centrada?: boolean }) {
   const espaciado = compacta ? 'px-2.5 py-2' : 'px-4 py-2'
   const ajuste = (columna: Columna) => columna.multilinea ? 'max-w-44 whitespace-normal break-words' : 'whitespace-nowrap'
   const alineacion = (columna: Columna) => {
-    if (compacta && (columna.formato !== 'texto' || COLUMNAS_CENTRADAS_DETALLE.has(columna.titulo))) {
+    if (centrada || (compacta && (columna.formato !== 'texto' || COLUMNAS_CENTRADAS_DETALLE.has(columna.titulo)))) {
       return columna.formato === 'texto' ? 'text-center' : 'text-center tabular-nums'
     }
     return columna.formato === 'texto' ? 'text-left' : 'text-right tabular-nums'
