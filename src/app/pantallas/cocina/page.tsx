@@ -128,7 +128,7 @@ function TarjetaPedido({
           className="mt-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-full py-2 text-sm text-muted transition-colors hover:text-text"
         >
           <Printer className="size-4" />
-          Imprimir comanda
+          Imprimir ticket
         </button>
       </div>
     </article>

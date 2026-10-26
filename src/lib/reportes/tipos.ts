@@ -5,7 +5,7 @@
 // - El rango se filtra por Pedido.fecha (cuando se hizo el pedido).
 // - Fechas y horas en hora de Argentina.
 
-import type { EstadoPago, MetodoPago, OrigenPedido, TipoEntrega } from '@/lib/pedidos/pedidos-estados'
+import type { EstadoPedido, EstadoPago, MetodoPago, OrigenPedido, TipoEntrega } from '@/lib/pedidos/pedidos-estados'
 
 export type Agrupacion = 'dia' | 'semana' | 'mes'
 
@@ -50,6 +50,7 @@ export type PedidoReporte = {
   registradoPor: string | null // nombre y apellido del personal; null si no hay usuario asociado
   origen: OrigenPedido
   tipoEntrega: TipoEntrega
+  estadoPedido: EstadoPedido
   metodoPago: MetodoPago
   estadoPago: EstadoPago
   vendido: boolean

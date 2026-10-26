@@ -10,6 +10,8 @@ La búsqueda afecta el listado y sus exportaciones PDF, CSV y JSON. En Excel, so
 
 Las tarjetas superiores y los demás gráficos mantienen los totales del rango y la sucursal seleccionados. Los pedidos pendientes siguen apareciendo en el detalle sin sumarse como vendidos.
 
+El detalle también incluye **Estado del pedido** (pendiente de pago, recibido, en preparación, listo, enviado o entregado), separado del tipo de entrega y del estado de pago. La columna aparece en la pantalla, PDF, Excel y CSV; JSON incluye el campo `estadoPedido`. No se ocultan pedidos por su estado ni se altera la regla de venta por pago confirmado.
+
 No requiere migraciones, cambios en Supabase, variables nuevas ni dependencias.
 
 Para probar: buscar un producto, un empleado con/sin tildes, un cliente y `#` seguido del número de pedido; combinar producto y empleado; probar una búsqueda sin coincidencias; limpiar; cambiar fechas/sucursal y comprobar las descargas.

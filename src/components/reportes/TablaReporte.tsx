@@ -1,12 +1,20 @@
 // Tabla de una pestaña de Reportes, armada con las columnas de lib/reportes/pestanas.ts.
-// Los números van alineados a la derecha; el encabezado queda fijo al hacer scroll.
+// En el detalle compacto se centran importes y las columnas de identificación del pedido.
+// El encabezado queda fijo al hacer scroll.
 
 import { formatear, type Columna, type Valor } from '@/lib/reportes/pestanas'
+
+const COLUMNAS_CENTRADAS_DETALLE = new Set(['Registrado por', 'Canal', 'Entrega', 'Pago', 'Vendido', 'Productos'])
 
 export function TablaReporte({ columnas, filas, compacta = false }: { columnas: Columna[]; filas: Valor[][]; compacta?: boolean }) {
   const espaciado = compacta ? 'px-2.5 py-2' : 'px-4 py-2'
   const ajuste = (columna: Columna) => columna.multilinea ? 'max-w-44 whitespace-normal break-words' : 'whitespace-nowrap'
-  const alineacion = (columna: Columna) => (columna.formato === 'texto' ? 'text-left' : 'text-right tabular-nums')
+  const alineacion = (columna: Columna) => {
+    if (compacta && (columna.formato !== 'texto' || COLUMNAS_CENTRADAS_DETALLE.has(columna.titulo))) {
+      return columna.formato === 'texto' ? 'text-center' : 'text-center tabular-nums'
+    }
+    return columna.formato === 'texto' ? 'text-left' : 'text-right tabular-nums'
+  }
 
   return (
     <div className="max-h-[32rem] overflow-auto rounded-2xl border border-border">

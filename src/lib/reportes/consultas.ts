@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client'
+import { ESTADOS_PEDIDO } from '@/lib/pedidos/pedidos-estados'
 import { prisma } from '@/lib/db/prisma'
 import type { Agrupacion, DatosReportes, FiltrosReportes, PedidoReporte, ProductoMasVendido, VentaPorPeriodo } from './tipos'
 
@@ -80,7 +81,7 @@ function periodoDe(dia: string, agrupacion: Agrupacion) {
 
 const camposPedido = {
   idPedido: true, fecha: true, idSucursal: true, origenPedido: true,
-  metodoPago: true, estadoPago: true, subtotal: true, recargoDelivery: true, total: true,
+  metodoPago: true, estadoPago: true, estadoPedido: true, subtotal: true, recargoDelivery: true, total: true,
   usuario: { select: { nombre: true, apellido: true } },
   cliente: { select: { nombre: true, apellido: true } },
   sucursal: { select: { nombre: true } },
@@ -125,11 +126,12 @@ export function calcularReportes(
     const origen = pedido.origenPedido
     const metodoPago = pedido.metodoPago
     const estadoPago = pedido.estadoPago
+    const estadoPedido = ESTADOS_PEDIDO.find(estado => estado === pedido.estadoPedido)
     const tipoEntrega = pedido.tipoEntrega.nombre
     if ((origen !== 'mostrador' && origen !== 'online') ||
         (metodoPago !== 'efectivo' && metodoPago !== 'transferencia') ||
         (estadoPago !== 'pagado' && estadoPago !== 'pendiente' && estadoPago !== 'pendiente_verificacion') ||
-        (tipoEntrega !== 'retiro' && tipoEntrega !== 'delivery')) {
+        (tipoEntrega !== 'retiro' && tipoEntrega !== 'delivery') || !estadoPedido) {
       throw new ErrorReporte(500, 'Hay pedidos con datos incompatibles con el reporte. Contactá al administrador.')
     }
     const vendido = estadoPago === 'pagado'
@@ -137,7 +139,7 @@ export function calcularReportes(
       idPedido: pedido.idPedido, fecha, sucursal: pedido.sucursal.nombre,
       cliente: [pedido.cliente.nombre, pedido.cliente.apellido].filter(Boolean).join(' '),
       registradoPor: pedido.usuario ? [pedido.usuario.nombre, pedido.usuario.apellido].filter(Boolean).join(' ') : null,
-      origen, metodoPago, estadoPago, vendido, tipoEntrega,
+      origen, metodoPago, estadoPago, estadoPedido, vendido, tipoEntrega,
       productos: [...new Set(pedido.detalles.map((detalle) => detalle.producto.nombre))],
       cantidadProductos: pedido.detalles.reduce((suma, d) => suma + d.cantidad, 0),
       recargoDelivery: dinero(pedido.recargoDelivery),
