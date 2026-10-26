@@ -2,7 +2,7 @@
 // y el Excel leen de acá, así las columnas no se repiten en tres lugares.
 // Sin React ni imports de servidor.
 
-import type { EstadoPago, MetodoPago, OrigenPedido, TipoEntrega } from '@/lib/pedidos/pedidos-estados'
+import type { EstadoPedido, EstadoPago, MetodoPago, OrigenPedido, TipoEntrega } from '@/lib/pedidos/pedidos-estados'
 import { formatearPrecio } from '@/lib/utils/precio'
 import type { Agrupacion, DatosReportes } from './tipos'
 
@@ -25,6 +25,10 @@ export type Pestana = {
 }
 
 export const NOMBRES_METODO_PAGO: Record<MetodoPago, string> = { efectivo: 'Efectivo', transferencia: 'Transferencia' }
+const NOMBRES_ESTADO_PEDIDO: Record<EstadoPedido, string> = {
+  pendiente_pago: 'Pendiente de pago', recibido: 'Recibido', en_preparacion: 'En preparación',
+  listo: 'Listo', enviado: 'Enviado', entregado: 'Entregado',
+}
 const NOMBRES_ESTADO_PAGO: Record<EstadoPago, string> = {
   pagado: 'Pagado', pendiente: 'Pendiente', pendiente_verificacion: 'Pendiente de verificación',
 }
@@ -132,6 +136,7 @@ export const PESTANAS: Pestana[] = [
       { titulo: 'Registrado por', formato: 'texto', multilinea: true },
       { titulo: 'Canal', formato: 'texto' },
       { titulo: 'Entrega', formato: 'texto' },
+      { titulo: 'Estado del pedido', formato: 'texto', multilinea: true },
       { titulo: 'Pago', formato: 'texto' },
       { titulo: 'Estado de pago', formato: 'texto', multilinea: true },
       { titulo: 'Vendido', formato: 'texto' },
@@ -145,7 +150,7 @@ export const PESTANAS: Pestana[] = [
       datos.pedidos.map((p) => [
         p.idPedido, fechaYHora(p.fecha), p.sucursal, p.cliente,
         p.registradoPor ?? (p.origen === 'online' ? 'Pedido online' : 'Sin registro'),
-        NOMBRES_ORIGEN[p.origen], NOMBRES_ENTREGA[p.tipoEntrega], NOMBRES_METODO_PAGO[p.metodoPago],
+        NOMBRES_ORIGEN[p.origen], NOMBRES_ENTREGA[p.tipoEntrega], NOMBRES_ESTADO_PEDIDO[p.estadoPedido], NOMBRES_METODO_PAGO[p.metodoPago],
         NOMBRES_ESTADO_PAGO[p.estadoPago], p.vendido ? 'Sí' : 'No', (p.productos ?? []).join(', '), p.cantidadProductos, p.subtotal, p.recargoDelivery, p.total,
       ]),
     grafico: null,

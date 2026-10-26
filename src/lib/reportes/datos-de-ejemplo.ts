@@ -130,6 +130,7 @@ function generarPedidosDelDia(dia: string, sucursal: { idSucursal: number; nombr
       registradoPor: origen === 'mostrador' ? 'Empleado de ejemplo' : null,
       origen,
       estadoPago: 'pagado',
+      estadoPedido: 'entregado',
       vendido: true,
       tipoEntrega: origen === 'online' && azar() < 0.5 ? 'delivery' : 'retiro',
       metodoPago: origen === 'online' && azar() < 0.6 ? 'transferencia' : 'efectivo',
@@ -236,7 +237,7 @@ export function generarDatosDeEjemplo(filtros: FiltrosReportes): DatosReportes {
     pedidos: pedidos
       .map((p): PedidoReporte => ({
         idPedido: p.idPedido, fecha: p.fecha, sucursal: p.sucursal, cliente: p.cliente, origen: p.origen,
-        registradoPor: p.registradoPor, estadoPago: p.estadoPago, vendido: p.vendido,
+        registradoPor: p.registradoPor, estadoPago: p.estadoPago, estadoPedido: p.estadoPedido, vendido: p.vendido,
         tipoEntrega: p.tipoEntrega, metodoPago: p.metodoPago, productos: p.productos, cantidadProductos: p.cantidadProductos,
         subtotal: p.subtotal, recargoDelivery: 0, total: p.total,
       }))

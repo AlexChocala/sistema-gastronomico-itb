@@ -89,7 +89,8 @@ export async function exportarPdf({ negocio, pestana, filas, resumen, periodo, s
     margin: { left: MARGEN, right: MARGEN },
     head: [pestana.columnas.map((columna) => columna.titulo)],
     body: filas.map((fila) => fila.map((valor, i) => formatear(valor, pestana.columnas[i].formato))),
-    styles: { fontSize: 9 },
+    // El detalle tiene más columnas: reduce tamaño y márgenes internos para no cortar palabras.
+    styles: pestana.id === 'pedidos' ? { fontSize: 7.5, cellPadding: 1.3 } : { fontSize: 9 },
     headStyles: { fillColor: acento, textColor: textoSobreAcento },
     // Números a la derecha, también en el encabezado.
     didParseCell: ({ cell, column }) => {
