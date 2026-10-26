@@ -300,7 +300,7 @@ function Pestanas({ datos, agrupacion, contexto, descargasHabilitadas }: Pestana
                 formato={actual.columnas[grafico.valor].formato}
               />
             )}
-            {grafico?.tipo !== 'mapa' && <TablaReporte columnas={actual.columnas} filas={filas} compacta={actual.id === 'pedidos'} />}
+            {grafico?.tipo !== 'mapa' && <TablaReporte columnas={actual.columnas} filas={filas} compacta={actual.id === 'pedidos'} centrada={['periodo', 'horario', 'productos', 'pago', 'origen', 'entrega'].includes(actual.id)} />}
           </>
         )}
       </div>
