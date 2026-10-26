@@ -20,7 +20,7 @@ export function TablaReporte({ columnas, filas, compacta = false, centrada = fal
   }
 
   return (
-    <div className="max-h-[32rem] overflow-auto rounded-2xl border border-border">
+    <div className="max-h-128 overflow-auto rounded-2xl border border-border">
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-surface-muted text-muted">
           <tr>

@@ -554,14 +554,15 @@ export default function UsuariosPage() {
           )
         ) : (
           <div className="overflow-x-auto rounded-3xl bg-surface p-2 shadow-sm">
-            <table className="w-full min-w-[44rem] text-left text-sm">
+            <table className="w-full min-w-[44rem] text-center text-sm">
               <thead>
                 <tr className="text-xs text-muted">
+                  <th className="w-20 px-4 py-3 font-medium" scope="col">Perfil</th>
                   <th className="px-4 py-3 font-medium">Usuario</th>
                   <th className="px-4 py-3 font-medium">Rol</th>
                   <th className="px-4 py-3 font-medium">Sucursal</th>
                   <th className="px-4 py-3 font-medium">Estado</th>
-                  {esAdmin && <th className="px-4 py-3 text-right font-medium">Acciones</th>}
+                  {esAdmin && <th className="px-4 py-3 text-center font-medium">Acciones</th>}
                 </tr>
               </thead>
               <tbody>
@@ -570,8 +571,8 @@ export default function UsuariosPage() {
                     key={u.idUsuario}
                     className={`border-t border-bg transition-colors hover:bg-bg/60 ${u.activo ? '' : 'text-muted'}`}
                   >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
+                    <td className="w-20 px-4 py-3">
+                      <div className="flex justify-center">
                         {u.fotoPerfilUrl ? (
                           // URL del bucket: no pasa por next/image.
                           // eslint-disable-next-line @next/next/no-img-element
@@ -587,10 +588,12 @@ export default function UsuariosPage() {
                             {iniciales(u)}
                           </span>
                         )}
-                        <div className="min-w-0">
-                          <Link href={`/usuarios/asistencia/${u.idUsuario}`} className="block truncate rounded-md font-medium hover:text-accent hover:underline" title="Ver horario e historial de asistencia">{u.nombre} {u.apellido}</Link>
-                          <p className="truncate text-xs text-muted">{u.email}</p>
-                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="mx-auto w-full max-w-xs text-center">
+                        <Link href={`/usuarios/asistencia/${u.idUsuario}`} className="block truncate rounded-md font-medium hover:text-accent hover:underline" title="Ver horario e historial de asistencia">{u.nombre} {u.apellido}</Link>
+                        <p className="truncate text-xs text-muted">{u.email}</p>
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -614,7 +617,7 @@ export default function UsuariosPage() {
                     </td>
                     {esAdmin && vista === 'archivados' && (
                       <td className="px-4 py-3">
-                        <div className="flex justify-end">
+                        <div className="flex justify-center">
                           <button
                             type="button"
                             onClick={() => reactivarUsuario(u)}
@@ -629,7 +632,7 @@ export default function UsuariosPage() {
                     )}
                     {esAdmin && vista === 'activos' && (
                       <td className="px-4 py-3">
-                        <div className="flex justify-end gap-1">
+                        <div className="flex justify-center gap-1">
                           <button
                             type="button"
                             onClick={() => abrirEditar(u)}
