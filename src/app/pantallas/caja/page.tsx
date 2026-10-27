@@ -8,8 +8,6 @@
 //      número que le da la base, y se imprime el ticket del cliente.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
-import { Aviso } from '@/components/ui/Aviso'
 import { CODIGO_ASISTENCIA_REQUERIDA } from '@/lib/asistencia/permiso-pedidos'
 import {
   ArrowLeft, Banknote, Bike, CircleCheck, Landmark, Minus, Plus, Printer, Search, ShoppingBag, Trash2, X,
@@ -805,15 +803,6 @@ export default function CajaPage() {
             {cobrando && <span className="text-muted"> · {cliente.trim()}</span>}
           </h2>
 
-          {!permiso.puedeRegistrar && (
-            <Aviso tipo={permiso.cargando ? 'info' : 'advertencia'}>
-              <p>{permiso.cargando ? 'Verificando permiso para registrar pedidos…' : permiso.mensaje ?? 'No estás habilitado para registrar pedidos.'}</p>
-              {!permiso.cargando && <div className="mt-2 flex flex-wrap items-center gap-3">
-                <Link href="/perfil/asistencia" target="_blank" rel="noopener noreferrer" className="rounded-md text-accent underline">Abrir Mi asistencia</Link>
-                <button type="button" onClick={() => void permiso.recargar()} className="cursor-pointer rounded-md text-sm underline">Volver a verificar</button>
-              </div>}
-            </Aviso>
-          )}
           {cobrando ? (
             <PanelCobro
               total={total}

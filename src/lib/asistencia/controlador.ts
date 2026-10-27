@@ -4,6 +4,7 @@ import {
   type HorarioDia,
 } from './reglas'
 import type { DatosAsistencia, PersonaAsistencia, RegistroAsistencia } from './tipos'
+import { consultarHistorialAsistencia } from './consultar-historial'
 
 type Sesion = { user: { idUsuario: number } } | null
 type Base = PrismaClient | Prisma.TransactionClient
@@ -21,7 +22,7 @@ function responderError(error: unknown) {
   if (error instanceof ErrorAsistencia) return responder({ error: error.message }, error.estado)
   const codigo = error && typeof error === 'object' && 'code' in error ? error.code : null
   if (codigo === 'P2002' || codigo === 'P2034') return responder({ error: 'Los datos cambiaron o el turno ya se registró. Actualizá antes de intentar nuevamente.' }, 409)
-  if (codigo === 'P2021' || codigo === 'P2022') return responder({ error: 'La asistencia todavía no está habilitada en esta base. Falta aplicar su migración.' }, 503)
+  if (codigo === 'P2021' || codigo === 'P2022') return responder({ error: 'La asistencia no está disponible por un problema de configuración. Avisale al administrador.', codigo: 'ASISTENCIA_NO_CONFIGURADA' }, 503)
   return responder({ error: 'No se pudo completar la operación de asistencia. Intentá nuevamente.' }, 500)
 }
 
@@ -69,17 +70,23 @@ function marcaPublica(m: Marca): RegistroAsistencia {
   }
 }
 
-async function consultar(db: Base, actor: Persona, idUsuario: number, request: Request, ahora: Date): Promise<DatosAsistencia> {
+function puedeReanudarMarca(persona: Persona, marca: Marca | null, ahora: Date) {
+  if (!marca?.salida || marca.idUsuario !== persona.idUsuario || marca.idSucursal !== persona.idSucursal) return false
+  if (persona.rol.nombre !== 'admin' && (!persona.idSucursal || !persona.sucursal?.activa)) return false
+  return ahora >= marca.entradaPrevista && ahora < marca.salidaPrevista
+    && ahora >= marca.salida && ahora >= marca.entrada && +ahora - +marca.entrada < 86400000
+}
+
+async function consultar(db: Base, actor: Persona, idUsuario: number, request: Request, ahora: Date, exportacion = false): Promise<DatosAsistencia> {
   const destino = await buscarDestino(db, actor, idUsuario)
-  const { desde, hasta } = rangoAsistencia(new URL(request.url).searchParams, ahora)
+  const { desde, hasta, pagina: paginaSolicitada, todo, puntualidad, jornada } = rangoAsistencia(new URL(request.url).searchParams, ahora)
   const horario = await leerHorario(db, idUsuario)
   const programado = turnoProgramado(horario, ahora)
   // Un supervisor no ve marcas históricas hechas en otra sucursal tras un traslado.
   const alcance = actor.rol.nombre === 'supervisor' && actor.idUsuario !== idUsuario ? { idSucursal: actor.idSucursal } : {}
-  const registros = await db.asistenciaUsuario.findMany({
-    where: { idUsuario, ...alcance, fechaJornada: { gte: fechaParaBase(desde), lte: fechaParaBase(hasta) } },
-    orderBy: { fechaJornada: 'desc' }, take: 366,
-  })
+  const { registros, pagina, porPagina, totalRegistros, totalPaginas } = await consultarHistorialAsistencia(db, {
+    idUsuario, ...alcance, desde, hasta, pagina: paginaSolicitada, puntualidad, jornada,
+  }, exportacion)
   const abierto = await db.asistenciaUsuario.findFirst({ where: { idUsuario, ...alcance, salida: null } })
   const registroDelDia = await db.asistenciaUsuario.findFirst({ where: { idUsuario, ...alcance, fechaJornada: fechaParaBase(programado?.fechaJornada ?? fechaArgentina(ahora)) } })
   return {
@@ -87,7 +94,8 @@ async function consultar(db: Base, actor: Persona, idUsuario: number, request: R
     horario, versionHorario: JSON.stringify(horario), ahora: ahora.toISOString(), desde, hasta,
     programado: programado ? { ...programado, entradaPrevista: programado.entradaPrevista.toISOString(), salidaPrevista: programado.salidaPrevista.toISOString() } : null,
     abierto: abierto ? marcaPublica(abierto) : null, registroDelDia: registroDelDia ? marcaPublica(registroDelDia) : null,
-    registros: registros.map(marcaPublica),
+    puedeReanudarTurno: actor.idUsuario === idUsuario && !abierto && puedeReanudarMarca(destino, registroDelDia, ahora),
+    registros: registros.map(marcaPublica), pagina, porPagina, totalRegistros, totalPaginas, todo,
   }
 }
 
@@ -106,6 +114,10 @@ export function crearControladorAsistencia(db: PrismaClient, leerSesion: () => P
     consultar: (request: Request, id?: string) => proteger(request, false, async actor => {
       const datos = await db.$transaction(tx => consultar(tx, actor, id ? leerId(id) : actor.idUsuario, request, reloj()), { isolationLevel: 'RepeatableRead' })
       return responder(datos)
+    }),
+    exportar: (request: Request, id?: string) => proteger(request, false, async actor => {
+      const datos = await db.$transaction(tx => consultar(tx, actor, id ? leerId(id) : actor.idUsuario, request, reloj(), true), { isolationLevel: 'RepeatableRead' })
+      return responder({ usuario: datos.usuario, registros: datos.registros, desde: datos.desde, hasta: datos.hasta, generado: datos.ahora })
     }),
     listarPersonal: (request: Request) => proteger(request, false, async actor => {
       if (!['admin', 'supervisor'].includes(actor.rol.nombre)) throw new ErrorAsistencia(403, 'No tenés permiso para ver la asistencia del personal.')
@@ -135,15 +147,37 @@ export function crearControladorAsistencia(db: PrismaClient, leerSesion: () => P
       return responder({ mensaje: 'Horario guardado. Las asistencias anteriores conservan su horario original.' })
     }),
     marcar: (request: Request) => proteger(request, true, async actor => {
-      const datos = await leerObjeto(request, ['accion'])
-      if (datos.accion !== 'iniciar' && datos.accion !== 'finalizar') throw new ErrorAsistencia(400, 'Elegí iniciar o finalizar el turno.')
-      const ahora = reloj()
+      const datos = await leerObjeto(request, ['accion', 'idAsistencia', 'salidaRegistrada'])
+      if (typeof datos.accion !== 'string' || !['iniciar', 'finalizar', 'reanudar'].includes(datos.accion)) throw new ErrorAsistencia(400, 'Elegí iniciar, finalizar o reanudar el turno.')
+      if (datos.idAsistencia !== undefined && (typeof datos.idAsistencia !== 'number' || !idValido(datos.idAsistencia))) throw new ErrorAsistencia(400, 'Indicá un turno válido.')
+      const idAsistencia = datos.idAsistencia as number | undefined
+      if (datos.accion === 'iniciar' && idAsistencia !== undefined) throw new ErrorAsistencia(400, 'El inicio no recibe un turno previo.')
+      if (datos.accion === 'reanudar') {
+        if (idAsistencia === undefined || typeof datos.salidaRegistrada !== 'string' || datos.salidaRegistrada.length > 40 || !Number.isFinite(Date.parse(datos.salidaRegistrada))) {
+          throw new ErrorAsistencia(400, 'Actualizá la pantalla antes de reanudar el turno.')
+        }
+      } else if (datos.salidaRegistrada !== undefined) throw new ErrorAsistencia(400, 'La salida previa solo se usa al reanudar.')
       const registro = await db.$transaction(async tx => {
         const persona = await tx.usuario.findUnique({ where: { idUsuario: actor.idUsuario }, select: camposPersona })
         comprobarPersonal(persona)
         const abierto = await tx.asistenciaUsuario.findFirst({ where: { idUsuario: actor.idUsuario, salida: null } })
+        let ahora = reloj()
+        if (datos.accion === 'reanudar') {
+          if (abierto) throw new ErrorAsistencia(409, 'Ya tenés un turno abierto. Actualizá la pantalla.')
+          const cerrado = await tx.asistenciaUsuario.findFirst({ where: { idAsistencia: idAsistencia!, idUsuario: actor.idUsuario } })
+          ahora = reloj()
+          if (!puedeReanudarMarca(persona, cerrado, ahora)) throw new ErrorAsistencia(409, 'Solo podés reanudar tu turno dentro de su horario original y en la misma sucursal.')
+          if (!cerrado?.salida || cerrado.salida.toISOString() !== datos.salidaRegistrada) throw new ErrorAsistencia(409, 'El turno cambió desde que abriste la pantalla. Actualizá antes de reanudarlo.')
+          const reanudado = await tx.asistenciaUsuario.updateMany({
+            where: { idAsistencia: cerrado.idAsistencia, idUsuario: actor.idUsuario, salida: cerrado.salida },
+            data: { salida: null },
+          })
+          if (reanudado.count !== 1) throw new ErrorAsistencia(409, 'El turno ya cambió. Actualizá la pantalla.')
+          return { ...cerrado, salida: null }
+        }
         if (datos.accion === 'finalizar') {
           if (!abierto) throw new ErrorAsistencia(409, 'No tenés un turno abierto para finalizar.')
+          if (idAsistencia !== undefined && abierto.idAsistencia !== idAsistencia) throw new ErrorAsistencia(409, 'El turno cambió. Revisalo antes de confirmar su salida.')
           if (ahora < abierto.entrada) throw new ErrorAsistencia(409, 'La hora del servidor es anterior a la entrada registrada. Intentá nuevamente.')
           const cerrado = await tx.asistenciaUsuario.updateMany({ where: { idAsistencia: abierto.idAsistencia, idUsuario: actor.idUsuario, salida: null }, data: { salida: ahora } })
           if (cerrado.count !== 1) throw new ErrorAsistencia(409, 'El turno ya fue finalizado. Actualizá la pantalla.')
@@ -162,7 +196,7 @@ export function crearControladorAsistencia(db: PrismaClient, leerSesion: () => P
           toleranciaMinutos: plan.toleranciaMinutos, entrada: ahora,
         } })
       }, { isolationLevel: 'Serializable' })
-      return responder({ mensaje: datos.accion === 'iniciar' ? 'Entrada registrada.' : 'Salida registrada.', registro: marcaPublica(registro) }, datos.accion === 'iniciar' ? 201 : 200)
+      return responder({ mensaje: datos.accion === 'iniciar' ? 'Entrada registrada.' : datos.accion === 'reanudar' ? 'Turno reanudado. Se conservó la entrada original.' : 'Salida registrada.', registro: marcaPublica(registro) }, datos.accion === 'iniciar' ? 201 : 200)
     }),
   }
 }

@@ -13,6 +13,8 @@ import { useCerrarAlSalir } from '@/lib/utils/useCerrarAlSalir'
 
 interface SelectorRangoFechasProps {
   etiqueta: string
+  // Permite mostrar una invitación a elegir fechas cuando no hay un rango activo.
+  textoBoton?: string
   desde: string
   hasta: string
   // Último día que se puede elegir (ej. hoy).
@@ -44,7 +46,7 @@ const estiloCalendario = {
   '--rdp-day_button-width': '38px',
 } as CSSProperties
 
-export function SelectorRangoFechas({ etiqueta, desde, hasta, maximo, onCambiar }: SelectorRangoFechasProps) {
+export function SelectorRangoFechas({ etiqueta, textoBoton, desde, hasta, maximo, onCambiar }: SelectorRangoFechasProps) {
   const [abierto, setAbierto] = useState(false)
   // Lo marcado en el calendario. Con solo "desde" es un rango a medio elegir: se aplica
   // recién cuando se marca el otro extremo.
@@ -53,7 +55,7 @@ export function SelectorRangoFechas({ etiqueta, desde, hasta, maximo, onCambiar 
   const boton = useRef<HTMLButtonElement>(null)
   useCerrarAlSalir(abierto, setAbierto, contenedor, boton)
 
-  const texto = desde === hasta ? mostrar(desde) : `${mostrar(desde)} – ${mostrar(hasta)}`
+  const texto = textoBoton ?? (desde === hasta ? mostrar(desde) : `${mostrar(desde)} – ${mostrar(hasta)}`)
   const eligiendoHasta = marcado?.from !== undefined && marcado.to === undefined
 
   function abrir() {
@@ -90,7 +92,7 @@ export function SelectorRangoFechas({ etiqueta, desde, hasta, maximo, onCambiar 
       </button>
 
       {abierto && (
-        <div role="dialog" aria-label={etiqueta} className="absolute top-full left-0 z-40 mt-2 rounded-2xl bg-surface p-3 text-sm text-text shadow-xl">
+        <div role="dialog" aria-label={etiqueta} className="absolute top-full left-0 z-40 mt-2 w-max rounded-2xl bg-surface p-3 text-sm text-text shadow-xl">
           <DayPicker
             mode="range"
             locale={es}

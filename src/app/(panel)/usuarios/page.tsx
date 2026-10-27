@@ -1,4 +1,4 @@
-﻿// src/app/(panel)/usuarios/page.tsx
+// src/app/(panel)/usuarios/page.tsx
 // Usuarios activos y archivados en la misma pantalla: la URL elige la vista
 // (/usuarios o /usuarios/archivados, que reutiliza este componente). Los archivados son
 // los mismos usuarios en otro estado, por eso comparten tabla, búsqueda y filtros.
@@ -8,9 +8,10 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  ArrowUpDown, Copy, KeyRound, Pencil, Plus, Power, RotateCcw, Search, ShieldCheck, Store, Trash2, X,
+  ArrowUpDown, Copy, KeyRound, LockKeyhole, Pencil, Plus, Power, RotateCcw, Search, ShieldCheck, Store, Trash2, X,
 } from '@/components/icons'
 import { Desplegable } from '@/components/ui/Desplegable'
+import { BotonVerHistorial } from '@/components/asistencia/BotonVerHistorial'
 import { ExportarImportar } from '@/components/ui/ExportarImportar'
 import { hoyEnArgentina } from '@/lib/reportes/fechas'
 import { etiquetaRol, rolSinSucursal } from '@/lib/usuarios/roles'
@@ -592,7 +593,7 @@ export default function UsuariosPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="mx-auto w-full max-w-xs text-center">
-                        <Link href={`/usuarios/asistencia/${u.idUsuario}`} className="block truncate rounded-md font-medium hover:text-accent hover:underline" title="Ver horario e historial de asistencia">{u.nombre} {u.apellido}</Link>
+                        <p className="truncate font-medium">{u.nombre} {u.apellido}</p>
                         <p className="truncate text-xs text-muted">{u.email}</p>
                       </div>
                     </td>
@@ -617,7 +618,8 @@ export default function UsuariosPage() {
                     </td>
                     {esAdmin && vista === 'archivados' && (
                       <td className="px-4 py-3">
-                        <div className="flex justify-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <BotonVerHistorial idUsuario={u.idUsuario} nombre={`${u.nombre} ${u.apellido}`} />
                           <button
                             type="button"
                             onClick={() => reactivarUsuario(u)}
@@ -632,7 +634,8 @@ export default function UsuariosPage() {
                     )}
                     {esAdmin && vista === 'activos' && (
                       <td className="px-4 py-3">
-                        <div className="flex justify-center gap-1">
+                        <div className="flex items-center justify-center gap-1">
+                          <BotonVerHistorial idUsuario={u.idUsuario} nombre={`${u.nombre} ${u.apellido}`} />
                           <button
                             type="button"
                             onClick={() => abrirEditar(u)}
@@ -642,16 +645,16 @@ export default function UsuariosPage() {
                           >
                             <Pencil className="size-4" />
                           </button>
-                          {/* La propia contraseña se cambia desde el flujo normal, no desde acá. */}
-                          {u.idUsuario !== idUsuarioSesion && (
-                            <button
-                              type="button"
-                              onClick={() => setConfirmarRestablecer(u)}
-                              aria-label={`Restablecer contraseña de ${u.nombre} ${u.apellido}`}
-                              title="Restablecer contraseña"
-                              className={`${claseBotonIcono} text-muted hover:bg-bg hover:text-text`}
-                            >
-                              <KeyRound className="size-4" />
+                          {u.idUsuario === idUsuarioSesion ? (
+                            <Link href="/acceso/cambiar-contrasena" aria-label="Cambiar mi contraseña" title="Cambiar mi contraseña"
+                              className={`${claseBotonIcono} text-muted hover:bg-bg hover:text-text`}>
+                              <LockKeyhole className="size-4" aria-hidden="true" />
+                            </Link>
+                          ) : (
+                            <button type="button" onClick={() => setConfirmarRestablecer(u)}
+                              aria-label={`Restablecer contraseña de ${u.nombre} ${u.apellido}`} title="Restablecer contraseña"
+                              className={`${claseBotonIcono} text-muted hover:bg-bg hover:text-text`}>
+                              <KeyRound className="size-4" aria-hidden="true" />
                             </button>
                           )}
                           <button

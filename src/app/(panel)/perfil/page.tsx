@@ -77,6 +77,7 @@ export default async function PerfilPage() {
           </Dato>
         </div>
       </section>
+      <Link href="/acceso/cambiar-contrasena" className="self-start rounded-full border border-border bg-surface px-5 py-2.5 text-sm hover:bg-surface-muted">Cambiar mi contraseña</Link>
       <Link href="/perfil/asistencia" className="self-start rounded-full border border-border bg-surface px-5 py-2.5 text-sm hover:bg-surface-muted">Ver mi horario e historial de asistencia</Link>
     </main>
   )

@@ -3,51 +3,130 @@
 import { useId, useState, type FormEvent } from 'react'
 import { Aviso } from '@/components/ui/Aviso'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 import { DIAS_ASISTENCIA, validarHorario, type HorarioDia } from '@/lib/asistencia/reglas'
-import { EVENTO_ASISTENCIA, pedirAsistencia } from './useAsistencia'
+import { notificarCambioAsistencia, pedirAsistencia } from './useAsistencia'
+import { useCambiosSinGuardar } from '@/lib/utils/useCambiosSinGuardar'
 
 type DiaFormulario = HorarioDia & { habilitado: boolean }
+type Borrador = { dias: DiaFormulario[]; version: string }
 
-export function EditorHorario({ idUsuario, horario, versionHorario, onCerrar, onGuardado }: {
-  idUsuario: number; horario: HorarioDia[]; versionHorario: string; onCerrar: () => void; onGuardado: () => void
-}) {
-  const id = useId()
-  const [versionInicial] = useState(versionHorario)
-  const [dias, setDias] = useState<DiaFormulario[]>(() => [1, 2, 3, 4, 5, 6, 0].map(diaSemana => ({
+const HORA_VALIDA = /^([01]\d|2[0-3]):[0-5]\d$/
+function normalizarHora(valor: string) {
+  const hora = valor.trim()
+  const partes = /^(\d{1,2}):(\d{1,2})$/.exec(hora)
+  if (partes) return `${partes[1].padStart(2, '0')}:${partes[2].padStart(2, '0')}`
+  if (/^\d{1,2}$/.test(hora)) return `${hora.padStart(2, '0')}:00`
+  if (/^\d{3,4}$/.test(hora)) return `${hora.slice(0, -2).padStart(2, '0')}:${hora.slice(-2)}`
+  return hora
+}
+
+function diasFormulario(horario: HorarioDia[]): DiaFormulario[] {
+  return [1, 2, 3, 4, 5, 6, 0].map(diaSemana => ({
     diaSemana, entrada: '09:00', salida: '17:00', toleranciaMinutos: 10,
     ...horario.find(h => h.diaSemana === diaSemana), habilitado: horario.some(h => h.diaSemana === diaSemana),
-  })))
+  }))
+}
+
+export function EditorHorario({ idUsuario, horario, versionHorario, onGuardado }: {
+  idUsuario: number; horario: HorarioDia[]; versionHorario: string; onGuardado: () => void
+}) {
+  const id = useId()
+  const [borrador, setBorrador] = useState<Borrador | null>(null)
   const [ocupado, setOcupado] = useState(false)
   const [error, setError] = useState('')
-  function cambiar(diaSemana: number, cambios: Partial<DiaFormulario>) { setDias(previos => previos.map(d => d.diaSemana === diaSemana ? { ...d, ...cambios } : d)) }
+  const [mensaje, setMensaje] = useState('')
+  const [mostrarErrores, setMostrarErrores] = useState(false)
+  const dias = borrador?.dias ?? diasFormulario(horario)
+  const cambioExterno = borrador !== null && borrador.version !== versionHorario
+  const hayCambios = borrador !== null && JSON.stringify(borrador.dias) !== JSON.stringify(diasFormulario(horario))
+
+  useCambiosSinGuardar(hayCambios)
+
+  function cambiar(diaSemana: number, cambios: Partial<DiaFormulario>) {
+    setMensaje(''); setError('')
+    setBorrador(previo => ({
+      version: previo?.version ?? versionHorario,
+      dias: (previo?.dias ?? diasFormulario(horario)).map(d => d.diaSemana === diaSemana ? { ...d, ...cambios } : d),
+    }))
+  }
+  function descartar() {
+    setBorrador(null); setError(''); setMensaje(''); setMostrarErrores(false); onGuardado()
+  }
   async function guardar(evento: FormEvent) {
     evento.preventDefault()
-    if (ocupado) return
-    setError('')
-    const horario = dias.filter(d => d.habilitado).map(({ diaSemana, entrada, salida, toleranciaMinutos }) => ({ diaSemana, entrada, salida, toleranciaMinutos }))
-    try { validarHorario(horario) } catch (error) { setError(error instanceof Error ? error.message : 'Revisá los horarios.'); return }
-    setOcupado(true)
+    if (ocupado || !hayCambios || cambioExterno) return
+    setError(''); setMensaje(''); setMostrarErrores(true)
+    let horarioNuevo: HorarioDia[]
     try {
-      await pedirAsistencia(`/api/asistencia/usuarios/${idUsuario}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ horario, versionHorario: versionInicial }) })
-      window.dispatchEvent(new Event(EVENTO_ASISTENCIA)); onGuardado(); onCerrar()
-    } catch (error) { setError(error instanceof Error ? error.message : 'No se pudo guardar el horario.') }
-    finally { setOcupado(false) }
+      horarioNuevo = validarHorario(dias.filter(d => d.habilitado).map(({ diaSemana, entrada, salida, toleranciaMinutos }) => ({ diaSemana, entrada: normalizarHora(entrada), salida: normalizarHora(salida), toleranciaMinutos })))
+    } catch (error) { setError(error instanceof Error ? error.message : 'Revisá los horarios.'); return }
+    setOcupado(true)
+    const control = new AbortController()
+    const espera = setTimeout(() => control.abort(), 15000)
+    try {
+      await pedirAsistencia(`/api/asistencia/usuarios/${idUsuario}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, signal: control.signal,
+        body: JSON.stringify({ horario: horarioNuevo, versionHorario: borrador!.version }),
+      }, { accion: 'guardar el horario' })
+      setBorrador(null); setMostrarErrores(false); setMensaje('Horario guardado.')
+      notificarCambioAsistencia(); onGuardado()
+    } catch (error) {
+      setError(control.signal.aborted ? 'Se agotó el tiempo de espera. No pudimos confirmar el guardado. Actualizá la ficha para comprobar si se guardó antes de reintentar.' : error instanceof Error ? error.message : 'No se pudo guardar el horario.')
+      if (control.signal.aborted) onGuardado()
+    } finally { clearTimeout(espera); setOcupado(false) }
   }
-  const clase = 'min-w-0 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm disabled:opacity-50'
+  const claseCampo = 'w-full min-w-0 text-center text-sm tabular-nums disabled:opacity-50'
   return (
-    <form onSubmit={guardar} className="flex flex-col gap-4 rounded-2xl border border-border p-4" aria-label="Editar horario semanal">
-      <p className="text-sm text-muted">Marcá los días de trabajo. Si la salida es anterior a la entrada, el turno termina al día siguiente. Sin días seleccionados, queda sin horario asignado.</p>
-      {dias.map(d => (
-        <fieldset key={d.diaSemana} disabled={ocupado} className="grid min-w-0 gap-3 rounded-2xl bg-bg p-3 sm:grid-cols-[8rem_1fr_1fr_1fr] sm:items-end">
-          <legend className="sr-only">{DIAS_ASISTENCIA[d.diaSemana]}</legend>
-          <label className="flex items-center gap-2 py-2 text-sm font-medium"><input type="checkbox" checked={d.habilitado} onChange={e => cambiar(d.diaSemana, { habilitado: e.target.checked })} className="size-4 accent-accent" />{DIAS_ASISTENCIA[d.diaSemana]}</label>
-          <div><label htmlFor={`${id}-${d.diaSemana}-entrada`} className="text-xs text-muted">Entrada</label><input id={`${id}-${d.diaSemana}-entrada`} aria-label={`Entrada ${DIAS_ASISTENCIA[d.diaSemana]}`} type="time" step="60" required disabled={!d.habilitado} value={d.entrada} onChange={e => cambiar(d.diaSemana, { entrada: e.target.value })} className={clase} /></div>
-          <div><label htmlFor={`${id}-${d.diaSemana}-salida`} className="text-xs text-muted">Salida</label><input id={`${id}-${d.diaSemana}-salida`} aria-label={`Salida ${DIAS_ASISTENCIA[d.diaSemana]}`} type="time" step="60" required disabled={!d.habilitado} value={d.salida} onChange={e => cambiar(d.diaSemana, { salida: e.target.value })} className={clase} /></div>
-          <div><label htmlFor={`${id}-${d.diaSemana}-tolerancia`} className="text-xs text-muted">Tolerancia (min)</label><input id={`${id}-${d.diaSemana}-tolerancia`} aria-label={`Tolerancia ${DIAS_ASISTENCIA[d.diaSemana]}`} type="number" min="0" max="120" step="1" required disabled={!d.habilitado} value={Number.isNaN(d.toleranciaMinutos) ? '' : d.toleranciaMinutos} onChange={e => cambiar(d.diaSemana, { toleranciaMinutos: e.target.value === '' ? NaN : Number(e.target.value) })} className={clase} /></div>
-        </fieldset>
-      ))}
+    <form noValidate onSubmit={guardar} className="flex min-w-0 flex-col gap-4" aria-label="Editar horario semanal">
+      <p className="text-sm text-muted">Elegí los días y horarios de trabajo.</p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-xl table-fixed text-center text-sm">
+          <caption className="sr-only">Editar los días y horarios de trabajo asignados</caption>
+          <thead><tr className="text-xs text-muted">
+            {['Día laboral', 'Entrada', 'Salida', 'Tolerancia (min)'].map((t, i) => (
+              <th key={t} scope="col" className="w-1/4 px-2 py-3 text-center font-medium">
+                {i === 0 ? <span className="mx-auto block w-full max-w-48 text-center">{t}</span> : t}
+              </th>
+            ))}
+          </tr></thead>
+          <tbody>{dias.map(d => (
+            <tr key={d.diaSemana} className="border-t border-bg transition-colors hover:bg-bg/60">
+              <th scope="row" className="px-2 py-3 font-medium">
+                <label className="relative mx-auto flex w-full max-w-48 cursor-pointer items-center justify-center text-center">
+                  <input type="checkbox" aria-label={`Trabaja ${DIAS_ASISTENCIA[d.diaSemana]}`} checked={d.habilitado} disabled={ocupado}
+                    onChange={e => cambiar(d.diaSemana, { habilitado: e.target.checked })} className="absolute top-1/2 left-0 size-4 -translate-y-1/2 accent-accent" />
+                  <span>{DIAS_ASISTENCIA[d.diaSemana]}</span>
+                </label>
+              </th>
+              <td className="px-2 py-3"><div className="relative mx-auto w-full max-w-48 [&_label]:sr-only">
+                <Input id={`${id}-${d.diaSemana}-entrada`} label={`Entrada ${DIAS_ASISTENCIA[d.diaSemana]}`} type="text" inputMode="numeric" placeholder="HH:mm" maxLength={5} autoComplete="off" spellCheck={false} required disabled={ocupado || !d.habilitado}
+                  value={d.entrada} onChange={e => cambiar(d.diaSemana, { entrada: e.target.value })}
+                  onBlur={e => { const hora = normalizarHora(e.target.value); if (hora !== d.entrada) cambiar(d.diaSemana, { entrada: hora }) }}
+                  error={d.habilitado && mostrarErrores && !HORA_VALIDA.test(normalizarHora(d.entrada)) ? 'Usá una hora entre 00:00 y 23:59.' : undefined} className={claseCampo} />
+              </div></td>
+              <td className="px-2 py-3"><div className="relative mx-auto w-full max-w-48 [&_label]:sr-only">
+                <Input id={`${id}-${d.diaSemana}-salida`} label={`Salida ${DIAS_ASISTENCIA[d.diaSemana]}`} type="text" inputMode="numeric" placeholder="HH:mm" maxLength={5} autoComplete="off" spellCheck={false} required disabled={ocupado || !d.habilitado}
+                  value={d.salida} onChange={e => cambiar(d.diaSemana, { salida: e.target.value })}
+                  onBlur={e => { const hora = normalizarHora(e.target.value); if (hora !== d.salida) cambiar(d.diaSemana, { salida: hora }) }}
+                  error={d.habilitado && mostrarErrores && !HORA_VALIDA.test(normalizarHora(d.salida)) ? 'Usá una hora entre 00:00 y 23:59.' : undefined} className={claseCampo} />
+              </div>{d.habilitado && HORA_VALIDA.test(normalizarHora(d.entrada)) && HORA_VALIDA.test(normalizarHora(d.salida)) && normalizarHora(d.salida) < normalizarHora(d.entrada) && <p className="mt-1 text-xs text-muted">Día siguiente</p>}</td>
+              <td className="px-2 py-3"><div className="relative mx-auto w-full max-w-48 [&_label]:sr-only">
+                <Input id={`${id}-${d.diaSemana}-tolerancia`} label={`Tolerancia ${DIAS_ASISTENCIA[d.diaSemana]}`} type="number" min="0" max="120" step="1" required disabled={ocupado || !d.habilitado}
+                  value={Number.isNaN(d.toleranciaMinutos) ? '' : d.toleranciaMinutos}
+                  onChange={e => cambiar(d.diaSemana, { toleranciaMinutos: e.target.value === '' ? NaN : Number(e.target.value) })} className={claseCampo} />
+              </div></td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      {cambioExterno && <Aviso tipo="advertencia">El horario se actualizó mientras editabas. Descartá tus cambios para cargar la versión más reciente.</Aviso>}
       {error && <Aviso tipo="error">{error}</Aviso>}
-      <div className="flex flex-wrap gap-3"><Button type="submit" variant="acento" disabled={ocupado} className="w-auto! rounded-full!">{ocupado ? 'Guardando…' : 'Guardar horario'}</Button><Button type="button" variant="secundario" disabled={ocupado} onClick={onCerrar} className="w-auto! rounded-full!">Cancelar</Button></div>
+      {mensaje && <Aviso tipo="exito">{mensaje}</Aviso>}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {borrador !== null && <Button type="button" variant="secundario" disabled={ocupado} onClick={descartar} className="w-auto! rounded-full!">Descartar cambios</Button>}
+        <Button type="submit" variant="acento" disabled={ocupado || !hayCambios || cambioExterno} className="w-auto! rounded-full!">{ocupado ? 'Guardando…' : 'Guardar horario'}</Button>
+      </div>
     </form>
   )
 }

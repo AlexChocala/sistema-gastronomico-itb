@@ -2,17 +2,22 @@
 
 import { useEffect, useState } from 'react'
 import type { DatosAsistencia } from '@/lib/asistencia/tipos'
+import { solicitarJson, type OpcionesSolicitud } from '@/lib/utils/solicitud-json'
 
 export const EVENTO_ASISTENCIA = 'asistencia-actualizada'
-
-export async function pedirAsistencia<T>(url: string, init?: RequestInit): Promise<T> {
-  const respuesta = await fetch(url, { cache: 'no-store', ...init })
-  const datos = await respuesta.json().catch(() => null)
-  if (!respuesta.ok || !datos) throw new Error(datos?.error ?? 'No se pudo consultar la asistencia. Revisá tu conexión.')
-  return datos as T
+export const CLAVE_CAMBIO_ASISTENCIA = 'mise-asistencia-actualizada'
+export function notificarCambioAsistencia() {
+  window.dispatchEvent(new Event(EVENTO_ASISTENCIA))
+  try { localStorage.setItem(CLAVE_CAMBIO_ASISTENCIA, `${Date.now()}-${Math.random()}`) } catch { /* El refresco periódico cubre navegadores sin almacenamiento. */ }
 }
 
-export function useAsistencia(url: string) {
+export function pedirAsistencia<T>(url: string, init?: RequestInit, opciones?: OpcionesSolicitud): Promise<T> {
+  return solicitarJson<T>(url, init, { accion: 'consultar la asistencia', ...opciones })
+}
+
+// Al paginar la misma ficha, conserva el turno y el horario mientras llega la consulta.
+// Nunca reutiliza datos al cambiar de usuario o de endpoint.
+export function useAsistencia(url: string, conservarDatos = false) {
   const [estado, setEstado] = useState<{ url: string; datos: DatosAsistencia | null; error: string | null } | null>(null)
   const [intento, setIntento] = useState(0)
   useEffect(() => {
@@ -26,7 +31,7 @@ export function useAsistencia(url: string) {
         const datos = await pedirAsistencia<DatosAsistencia>(url, { signal: abortar.signal })
         if (vigente) setEstado({ url, datos, error: null })
       } catch (error) {
-        if (vigente) setEstado(previo => ({ url, datos: previo?.url === url ? previo.datos : null, error: error instanceof Error ? error.message : 'No se pudo consultar la asistencia.' }))
+        if (vigente) setEstado(previo => ({ url, datos: previo && (previo.url === url || (conservarDatos && previo.url.split('?')[0] === url.split('?')[0])) ? previo.datos : null, error: error instanceof Error ? error.message : 'No se pudo consultar la asistencia.' }))
       } finally { consultando = false }
     }
     void consultar()
@@ -41,7 +46,8 @@ export function useAsistencia(url: string) {
       window.removeEventListener(EVENTO_ASISTENCIA, actualizar)
       document.removeEventListener('visibilitychange', actualizar)
     }
-  }, [url, intento])
+  }, [url, intento, conservarDatos])
   const actual = estado?.url === url ? estado : null
-  return { datos: actual?.datos ?? null, error: actual?.error ?? null, cargando: !actual, recargar: () => setIntento(n => n + 1) }
+  const anteriores = conservarDatos && estado?.url.split('?')[0] === url.split('?')[0] ? estado.datos : null
+  return { datos: actual?.datos ?? anteriores, error: actual?.error ?? null, cargando: !actual, recargar: () => setIntento(n => n + 1) }
 }

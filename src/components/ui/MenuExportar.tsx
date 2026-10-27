@@ -5,9 +5,10 @@
 // Mientras se arma un archivo la opción muestra "Generando…"; si falla, queda en "Reintentar"
 // con el menú abierto. Se maneja con teclado: flechas, Inicio/Fin y Escape.
 
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ChevronDown, Download } from '@/components/icons'
-import { MENSAJES } from '@/lib/utils/mensajes'
+import { mensajeErrorSolicitud } from '@/lib/utils/solicitud-json'
+import { Aviso } from './Aviso'
 import { useCerrarAlSalir } from '@/lib/utils/useCerrarAlSalir'
 import type { GrupoExportar, OpcionExportar } from '@/lib/utils/exportar'
 
@@ -25,10 +26,17 @@ export function MenuExportar({ grupos, deshabilitado = false, tamano = 'chico' }
   const [abierto, setAbierto] = useState(false)
   // Clave "grupo-opción" → estado; las que no están, están listas.
   const [estados, setEstados] = useState<Record<string, EstadoOpcion>>({})
+  const [errores, setErrores] = useState<Record<string, string>>({})
   const contenedor = useRef<HTMLDivElement>(null)
   const boton = useRef<HTMLButtonElement>(null)
   const menu = useRef<HTMLDivElement>(null)
   useCerrarAlSalir(abierto, setAbierto, contenedor, boton)
+
+  useEffect(() => {
+    if (Object.keys(errores).length) {
+      menu.current?.querySelector<HTMLElement>('[role="alert"]')?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [errores])
 
   const generando = Object.values(estados).includes('generando')
 
@@ -44,6 +52,7 @@ export function MenuExportar({ grupos, deshabilitado = false, tamano = 'chico' }
 
   async function elegir(clave: string, opcion: OpcionExportar) {
     setEstados((actuales) => ({ ...actuales, [clave]: 'generando' }))
+    setErrores({})
     try {
       await opcion.generar()
       setEstados((actuales) => {
@@ -53,8 +62,9 @@ export function MenuExportar({ grupos, deshabilitado = false, tamano = 'chico' }
       })
       setAbierto(false)
       boton.current?.focus()
-    } catch {
+    } catch (error) {
       setEstados((actuales) => ({ ...actuales, [clave]: 'error' }))
+      setErrores({ [clave]: mensajeErrorSolicitud(error, 'No pudimos generar el archivo. Intentá nuevamente. Si sigue ocurriendo, avisale al administrador.') })
     }
   }
 
@@ -100,7 +110,7 @@ export function MenuExportar({ grupos, deshabilitado = false, tamano = 'chico' }
           role="menu"
           aria-label="Exportar"
           onKeyDown={moverFoco}
-          className="absolute top-full right-0 z-40 mt-2 flex w-64 flex-col gap-1 rounded-2xl border border-border bg-surface p-2 text-sm text-text shadow-xl"
+          className="absolute top-full right-0 z-40 mt-2 flex max-h-96 w-64 flex-col gap-1 overflow-y-auto rounded-2xl border border-border bg-surface p-2 text-sm text-text shadow-xl"
         >
           {grupos.map((grupo, indiceGrupo) => (
             <div key={grupo.titulo} role="group" aria-labelledby={`grupo-exportar-${indiceGrupo}`}
@@ -112,17 +122,19 @@ export function MenuExportar({ grupos, deshabilitado = false, tamano = 'chico' }
                 const clave = `${indiceGrupo}-${indiceOpcion}`
                 const estado = estados[clave]
                 return (
+                  <div key={opcion.texto}>
                   <button
-                    key={opcion.texto}
                     type="button"
                     role="menuitem"
                     onClick={() => void elegir(clave, opcion)}
                     disabled={estado === 'generando'}
-                    title={estado === 'error' ? MENSAJES.panel.errorGenerico : undefined}
+                    title={estado === 'error' ? errores[clave] : undefined}
                     className={`w-full cursor-pointer rounded-xl px-3 py-2 text-left font-medium transition-colors hover:bg-bg focus-visible:bg-bg focus-visible:outline-none disabled:cursor-wait ${estado === 'error' ? 'text-danger' : ''}`}
                   >
                     {estado === 'generando' ? 'Generando…' : estado === 'error' ? `Reintentar ${opcion.texto}` : opcion.texto}
                   </button>
+                  {errores[clave] && <Aviso tipo="error" className="mt-1 px-3! py-2!">{errores[clave]}</Aviso>}
+                  </div>
                 )
               })}
             </div>
