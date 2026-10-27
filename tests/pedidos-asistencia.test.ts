@@ -20,13 +20,13 @@ test('permiso de jornada: requiere marca abierta propia de la sucursal y rechaza
   assert.equal(turnoHabilitaPedidos(marca('2026-10-22'), 1, ahora), false)
 })
 
-test('turnos nocturnos siguen habilitados después de medianoche; permiten compensar minutos sin servir indefinidamente', () => {
+test('turnos nocturnos funcionan después de medianoche, pero se apagan exactamente al terminar el horario', () => {
   const turno = marca('2026-10-23', '19:00', '02:00')
   assert.equal(turnoHabilitaPedidos(turno, 1, instanteArgentina('2026-10-24', '01:00')), true)
-  assert.equal(turnoHabilitaPedidos(turno, 1, instanteArgentina('2026-10-24', '02:30')), true)
+  assert.equal(turnoHabilitaPedidos(turno, 1, instanteArgentina('2026-10-24', '02:30')), false)
   assert.equal(turnoHabilitaPedidos(turno, 1, instanteArgentina('2026-10-24', '19:00')), false)
   assert.equal(turnoHabilitaPedidos(turno, 1, instanteArgentina('2026-10-25', '01:00')), false)
-  assert.equal(turnoHabilitaPedidos(marca(), 1, instanteArgentina('2026-10-23', '18:00')), true)
+  assert.equal(turnoHabilitaPedidos(marca(), 1, instanteArgentina('2026-10-23', '18:00')), false)
 })
 
 function escenario() {
@@ -34,7 +34,7 @@ function escenario() {
   const estado = {
     rol: 'empleado', activo: true, cambiarContrasena: false, sucursal: 1, sesion: true,
     dentro: false, cerrarAlGuardar: false, rolAlGuardar: '', sucursalAlGuardar: 0,
-    clientes: 0, pedidos: 0, bloqueos: 0, lecturas: 0, falloAsistencia: false,
+    clientes: 0, pedidos: 0, cambios: 0, bloqueos: 0, lecturas: 0, falloAsistencia: false, avanzarAlBloquear: false, avanzarAlCalcular: false,
     marcas: [] as (TurnoParaPedidos & { idUsuario: number })[],
   }
   const fila = {
@@ -55,14 +55,20 @@ function escenario() {
       assert.equal(estado.dentro, true); assert.match(sql.join('?'), /FOR SHARE/)
       assert.match(sql.join('?'), /"salida" IS NULL/); assert.deepEqual(valores, [2, 1]); estado.bloqueos++
       if (estado.falloAsistencia) throw { code: 'P2021' }
+      if (estado.avanzarAlBloquear) momento = instanteArgentina('2026-10-23', '17:01')
       const turno = seleccionar(Number(valores[0]), Number(valores[1])); return turno ? [turno] : []
     },
     sucursal: { findUnique: async () => ({ idSucursal: 1, activa: true, ofreceRetiro: true, ofreceDelivery: true, localidadesDelivery: [], slug: 'avellaneda' }) },
     negocio: { findUnique: async () => null },
-    producto: { findMany: async () => [{ idProducto: 1, nombre: 'Hamburguesa', precio: 1000, activo: true, categoria: { activa: true }, sucursales: [{ disponible: true }], variaciones: [], extras: [] }] },
+    producto: { findMany: async () => { if (estado.avanzarAlCalcular) momento = instanteArgentina('2026-10-23', '17:01'); return [{ idProducto: 1, nombre: 'Hamburguesa', precio: 1000, activo: true, categoria: { activa: true }, sucursales: [{ disponible: true }], variaciones: [], extras: [] }] } },
     tipoEntrega: { findUnique: async () => ({ idTipoEntrega: 1 }) },
     cliente: { create: async () => { estado.clientes++; return { idCliente: 1 } } },
-    pedido: { create: async ({ data }: { data: { idUsuario: number | null } }) => { estado.pedidos++; return { ...fila, idUsuario: data.idUsuario } } },
+    pedido: {
+      create: async ({ data }: { data: { idUsuario: number | null } }) => { estado.pedidos++; return { ...fila, idUsuario: data.idUsuario } },
+      findFirst: async () => structuredClone(fila),
+      updateMany: async ({ data }: { data: Partial<typeof fila> }) => { estado.cambios++; Object.assign(fila, data); return { count: 1 } },
+      findUniqueOrThrow: async () => structuredClone(fila),
+    },
     $transaction: async <T>(accion: (tx: PrismaClient) => Promise<T>) => {
       estado.dentro = true
       if (estado.cerrarAlGuardar) estado.marcas.forEach(m => { m.salida = momento })
@@ -122,10 +128,11 @@ test('rol y sucursal se vuelven a verificar en la transacción; un rol del token
   assert.equal(e.estado.pedidos, 0)
 })
 
-test('supervisor conserva su permiso y admin, sin sesión e inactivo siguen bloqueados', async () => {
+test('supervisor también requiere asistencia y admin, sin sesión e inactivo siguen bloqueados', async () => {
   const e = escenario(); e.estado.rol = 'supervisor'
-  assert.equal((await e.controlador.crearCaja(request())).status, 201)
-  assert.equal(e.estado.bloqueos, 0)
+  assert.equal((await e.controlador.crearCaja(request())).status, 403)
+  e.abrir(); assert.equal((await e.controlador.crearCaja(request())).status, 201)
+  assert.equal(e.estado.bloqueos, 2)
   e.estado.rol = 'admin'; assert.equal((await e.controlador.crearCaja(request())).status, 403)
   e.estado.rol = 'empleado'; e.estado.activo = false; assert.equal((await e.controlador.crearCaja(request())).status, 403)
   e.estado.sesion = false; assert.equal((await e.controlador.crearCaja(request())).status, 401)
@@ -150,4 +157,53 @@ test('la carta online sigue permitiendo pedidos de clientes sin consultar asiste
   const respuesta = await controlador.crear(request({ ...cuerpo, slugSucursal: 'avellaneda', cliente: { nombre: 'Juan', telefono: '1123456789' } }))
   assert.equal(respuesta.status, 201)
   assert.equal(e.estado.lecturas, 0); assert.equal(e.estado.bloqueos, 0); assert.equal(e.estado.pedidos, 1)
+})
+
+
+test('límites del horario: antes de entrada y desde la salida no se puede operar, aunque se haya fichado temprano', () => {
+  const turno = { ...marca(), entrada: instanteArgentina('2026-10-23', '08:50') }
+  assert.equal(turnoHabilitaPedidos(turno, 1, new Date(+turno.entradaPrevista - 1)), false)
+  assert.equal(turnoHabilitaPedidos(turno, 1, turno.entradaPrevista), true)
+  assert.equal(turnoHabilitaPedidos(turno, 1, new Date(+turno.salidaPrevista - 1)), true)
+  assert.equal(turnoHabilitaPedidos(turno, 1, turno.salidaPrevista), false)
+})
+
+for (const rol of ['empleado', 'supervisor']) {
+  test(`${rol}: permiso, creación y cambios de estado exigen turno abierto dentro del horario`, async () => {
+    const e = escenario(); e.estado.rol = rol
+    const accion = () => e.controlador.actualizar(request({ accion: 'marcarEnPreparacion' }, 'PATCH'), '50')
+    assert.equal((await accion()).status, 403); assert.equal(e.estado.cambios, 0)
+    e.abrir()
+    const permiso = await (await e.controlador.permisoCaja(request(undefined, 'GET'))).json()
+    assert.equal(permiso.habilitado, true); assert.equal(permiso.requiereAsistencia, true)
+    assert.equal(permiso.habilitadoHasta, instanteArgentina('2026-10-23', '17:00').toISOString())
+    assert.equal((await accion()).status, 200); assert.equal(e.estado.cambios, 1)
+    e.mover(instanteArgentina('2026-10-23', '17:00').toISOString())
+    const vencido = await (await e.controlador.permisoCaja(request(undefined, 'GET'))).json()
+    assert.equal(vencido.habilitado, false); assert.equal(vencido.habilitadoHasta, null)
+    const cerrado = await accion(); assert.equal(cerrado.status, 403)
+    assert.equal((await cerrado.json()).codigo, CODIGO_ASISTENCIA_REQUERIDA)
+    assert.equal((await e.controlador.crearCaja(request())).status, 403)
+    assert.equal(e.estado.cambios, 1); assert.equal(e.estado.clientes, 0); assert.equal(e.estado.pedidos, 0)
+  })
+}
+
+test('cerrar el turno o cambiar de sucursal bloquea acciones de Cocina y Entregas por API', async () => {
+  for (const caso of ['cerrada', 'otra-sucursal', 'otro-usuario']) {
+    const e = escenario(); e.abrir()
+    if (caso === 'cerrada') e.estado.marcas[0].salida = instanteArgentina('2026-10-23', '09:30')
+    if (caso === 'otra-sucursal') e.estado.marcas[0].idSucursal = 3
+    if (caso === 'otro-usuario') e.estado.marcas[0].idUsuario = 3
+    assert.equal((await e.controlador.actualizar(request({ accion: 'marcarListo' }, 'PATCH'), '50')).status, 403)
+    assert.equal(e.estado.cambios, 0)
+  }
+})
+
+test('la hora se comprueba después de esperar el bloqueo y antes de escribir datos', async () => {
+  const bloqueo = escenario(); bloqueo.abrir(); bloqueo.estado.avanzarAlBloquear = true
+  assert.equal((await bloqueo.controlador.crearCaja(request())).status, 403)
+  assert.equal(bloqueo.estado.clientes, 0); assert.equal(bloqueo.estado.pedidos, 0)
+  const calculo = escenario(); calculo.abrir(); calculo.estado.avanzarAlCalcular = true
+  assert.equal((await calculo.controlador.crearCaja(request())).status, 403)
+  assert.equal(calculo.estado.clientes, 0); assert.equal(calculo.estado.pedidos, 0)
 })

@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LogoMise } from '@/components/acceso/ElementosAcceso'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
+import { EnlacePantalla } from '@/components/asistencia/EnlacePantalla'
+import { usePermisoPantallas } from '@/lib/pedidos/pedidos-pantallas'
 import {
   ChartColumn, ChefHat, ChevronDown, ClipboardList, ExternalLink, LayoutDashboard, Layers, List,
   Monitor, MonitorPlay, Package, PackageCheck, Settings, Store, Tags, Users, Wallet,
@@ -96,6 +98,7 @@ const trazoIcono = 1.75
 export function PanelSidebar({ rol, nombreNegocio }: { rol: string; nombreNegocio: string }) {
   const rutaActual = usePathname()
   const { sucursal } = useSucursalActiva()
+  const permiso = usePermisoPantallas(rol === 'empleado' || rol === 'supervisor')
   const seccionesVisibles = secciones.filter((seccion) => esVisible(seccion.roles, rol))
   // Grupos con subenlaces que el usuario abrió o cerró con la flecha. Si no lo tocó, el
   // grupo está abierto mientras estás dentro de su sección.
@@ -184,11 +187,11 @@ export function PanelSidebar({ rol, nombreNegocio }: { rol: string; nombreNegoci
                   {pantallas.map((pantalla) => {
                     const Icono = pantalla.icono
                     return (
-                      <a key={pantalla.href} href={hrefPantalla(pantalla.href)} target="_blank" rel="noopener noreferrer" className={claseSubItem + ' text-muted hover:bg-surface-muted/60 hover:text-text'}>
+                      <EnlacePantalla key={pantalla.href} href={hrefPantalla(pantalla.href)} habilitado={permiso.puedeRegistrar} motivo={permiso.mensaje} className={claseSubItem + ' text-muted hover:bg-surface-muted/60 hover:text-text'}>
                         <Icono strokeWidth={trazoIcono} className={claseIcono} />
                         {pantalla.texto}
                         <ExternalLink size={14} strokeWidth={trazoIcono} className="ml-auto opacity-60" />
-                      </a>
+                      </EnlacePantalla>
                     )
                   })}
                 </div>

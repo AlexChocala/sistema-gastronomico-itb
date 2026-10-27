@@ -3,6 +3,17 @@ export const ZONA_ASISTENCIA = 'America/Argentina/Buenos_Aires'
 export const DIAS_ASISTENCIA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const MINUTO = 60000
 const DIA = 86400000
+export const REGISTROS_POR_PAGINA_ASISTENCIA = 30
+export type FiltroPuntualidadAsistencia = 'puntual' | 'tarde'
+export type FiltroJornadaAsistencia = 'en_curso' | 'completo' | 'salida_anticipada' | 'incompleto'
+export const OPCIONES_PUNTUALIDAD_ASISTENCIA: { valor: FiltroPuntualidadAsistencia | 'todas'; texto: string }[] = [
+  { valor: 'todas', texto: 'Todas las llegadas' }, { valor: 'puntual', texto: 'Puntual' }, { valor: 'tarde', texto: 'Llegada tarde' },
+]
+export const OPCIONES_JORNADA_ASISTENCIA: { valor: FiltroJornadaAsistencia | 'todas'; texto: string }[] = [
+  { valor: 'todas', texto: 'Todas las jornadas' }, { valor: 'en_curso', texto: 'Turno abierto' },
+  { valor: 'completo', texto: 'Jornada completa' }, { valor: 'salida_anticipada', texto: 'Salida anticipada' },
+  { valor: 'incompleto', texto: 'Horas incompletas' },
+]
 
 export class ErrorAsistencia extends Error {
   constructor(public estado: number, mensaje: string) { super(mensaje) }
@@ -99,13 +110,29 @@ export function resultadoTurno(turno: MarcaTurno) {
 }
 
 export function rangoAsistencia(parametros: URLSearchParams, ahora: Date) {
-  if ([...parametros.keys()].some(k => !['desde', 'hasta'].includes(k) || parametros.getAll(k).length !== 1)) throw new ErrorAsistencia(400, 'Los filtros de asistencia no son válidos.')
-  const valida = (fecha: string) => /^\d{4}-\d{2}-\d{2}$/.test(fecha) && Number.isFinite(Date.parse(fecha + 'T00:00:00Z')) && fechaParaBase(fecha).toISOString().slice(0, 10) === fecha
+  if ([...parametros.keys()].some(k => !['desde', 'hasta', 'todo', 'pagina', 'puntualidad', 'jornada'].includes(k) || parametros.getAll(k).length !== 1)) throw new ErrorAsistencia(400, 'Los filtros de asistencia no son válidos.')
+  const leerEstado = <T extends string>(nombre: string, opciones: { valor: T; texto: string }[]): Exclude<T, 'todas'> | null => {
+    const valor = parametros.get(nombre)
+    if (valor === null) return null
+    const opcion = opciones.find(o => o.valor === valor && o.valor !== 'todas')
+    if (!opcion) throw new ErrorAsistencia(400, `El filtro ${nombre} no es válido.`)
+    return opcion.valor as Exclude<T, 'todas'>
+  }
+  const estados = { puntualidad: leerEstado('puntualidad', OPCIONES_PUNTUALIDAD_ASISTENCIA), jornada: leerEstado('jornada', OPCIONES_JORNADA_ASISTENCIA) }
+  const paginaTexto = parametros.get('pagina') ?? '1'
+  const pagina = Number(paginaTexto)
+  if (!/^[1-9]\d*$/.test(paginaTexto) || !Number.isSafeInteger(pagina)) throw new ErrorAsistencia(400, 'Indicá una página válida.')
+  const todo = parametros.get('todo') === '1' || (!parametros.has('todo') && !parametros.has('desde') && !parametros.has('hasta'))
+  if ((parametros.has('todo') && !todo) || (todo && (parametros.has('desde') || parametros.has('hasta')))) {
+    throw new ErrorAsistencia(400, 'Elegí todo el historial o un rango de fechas.')
+  }
+  const valida = (fecha: string) => /^\d{4}-\d{2}-\d{2}$/.test(fecha) && fecha >= '0001-01-01' && Number.isFinite(Date.parse(fecha + 'T00:00:00Z')) && fechaParaBase(fecha).toISOString().slice(0, 10) === fecha
   const hasta = parametros.get('hasta') ?? fechaArgentina(ahora)
   if (!valida(hasta)) throw new ErrorAsistencia(400, 'La fecha Hasta no es válida.')
+  if (todo || (!parametros.has('desde') && !parametros.has('hasta'))) return { desde: null, hasta, pagina, todo, ...estados }
   const desde = parametros.get('desde') ?? sumarDias(hasta, -29)
-  if (!valida(desde) || !valida(hasta) || desde > hasta || (fechaParaBase(hasta).getTime() - fechaParaBase(desde).getTime()) / DIA > 365) {
-    throw new ErrorAsistencia(400, 'Elegí un rango de fechas válido de hasta 366 días.')
+  if (!valida(desde) || desde > hasta) {
+    throw new ErrorAsistencia(400, 'Elegí un rango de fechas válido: Desde debe ser anterior o igual a Hasta.')
   }
-  return { desde, hasta }
+  return { desde, hasta, pagina, todo, ...estados }
 }

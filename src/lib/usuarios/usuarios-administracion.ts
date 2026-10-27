@@ -317,11 +317,12 @@ export function crearControladorUsuarios(db: PrismaClient, leerSesion: () => Pro
       return responder({ mensaje: 'Usuario activado.', usuario })
     }),
 
-    // Restablecer la contraseña de otro usuario: solo admin.
+    // Restablecer otras cuentas: exclusivamente administradores. El cambio propio
+    // siempre debe verificar la contraseña actual, incluso si se llama a esta API.
     restablecerContrasena: (request: Request, id: string) => proteger(request, ['admin'], true, async (idUsuarioSesion) => {
       const idUsuario = leerId(id)
       if (idUsuario === idUsuarioSesion) {
-        throw new ErrorUsuario(400, 'No podés restablecer tu propia contraseña. Usá la opción de cambiar contraseña.')
+        throw new ErrorUsuario(400, 'Para cambiar tu propia contraseña, ingresá la actual desde tu perfil.')
       }
       const passwordGenerada = generarPasswordAleatoria()
       const passwordHash = await bcrypt.hash(passwordGenerada, 10)

@@ -6,20 +6,37 @@
 // del menú, con el mismo estilo que los links del sidebar.
 
 import { signOut } from 'next-auth/react'
+import { useState } from 'react'
+import { Aviso } from '@/components/ui/Aviso'
 import { LogOut } from '@/components/icons'
+import { confirmarSalidaConCambios, cancelarSalidaConCambios } from '@/lib/utils/salida-con-cambios'
 
 // `className` permite usarlo fuera del sidebar (ej: pantalla de configuración inicial).
 export function CerrarSesionButton({
   className = 'nav-item cursor-pointer text-left text-muted hover:bg-surface-muted hover:text-danger',
 }: { className?: string }) {
+  const [error, setError] = useState('')
+  const [ocupado, setOcupado] = useState(false)
   return (
+    <>
     <button
       type="button"
-      onClick={() => signOut({ callbackUrl: '/acceso/login' })}
+      onClick={async () => {
+        if (ocupado || !confirmarSalidaConCambios()) return
+        setError(''); setOcupado(true)
+        try { await signOut({ callbackUrl: '/acceso/login' }) }
+        catch {
+          cancelarSalidaConCambios()
+          setError('No pudimos confirmar el cierre de sesión. Revisá tu conexión e intentá nuevamente.')
+        } finally { setOcupado(false) }
+      }}
+      disabled={ocupado}
       className={className}
     >
       <LogOut strokeWidth={1.75} className="size-(--sidebar-icono) shrink-0" />
       Cerrar sesión
     </button>
+    {error && <Aviso tipo="error" onCerrar={() => setError('')}>{error}</Aviso>}
+    </>
   )
 }

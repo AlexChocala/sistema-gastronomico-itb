@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PermisoRegistroPedidos } from '@/lib/asistencia/permiso-pedidos'
+import { CLAVE_CAMBIO_ASISTENCIA, EVENTO_ASISTENCIA } from '@/components/asistencia/useAsistencia'
 import {
   aplicarAccion, deshacerA, puedeIrACocina,
   type AccionEstado, type EstadoPago, type EstadoPedido, type ItemPedidoPantalla, type MetodoPago,
@@ -69,7 +70,7 @@ function mensajeDe(error: unknown) {
 
 // ---- Consulta periódica ----
 
-type Resultado<T> = { clave: string; datos: T | null; error: string | null }
+type Resultado<T> = { clave: string; datos: T | null; error: string | null; duracionConsulta: number }
 
 // Pide `url` al montar y cada INTERVALO_ACTUALIZACION_MS, con la pestaña visible. `clave`
 // identifica qué se está mirando (la sucursal): si cambia, lo anterior deja de valer.
@@ -85,12 +86,13 @@ function useConsultaPeriodica<T>(url: string | null, clave: string) {
     const miGeneracion = generacion.current
     enCurso.current = true
     try {
+      const inicio = performance.now()
       const datos = await pedirJson<T>(url)
-      if (miGeneracion === generacion.current) setResultado({ clave, datos, error: null })
+      if (miGeneracion === generacion.current) setResultado({ clave, datos, error: null, duracionConsulta: performance.now() - inicio })
     } catch (error) {
       if (miGeneracion === generacion.current) {
         // Si falla, se sigue mostrando lo último que llegó, con el aviso.
-        setResultado((previo) => ({ clave, datos: previo?.clave === clave ? previo.datos : null, error: mensajeDe(error) }))
+        setResultado((previo) => ({ clave, datos: previo?.clave === clave ? previo.datos : null, error: mensajeDe(error), duracionConsulta: previo?.duracionConsulta ?? 0 }))
       }
     } finally {
       if (miGeneracion === generacion.current) enCurso.current = false
@@ -146,6 +148,7 @@ function useConsultaPeriodica<T>(url: string | null, clave: string) {
   const vigente = url !== null && resultado?.clave === clave ? resultado : null
   return {
     datos: vigente?.datos ?? null,
+    duracionConsulta: vigente?.duracionConsulta ?? 0,
     // Solo la primera carga: las actualizaciones periódicas no vuelven a "cargando".
     cargando: url !== null && vigente?.datos == null && vigente?.error == null,
     error: vigente?.error ?? null,
@@ -157,15 +160,37 @@ function useConsultaPeriodica<T>(url: string | null, clave: string) {
 
 // Se actualiza cada 5 s y al volver de Mi asistencia. Un fallo de conexión bloquea
 // el cobro aunque antes hubiera permiso; POST siempre decide en el servidor.
-export function usePermisoRegistroPedidos() {
-  const consulta = useConsultaPeriodica<PermisoRegistroPedidos>('/api/pedidos/caja', 'permiso-caja')
+export function usePermisoPantallas(activo = true) {
+  const consulta = useConsultaPeriodica<PermisoRegistroPedidos>(activo ? '/api/pedidos/caja' : null, 'permiso-pantallas')
+  const [vencido, setVencido] = useState<PermisoRegistroPedidos | null>(null)
+  const { datos, invalidar, recargar, duracionConsulta } = consulta
+  const tiempoDisponible = datos?.habilitadoHasta ? Date.parse(datos.habilitadoHasta) - Date.parse(datos.ahora) - duracionConsulta : 0
+  useEffect(() => {
+    if (!activo) return
+    const actualizar = () => { setVencido(datos); invalidar(); void recargar() }
+    const entrePestanas = (evento: StorageEvent) => { if (evento.key === CLAVE_CAMBIO_ASISTENCIA) actualizar() }
+    window.addEventListener(EVENTO_ASISTENCIA, actualizar)
+    window.addEventListener('storage', entrePestanas)
+    return () => { window.removeEventListener(EVENTO_ASISTENCIA, actualizar); window.removeEventListener('storage', entrePestanas) }
+  }, [activo, datos, invalidar, recargar])
+  useEffect(() => {
+    if (!datos?.habilitado || !datos.habilitadoHasta) return
+    // Duración basada en la hora del servidor: cambiar la hora de la PC no concede acceso.
+    // Se descuenta el viaje de la consulta para que una respuesta tardía no prolongue el acceso.
+    const restante = tiempoDisponible
+    const temporizador = setTimeout(() => { setVencido(datos); invalidar(); void recargar() }, Number.isFinite(restante) ? Math.max(0, restante) : 0)
+    return () => clearTimeout(temporizador)
+  }, [datos, invalidar, recargar, tiempoDisponible])
   return {
-    puedeRegistrar: !consulta.cargando && !consulta.error && consulta.datos?.habilitado === true,
+    puedeRegistrar: activo && !consulta.cargando && !consulta.error && datos?.habilitado === true
+      && tiempoDisponible > 0 && vencido !== datos,
     cargando: consulta.cargando,
-    mensaje: consulta.error ?? consulta.datos?.mensaje ?? null,
-    recargar: consulta.recargar,
+    mensaje: consulta.error ?? (vencido === datos && datos?.habilitado ? 'Verificando tu turno…' : datos?.mensaje ?? null),
+    recargar,
   }
 }
+
+export function usePermisoRegistroPedidos() { return usePermisoPantallas() }
 
 // ---- Pantallas del personal ----
 

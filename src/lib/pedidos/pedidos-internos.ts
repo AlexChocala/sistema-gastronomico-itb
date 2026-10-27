@@ -112,13 +112,12 @@ function mismoOrigen(request: Request) {
 
 const conflicto = () => new ErrorPedido(409, MENSAJE_CONFLICTO_ESTADO)
 
-async function permisoParaCrearPedido(tx: Prisma.TransactionClient, idUsuario: number, idSucursal: number, ahora: Date, bloquear: boolean): Promise<PermisoRegistroPedidos> {
+async function permisoParaCrearPedido(tx: Prisma.TransactionClient, idUsuario: number, idSucursal: number, reloj: () => Date, bloquear: boolean): Promise<PermisoRegistroPedidos> {
   // Se vuelve a leer dentro de la transacción: el rol y sucursal pudieron cambiar.
   const usuario = await tx.usuario.findUnique({ where: { idUsuario }, select: { activo: true, debeCambiarContrasena: true, idSucursal: true, rol: { select: { nombre: true } } } })
   if (!usuario?.activo || usuario.debeCambiarContrasena) throw new ErrorPedido(403, 'Tu usuario no está habilitado para registrar pedidos.')
   if (!['empleado', 'supervisor'].includes(usuario.rol.nombre)) throw new ErrorPedido(403, 'El administrador puede ver los pedidos, pero no cargarlos ni cambiarlos.')
   if (usuario.idSucursal !== idSucursal) throw new ErrorPedido(403, 'Tu sucursal asignada cambió. Actualizá la pantalla antes de registrar pedidos.')
-  if (usuario.rol.nombre !== 'empleado') return { habilitado: true, requiereAsistencia: false, mensaje: null }
   // El bloqueo compartido impide cerrar la marca mientras se guarda este pedido.
   // La consulta usa parámetros; no recibe identidad ni horas del navegador.
   const turno = bloquear
@@ -129,8 +128,18 @@ async function permisoParaCrearPedido(tx: Prisma.TransactionClient, idUsuario: n
         FOR SHARE
       `)[0]
     : await tx.asistenciaUsuario.findFirst({ where: { idUsuario, idSucursal, salida: null }, select: { idSucursal: true, fechaJornada: true, entradaPrevista: true, salidaPrevista: true, entrada: true, salida: true } })
+  const ahora = reloj()
   const habilitado = turnoHabilitaPedidos(turno, idSucursal, ahora)
-  return { habilitado, requiereAsistencia: true, mensaje: habilitado ? null : MENSAJE_ASISTENCIA_REQUERIDA }
+  const mensaje = habilitado ? null : turno && ahora >= turno.salidaPrevista
+    ? 'Tu horario laboral finalizó. Las pantallas se habilitan en tu próximo turno.'
+    : turno && ahora < turno.entradaPrevista ? 'Tu horario laboral todavía no comenzó.' : MENSAJE_ASISTENCIA_REQUERIDA
+  return { habilitado, requiereAsistencia: true, mensaje, ahora: ahora.toISOString(), habilitadoHasta: habilitado && turno ? turno.salidaPrevista.toISOString() : null }
+}
+
+function exigirPermisoVigente(permiso: PermisoRegistroPedidos, ahora: Date) {
+  if (!permiso.habilitado || !permiso.habilitadoHasta || ahora >= new Date(permiso.habilitadoHasta)) {
+    throw new ErrorPedido(403, permiso.mensaje ?? 'Tu horario laboral finalizó. No se guardó la operación.', { codigo: CODIGO_ASISTENCIA_REQUERIDA })
+  }
 }
 
 // `sucursalDe` resuelve la sucursal activa de la sesión (en la app, obtenerSucursalActiva):
@@ -172,7 +181,7 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
 
   return {
     permisoCaja: (request: Request) => proteger(request, true, async ({ idUsuario, idSucursal }) => {
-      const permiso = await db.$transaction(tx => permisoParaCrearPedido(tx, idUsuario, idSucursal, reloj(), false))
+      const permiso = await db.$transaction(tx => permisoParaCrearPedido(tx, idUsuario, idSucursal, reloj, false))
       return responder(permiso)
     }),
     cotizarDelivery: (request: Request) => proteger(request, true, async ({ idSucursal }) => {
@@ -216,8 +225,8 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
         ? await prepararCoberturaDelivery(db, { idSucursal }, pedido.direccion, pedido.idLocalidad, pedido.ubicacion)
         : null
       const creado = await db.$transaction(async (tx) => {
-        const permiso = await permisoParaCrearPedido(tx, idUsuario, idSucursal, reloj(), true)
-        if (!permiso.habilitado) throw new ErrorPedido(403, permiso.mensaje!, { codigo: CODIGO_ASISTENCIA_REQUERIDA })
+        const permiso = await permisoParaCrearPedido(tx, idUsuario, idSucursal, reloj, true)
+        exigirPermisoVigente(permiso, reloj())
         const sucursal = await tx.sucursal.findUnique({
           where: { idSucursal },
           select: camposCobertura,
@@ -232,6 +241,7 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
         const { lineas, total: subtotal } = await calcularLineas(tx, idSucursal, pedido.items)
         const total = Math.round((subtotal + recargoDelivery) * 100) / 100
         const idTipoEntrega = await buscarTipoEntrega(tx, pedido.tipoEntrega)
+        exigirPermisoVigente(permiso, reloj())
         const cliente = await tx.cliente.create({
           data: { nombre: pedido.cliente.nombre, telefono: pedido.cliente.telefono },
           select: { idCliente: true },
@@ -261,7 +271,7 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
       return responder({ pedido: aPantalla(creado) }, 201)
     }),
 
-    actualizar: (request: Request, id: string) => proteger(request, true, async ({ idSucursal }) => {
+    actualizar: (request: Request, id: string) => proteger(request, true, async ({ idUsuario, idSucursal }) => {
       const idPedido = leerId(id)
       const accion = validarAccionPedido(await leerCuerpo(request))
       const cobertura = accion.accion === 'cambiarTipoEntrega' && accion.tipoEntrega === 'delivery'
@@ -269,6 +279,8 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
         : null
 
       const actualizado = await db.$transaction(async (tx) => {
+        const permiso = await permisoParaCrearPedido(tx, idUsuario, idSucursal, reloj, true)
+        exigirPermisoVigente(permiso, reloj())
         const fila = await tx.pedido.findFirst({ where: { idPedido, idSucursal }, select: camposPedido })
         if (!fila) throw new ErrorPedido(404, 'No encontramos ese pedido en esta sucursal.')
         const actual = aPantalla(fila)
@@ -306,6 +318,7 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
 
         // Update condicional: solo si el pedido sigue exactamente como se leyó. Si otra
         // pantalla lo cambió en el medio, no toca nada (count 0) y se responde 409.
+        exigirPermisoVigente(permiso, reloj())
         const { count } = await tx.pedido.updateMany({
           where: {
             idPedido, idSucursal,

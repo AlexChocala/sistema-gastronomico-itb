@@ -1,42 +1,26 @@
-// Pantalla de cambio de contraseña forzado en el primer login (debeCambiarContrasena=true).
-// No hay un endpoint API para esto en la lista de archivos a crear: usamos una Server
-// Action definida acá mismo, el mecanismo nativo de Next.js para mutaciones sin tener
-// que armar un route.ts aparte.
-
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
-import bcrypt from 'bcrypt'
 import { authOptions } from '@/lib/auth/auth'
 import { prisma } from '@/lib/db/prisma'
 import { CambiarContrasenaForm } from '@/components/forms/CambiarContrasenaForm'
+import { cambiarContrasenaPropia, type DatosCambioContrasena } from '@/lib/auth/cambiar-contrasena'
 
 export default async function CambiarContrasenaPage() {
   const sesion = await getServerSession(authOptions)
+  if (!sesion) redirect('/acceso/login')
+  const usuario = await prisma.usuario.findUnique({
+    where: { idUsuario: sesion.user.idUsuario },
+    select: { activo: true, debeCambiarContrasena: true },
+  })
+  if (!usuario?.activo) redirect('/acceso/login')
 
-  if (!sesion) {
-    redirect('/acceso/login')
-  }
-
-  async function actualizarContrasena(password: string) {
+  async function actualizarContrasena(datos: DatosCambioContrasena) {
     'use server'
 
-    // Volvemos a leer la sesión adentro de la Server Action: no confiamos en ningún
-    // dato que venga del cliente para decidir qué usuario se actualiza.
+    // También el cambio forzado verifica la contraseña temporal con la que ingresó.
     const sesionActual = await getServerSession(authOptions)
-    if (!sesionActual) {
-      throw new Error('No hay sesión activa')
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10)
-
-    await prisma.usuario.update({
-      where: { idUsuario: sesionActual.user.idUsuario },
-      data: {
-        passwordHash,
-        debeCambiarContrasena: false,
-      },
-    })
+    return cambiarContrasenaPropia(prisma, sesionActual, datos)
   }
 
-  return <CambiarContrasenaForm accion={actualizarContrasena} />
+  return <CambiarContrasenaForm accion={actualizarContrasena} cambioObligatorio={usuario.debeCambiarContrasena} />
 }
