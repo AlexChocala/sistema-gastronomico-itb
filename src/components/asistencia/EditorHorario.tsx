@@ -4,6 +4,7 @@ import { useId, useState, type FormEvent } from 'react'
 import { Aviso } from '@/components/ui/Aviso'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { CampoHora } from './CampoHora'
 import { DIAS_ASISTENCIA, validarHorario, type HorarioDia } from '@/lib/asistencia/reglas'
 import { notificarCambioAsistencia, pedirAsistencia } from './useAsistencia'
 import { useCambiosSinGuardar } from '@/lib/utils/useCambiosSinGuardar'
@@ -79,7 +80,7 @@ export function EditorHorario({ idUsuario, horario, versionHorario, onGuardado }
   const claseCampo = 'w-full min-w-0 text-center text-sm tabular-nums disabled:opacity-50'
   return (
     <form noValidate onSubmit={guardar} className="flex min-w-0 flex-col gap-4" aria-label="Editar horario semanal">
-      <p className="text-sm text-muted">Elegí los días y horarios de trabajo.</p>
+      <p className="text-sm text-muted">Escribí el horario o usá la rueda sobre las horas y los minutos.</p>
       <div className="overflow-x-auto">
         <table className="w-full min-w-xl table-fixed text-center text-sm">
           <caption className="sr-only">Editar los días y horarios de trabajo asignados</caption>
@@ -99,18 +100,16 @@ export function EditorHorario({ idUsuario, horario, versionHorario, onGuardado }
                   <span>{DIAS_ASISTENCIA[d.diaSemana]}</span>
                 </label>
               </th>
-              <td className="px-2 py-3"><div className="relative mx-auto w-full max-w-48 [&_label]:sr-only">
-                <Input id={`${id}-${d.diaSemana}-entrada`} label={`Entrada ${DIAS_ASISTENCIA[d.diaSemana]}`} type="text" inputMode="numeric" placeholder="HH:mm" maxLength={5} autoComplete="off" spellCheck={false} required disabled={ocupado || !d.habilitado}
-                  value={d.entrada} onChange={e => cambiar(d.diaSemana, { entrada: e.target.value })}
+              <td className="px-2 py-3">
+                <CampoHora id={`${id}-${d.diaSemana}-entrada`} label={`Entrada ${DIAS_ASISTENCIA[d.diaSemana]}`} inputMode="numeric" placeholder="HH:mm" maxLength={5} autoComplete="off" spellCheck={false} required disabled={ocupado || !d.habilitado}
+                  value={d.entrada} onCambiar={valor => cambiar(d.diaSemana, { entrada: valor })}
                   onBlur={e => { const hora = normalizarHora(e.target.value); if (hora !== d.entrada) cambiar(d.diaSemana, { entrada: hora }) }}
-                  error={d.habilitado && mostrarErrores && !HORA_VALIDA.test(normalizarHora(d.entrada)) ? 'Usá una hora entre 00:00 y 23:59.' : undefined} className={claseCampo} />
-              </div></td>
-              <td className="px-2 py-3"><div className="relative mx-auto w-full max-w-48 [&_label]:sr-only">
-                <Input id={`${id}-${d.diaSemana}-salida`} label={`Salida ${DIAS_ASISTENCIA[d.diaSemana]}`} type="text" inputMode="numeric" placeholder="HH:mm" maxLength={5} autoComplete="off" spellCheck={false} required disabled={ocupado || !d.habilitado}
-                  value={d.salida} onChange={e => cambiar(d.diaSemana, { salida: e.target.value })}
+                  error={d.habilitado && mostrarErrores && !HORA_VALIDA.test(normalizarHora(d.entrada)) ? 'Usá una hora entre 00:00 y 23:59.' : undefined} className={claseCampo} /></td>
+              <td className="px-2 py-3">
+                <CampoHora id={`${id}-${d.diaSemana}-salida`} label={`Salida ${DIAS_ASISTENCIA[d.diaSemana]}`} inputMode="numeric" placeholder="HH:mm" maxLength={5} autoComplete="off" spellCheck={false} required disabled={ocupado || !d.habilitado}
+                  value={d.salida} onCambiar={valor => cambiar(d.diaSemana, { salida: valor })}
                   onBlur={e => { const hora = normalizarHora(e.target.value); if (hora !== d.salida) cambiar(d.diaSemana, { salida: hora }) }}
-                  error={d.habilitado && mostrarErrores && !HORA_VALIDA.test(normalizarHora(d.salida)) ? 'Usá una hora entre 00:00 y 23:59.' : undefined} className={claseCampo} />
-              </div>{d.habilitado && HORA_VALIDA.test(normalizarHora(d.entrada)) && HORA_VALIDA.test(normalizarHora(d.salida)) && normalizarHora(d.salida) < normalizarHora(d.entrada) && <p className="mt-1 text-xs text-muted">Día siguiente</p>}</td>
+                  error={d.habilitado && mostrarErrores && !HORA_VALIDA.test(normalizarHora(d.salida)) ? 'Usá una hora entre 00:00 y 23:59.' : undefined} className={claseCampo} />{d.habilitado && HORA_VALIDA.test(normalizarHora(d.entrada)) && HORA_VALIDA.test(normalizarHora(d.salida)) && normalizarHora(d.salida) < normalizarHora(d.entrada) && <p className="mt-1 text-xs text-muted">Día siguiente</p>}</td>
               <td className="px-2 py-3"><div className="relative mx-auto w-full max-w-48 [&_label]:sr-only">
                 <Input id={`${id}-${d.diaSemana}-tolerancia`} label={`Tolerancia ${DIAS_ASISTENCIA[d.diaSemana]}`} type="number" min="0" max="120" step="1" required disabled={ocupado || !d.habilitado}
                   value={Number.isNaN(d.toleranciaMinutos) ? '' : d.toleranciaMinutos}

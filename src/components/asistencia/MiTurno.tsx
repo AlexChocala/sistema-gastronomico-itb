@@ -119,13 +119,10 @@ export function ControlTurno({ datos, onActualizar, mostrarHistorial = true, com
           <Clock className="mt-1 size-5 shrink-0 text-accent" aria-hidden="true" />
           <div>
             <h2 className="font-semibold">Mi turno</h2>
-            {!puedeIniciar && <p className="text-sm text-muted">
-              {datos.abierto ? `En curso · Entrada ${horaAsistencia(datos.abierto.entrada)} del ${fechaAsistencia(datos.abierto.fechaJornada)}`
-                : datos.registroDelDia ? 'Turno finalizado para esta jornada.'
-                  : datos.horario.length === 0 ? 'Necesitás un horario asignado para iniciar.' : 'No tenés un turno disponible para iniciar hoy.'}
-            </p>}
-            {referencia && <p className="mt-1 text-sm">Horario asignado: {horaAsistencia(referencia.entradaPrevista)} a {horaAsistencia(referencia.salidaPrevista)}{fechaArgentina(new Date(referencia.salidaPrevista)) !== fechaArgentina(new Date(referencia.entradaPrevista)) ? ' (+1 día)' : ''}</p>}
-            {registro && <p className="mt-1 text-xs text-muted">{registro.puntualidad === 'puntual' ? 'Entrada puntual' : `Llegada tarde (${registro.minutosTarde} min)`}{registro.salida ? ` · ${registro.cumplimiento === 'completo' ? 'Jornada completa' : registro.salidaAnticipada ? 'Salida anticipada' : 'Jornada incompleta'}` : ''}</p>}
+            <p className="mt-1 text-sm text-muted">
+              {referencia ? <>Entrada: {horaAsistencia(referencia.entradaPrevista)} · Salida: {horaAsistencia(referencia.salidaPrevista)}{fechaArgentina(new Date(referencia.salidaPrevista)) !== fechaArgentina(new Date(referencia.entradaPrevista)) ? ' (día siguiente)' : ''}</>
+                : datos.horario.length === 0 ? 'Sin horario asignado.' : 'Sin turno asignado para hoy.'}
+            </p>
           </div>
         </div>
         <div className={compacto ? 'flex flex-col gap-3' : 'flex flex-wrap items-center gap-3'}>
