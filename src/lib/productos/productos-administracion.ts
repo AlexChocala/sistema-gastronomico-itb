@@ -7,6 +7,7 @@ import {
   ErrorProducto, idValido, leerId, leerCuerpo, validarProducto, type VariacionProducto,
 } from './productos-validacion'
 import { validarCategoria } from './categorias-validacion'
+import { triggerHistorialActivo } from './historial-precios'
 import { validarExtra } from './extras-validacion'
 import { ErrorImagen, subirImagen, quitarImagen, urlImagenPublica } from '@/lib/storage/imagenes'
 
@@ -399,6 +400,36 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
       return responder({ producto: conImagenUrl(producto) })
     }),
 
+    historialPrecios: (request: Request, id: string) => proteger(request, false, async () => {
+      const idProducto = leerId(id)
+      const parametros = new URL(request.url).searchParams
+      if ([...parametros.keys()].some(k => k !== 'pagina') || parametros.getAll('pagina').length > 1) {
+        throw new ErrorProducto(400, 'Los parámetros del historial no son válidos.')
+      }
+      const textoPagina = parametros.get('pagina') ?? '1'
+      const paginaSolicitada = Number(textoPagina)
+      if (!/^[1-9]\d*$/.test(textoPagina) || !Number.isSafeInteger(paginaSolicitada)) {
+        throw new ErrorProducto(400, 'La página debe ser un número entero positivo.')
+      }
+      const resultado = await db.$transaction(async tx => {
+        const producto = await tx.producto.findUnique({
+          where: { idProducto }, select: { idProducto: true, nombre: true, precio: true, activo: true },
+        })
+        if (!producto) throw new ErrorProducto(404, 'Producto no encontrado.')
+        const where = { idProducto }
+        const totalRegistros = await tx.historialPrecioProducto.count({ where })
+        const porPagina = 30
+        const totalPaginas = Math.max(1, Math.ceil(totalRegistros / porPagina))
+        const pagina = Math.min(paginaSolicitada, totalPaginas)
+        const registros = await tx.historialPrecioProducto.findMany({
+          where, select: { idHistorial: true, precioAnterior: true, precioNuevo: true, fechaCambio: true },
+          orderBy: [{ fechaCambio: 'desc' }, { idHistorial: 'desc' }], take: porPagina, skip: (pagina - 1) * porPagina,
+        })
+        return { producto, registros: registros.map(r => ({ ...r, fechaCambio: r.fechaCambio.toISOString() })), pagina, porPagina, totalRegistros, totalPaginas }
+      }, { isolationLevel: 'RepeatableRead' })
+      return responder(resultado)
+    }),
+
     crear: (request: Request) => proteger(request, true, async () => {
       const datos = validarProducto(await leerCuerpo(request), false)
       const producto = await db.$transaction(async (tx) => {
@@ -446,12 +477,15 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
         }
         await nombreDisponible(tx, datos.nombre ?? actual.nombre, idCategoriaFinal, idProducto)
         const { idSucursales, idExtras, variaciones, ...cambiosProducto } = datos
-        // El nuevo precio y su historial se guardan juntos; los pedidos previos conservan sus importes.
+        // El trigger activo ya inserta el cambio. No duplicar ese registro desde Prisma.
+        // En bases sin el trigger se mantiene el historial manual, dentro de la transacción.
+        const cambiaPrecio = datos.precio !== undefined && datos.precio !== actual.precio
+        const historialAutomatico = cambiaPrecio && await triggerHistorialActivo(tx)
         await tx.producto.update({
           where: { idProducto },
           data: {
             ...cambiosProducto,
-            ...(datos.precio !== undefined && datos.precio !== actual.precio ? {
+            ...(datos.precio !== undefined && datos.precio !== actual.precio && !historialAutomatico ? {
               historialPrecios: { create: { precioAnterior: actual.precio, precioNuevo: datos.precio } },
             } : {}),
           },
