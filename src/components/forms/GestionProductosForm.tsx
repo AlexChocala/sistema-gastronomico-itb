@@ -3,10 +3,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import Link from 'next/link'
 import {
-  ChevronLeft, ChevronRight, Package, Pencil, Plus, Power, Search, Store, X,
+  ChevronLeft, ChevronRight, Clock, Package, Pencil, Plus, Power, Search, Store, X,
 } from '@/components/icons'
 import { IconoCategoria } from '@/components/icons/IconoCategoria'
 import { CampoVariaciones } from '@/components/productos/CampoVariaciones'
+import { HistorialPreciosProducto } from '@/components/productos/HistorialPreciosProducto'
+import { Button } from '@/components/ui/Button'
 import { CrearCategoriaRapida } from '@/components/productos/CrearCategoriaRapida'
 import { CampoFotoProducto } from '@/components/productos/CampoFotoProducto'
 import { CrearExtraRapido } from '@/components/productos/CrearExtraRapido'
@@ -123,6 +125,7 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
   const [error, setError] = useState('')
   const [cargando, setCargando] = useState(true)
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
+  const [productoHistorial, setProductoHistorial] = useState<{ idProducto: number; nombre: string } | null>(null)
   // Panel "Nueva categoría" abierto en el formulario: bloquea el resto hasta crearla.
   const [creandoCategoria, setCreandoCategoria] = useState(false)
   const bloqueadoPorCategoria = creandoCategoria || categorias.length === 0
@@ -674,6 +677,10 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
                     </button>
                   </div>
                 </div>
+                <Button variant="secundario" className="rounded-full!" onClick={() => setProductoHistorial({ idProducto: producto.idProducto, nombre: producto.nombre })}
+                  aria-label={`Historial de precios de ${producto.nombre}`}>
+                  <Clock className="size-4" aria-hidden="true" />Historial de precios
+                </Button>
               </article>
             )
           })}
@@ -705,6 +712,8 @@ export function GestionProductosForm({ rol }: { rol: RolNombre }) {
           </nav>
         )}
       </section>
+
+      {productoHistorial && <HistorialPreciosProducto key={productoHistorial.idProducto} producto={productoHistorial} onCerrar={() => setProductoHistorial(null)} />}
 
       {mostrarFormulario && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/40 p-4">

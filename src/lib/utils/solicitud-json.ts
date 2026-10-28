@@ -7,7 +7,7 @@ export class ErrorSolicitud extends Error {
     this.name = 'ErrorSolicitud'
   }
 }
-export type OpcionesSolicitud = { accion?: string; tiempoMaximo?: number }
+export type OpcionesSolicitud = { accion?: string; tiempoMaximo?: number; mensajeNoEncontrado?: string }
 
 // Solo se muestran detalles públicos de errores esperados, nunca HTML ni errores técnicos 5xx.
 function detallePublico(datos: unknown) {
@@ -16,14 +16,14 @@ function detallePublico(datos: unknown) {
   return texto && texto.length <= 400 && !/[<>\r\n]/.test(texto) ? texto : null
 }
 
-function errorHttp(estado: number, datos: unknown, accion: string) {
+function errorHttp(estado: number, datos: unknown, accion: string, mensajeNoEncontrado?: string) {
   const detalle = detallePublico(datos)
   if (estado === 503 && datos && typeof datos === 'object' && 'codigo' in datos && datos.codigo === 'ASISTENCIA_NO_CONFIGURADA') {
     return new ErrorSolicitud('servidor', 'La asistencia no está disponible por un problema de configuración. Avisale al administrador para que lo revise.', estado)
   }
   if (estado === 401) return new ErrorSolicitud('sesion', 'Tu sesión venció o no está iniciada. Volvé a iniciar sesión para continuar.', estado)
   if (estado === 403) return new ErrorSolicitud('permisos', `No tenés permiso para esta acción. ${detalle ?? 'Consultá al administrador si necesitás acceso.'}`, estado)
-  if (estado === 404) return new ErrorSolicitud('permisos', 'No encontramos ese usuario dentro de tus permisos. Volvé al listado de usuarios y revisá la selección.', estado)
+  if (estado === 404) return new ErrorSolicitud('permisos', mensajeNoEncontrado ?? 'No encontramos ese usuario dentro de tus permisos. Volvé al listado de usuarios y revisá la selección.', estado)
   if ([400, 422].includes(estado)) return new ErrorSolicitud('datos', `Revisá los datos ingresados. ${detalle ?? 'Corregí los campos indicados e intentá nuevamente.'}`, estado)
   if (estado === 409) return new ErrorSolicitud('estado', `No pudimos ${accion}. ${detalle ?? 'Los datos cambiaron. Actualizá la ficha y revisá el estado antes de intentar nuevamente.'}`, estado)
   if (estado === 429) return new ErrorSolicitud('limite', 'Hay demasiadas solicitudes. Esperá unos momentos antes de intentar nuevamente.', estado)
@@ -36,7 +36,7 @@ export function mensajeErrorSolicitud(error: unknown, alternativa: string = MENS
   return error instanceof ErrorSolicitud ? error.message : alternativa
 }
 
-export async function solicitarJson<T>(url: string, init: RequestInit = {}, { accion = 'completar la operación', tiempoMaximo = 15000 }: OpcionesSolicitud = {}): Promise<T> {
+export async function solicitarJson<T>(url: string, init: RequestInit = {}, { accion = 'completar la operación', tiempoMaximo = 15000, mensajeNoEncontrado }: OpcionesSolicitud = {}): Promise<T> {
   const control = new AbortController()
   let tiempoAgotado = false
   const cancelar = () => control.abort(init.signal?.reason)
@@ -47,15 +47,15 @@ export async function solicitarJson<T>(url: string, init: RequestInit = {}, { ac
   const comprobar = escritura ? ' Actualizá la ficha para comprobar si la operación quedó registrada antes de repetirla.' : ''
   try {
     const respuesta = await fetch(url, { cache: 'no-store', ...init, signal: control.signal })
-    if (respuesta.redirected && /\/acceso\/login(?:[/?#]|$)/.test(respuesta.url)) throw errorHttp(401, null, accion)
+    if (respuesta.redirected && /\/acceso\/login(?:[/?#]|$)/.test(respuesta.url)) throw errorHttp(401, null, accion, mensajeNoEncontrado)
     let datos: unknown
     try { datos = await respuesta.json() }
     catch (error) {
       if (control.signal.aborted || error instanceof TypeError) throw error
-      if (!respuesta.ok) throw errorHttp(respuesta.status, null, accion)
+      if (!respuesta.ok) throw errorHttp(respuesta.status, null, accion, mensajeNoEncontrado)
       throw new ErrorSolicitud('respuesta', `El sistema devolvió una respuesta que no pudimos leer. Actualizá la ficha; si sigue ocurriendo, avisale al administrador.${comprobar}`)
     }
-    if (!respuesta.ok) throw errorHttp(respuesta.status, datos, accion)
+    if (!respuesta.ok) throw errorHttp(respuesta.status, datos, accion, mensajeNoEncontrado)
     if (!datos || typeof datos !== 'object' || Array.isArray(datos)) throw new ErrorSolicitud('respuesta', `El sistema devolvió una respuesta incompleta.${comprobar || ' Actualizá la ficha e intentá nuevamente.'}`)
     return datos as T
   } catch (error) {
