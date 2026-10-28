@@ -570,7 +570,7 @@ export default function UsuariosPage() {
                 {usuariosVisibles.map((u) => (
                   <tr
                     key={u.idUsuario}
-                    className={`border-t border-bg transition-colors hover:bg-bg/60 ${u.activo ? '' : 'text-muted'}`}
+                    className={`border-t border-bg transition-colors ${u.idUsuario === idUsuarioSesion ? 'bg-surface-muted' : 'hover:bg-surface-muted/60 [html[data-tema=oscuro]_&]:hover:bg-bg/60'} ${u.activo ? '' : 'text-muted'}`}
                   >
                     <td className="w-20 px-4 py-3">
                       <div className="flex justify-center">
