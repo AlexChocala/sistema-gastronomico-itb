@@ -403,7 +403,8 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
     historialPrecios: (request: Request, id: string) => proteger(request, false, async () => {
       const idProducto = leerId(id)
       const parametros = new URL(request.url).searchParams
-      if ([...parametros.keys()].some(k => k !== 'pagina') || parametros.getAll('pagina').length > 1) {
+      if ([...parametros.keys()].some(k => k !== 'pagina' && k !== 'variacion')
+        || parametros.getAll('pagina').length > 1 || parametros.getAll('variacion').length > 1) {
         throw new ErrorProducto(400, 'Los parámetros del historial no son válidos.')
       }
       const textoPagina = parametros.get('pagina') ?? '1'
@@ -411,21 +412,54 @@ export function crearControladorProductos(db: PrismaClient, leerSesion: () => Pr
       if (!/^[1-9]\d*$/.test(textoPagina) || !Number.isSafeInteger(paginaSolicitada)) {
         throw new ErrorProducto(400, 'La página debe ser un número entero positivo.')
       }
+      const textoVariacion = parametros.get('variacion')
+      const idVariacion = textoVariacion === null ? null : Number(textoVariacion)
+      if (textoVariacion !== null && (!/^[1-9]\d*$/.test(textoVariacion) || !Number.isSafeInteger(idVariacion))) {
+        throw new ErrorProducto(400, 'La variación seleccionada no es válida.')
+      }
       const resultado = await db.$transaction(async tx => {
         const producto = await tx.producto.findUnique({
-          where: { idProducto }, select: { idProducto: true, nombre: true, precio: true, activo: true },
+          where: { idProducto },
+          select: {
+            idProducto: true, nombre: true, precio: true, activo: true,
+            variaciones: {
+              select: { idVariacion: true, nombre: true, disponible: true, precioAdicional: true },
+              orderBy: [{ precioAdicional: 'asc' }, { nombre: 'asc' }],
+            },
+          },
         })
         if (!producto) throw new ErrorProducto(404, 'Producto no encontrado.')
-        const where = { idProducto }
-        const totalRegistros = await tx.historialPrecioProducto.count({ where })
+        const variacion = idVariacion === null ? null : producto.variaciones.find(item => item.idVariacion === idVariacion)
+        if (idVariacion !== null && !variacion) throw new ErrorProducto(404, 'La variación no pertenece a este producto.')
         const porPagina = 30
+        const where = idVariacion === null ? { idProducto } : { idVariacion }
+        const totalRegistros = idVariacion === null
+          ? await tx.historialPrecioProducto.count({ where })
+          : await tx.historialPrecioVariacion.count({ where })
         const totalPaginas = Math.max(1, Math.ceil(totalRegistros / porPagina))
         const pagina = Math.min(paginaSolicitada, totalPaginas)
-        const registros = await tx.historialPrecioProducto.findMany({
-          where, select: { idHistorial: true, precioAnterior: true, precioNuevo: true, fechaCambio: true },
-          orderBy: [{ fechaCambio: 'desc' }, { idHistorial: 'desc' }], take: porPagina, skip: (pagina - 1) * porPagina,
-        })
-        return { producto, registros: registros.map(r => ({ ...r, fechaCambio: r.fechaCambio.toISOString() })), pagina, porPagina, totalRegistros, totalPaginas }
+        const registros = idVariacion === null
+          ? await tx.historialPrecioProducto.findMany({
+            where, select: { idHistorial: true, precioAnterior: true, precioNuevo: true, fechaCambio: true },
+            orderBy: [{ fechaCambio: 'desc' }, { idHistorial: 'desc' }], take: porPagina, skip: (pagina - 1) * porPagina,
+          })
+          : await tx.historialPrecioVariacion.findMany({
+            where, select: { idHistorial: true, precioAnterior: true, precioNuevo: true, fechaCambio: true },
+            orderBy: [{ fechaCambio: 'desc' }, { idHistorial: 'desc' }], take: porPagina, skip: (pagina - 1) * porPagina,
+          })
+        const { variaciones, ...productoSinVariaciones } = producto
+        return {
+          producto: productoSinVariaciones,
+          variaciones: variaciones.map(item => ({
+            idVariacion: item.idVariacion, nombre: item.nombre, disponible: item.disponible,
+            precio: producto.precio + item.precioAdicional,
+          })),
+          historial: idVariacion === null
+            ? { tipo: 'base' as const, idVariacion: null, nombre: 'Precio base', precioActual: producto.precio }
+            : { tipo: 'variacion' as const, idVariacion, nombre: variacion!.nombre, precioActual: producto.precio + variacion!.precioAdicional },
+          registros: registros.map(r => ({ ...r, fechaCambio: r.fechaCambio.toISOString() })),
+          pagina, porPagina, totalRegistros, totalPaginas,
+        }
       }, { isolationLevel: 'RepeatableRead' })
       return responder(resultado)
     }),

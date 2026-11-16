@@ -4,11 +4,14 @@ import type { PrismaClient } from '@prisma/client'
 import { crearControladorProductos } from '../src/lib/productos/productos-administracion'
 
 type Registro = { idHistorial: number; idProducto: number; precioAnterior: number | null; precioNuevo: number; fechaCambio: Date }
+type RegistroVariacion = { idHistorial: number; idVariacion: number; precioAnterior: number | null; precioNuevo: number; fechaCambio: Date }
 function escenario() {
   const estado = { trigger: true, consultasTrigger: 0, escrituras: 0, fallar: false }
-  let producto = { idProducto: 1, nombre: 'Hamburguesa', precio: 1000, activo: true, idCategoria: 1, descripcion: null, imagenPath: null, categoria: { idCategoria: 1, nombre: 'Comidas', activa: true }, sucursales: [], extras: [], variaciones: [] }
+  let producto = { idProducto: 1, nombre: 'Hamburguesa', precio: 1000, activo: true, idCategoria: 1, descripcion: null, imagenPath: null, categoria: { idCategoria: 1, nombre: 'Comidas', activa: true }, sucursales: [], extras: [], variaciones: [{ idVariacion: 10, nombre: 'Grande', precioAdicional: 300, disponible: true }] }
   let registros: Registro[] = []
+  const registrosVariacion: RegistroVariacion[] = []
   const agregar = (anterior: number | null, nuevo: number) => registros.push({ idHistorial: registros.length + 1, idProducto: producto.idProducto, precioAnterior: anterior, precioNuevo: nuevo, fechaCambio: new Date('2026-10-28T12:00:00Z') })
+  const agregarVariacion = (anterior: number | null, nuevo: number) => registrosVariacion.push({ idHistorial: registrosVariacion.length + 1, idVariacion: 10, precioAnterior: anterior, precioNuevo: nuevo, fechaCambio: new Date('2026-10-28T12:00:00Z') })
   const leer = (idProducto: number, select?: Record<string, unknown>) => {
     if (idProducto !== producto.idProducto) return null
     const dato = structuredClone(producto)
@@ -44,6 +47,10 @@ function escenario() {
       count: async ({ where }: { where: { idProducto: number } }) => registros.filter(r => r.idProducto === where.idProducto).length,
       findMany: async ({ where, take, skip }: { where: { idProducto: number }; take: number; skip: number }) => structuredClone(registros.filter(r => r.idProducto === where.idProducto).sort((a, b) => +b.fechaCambio - +a.fechaCambio || b.idHistorial - a.idHistorial).slice(skip, skip + take)).map(({ idProducto: _id, ...r }) => { void _id; return r }),
     },
+    historialPrecioVariacion: {
+      count: async ({ where }: { where: { idVariacion: number } }) => registrosVariacion.filter(r => r.idVariacion === where.idVariacion).length,
+      findMany: async ({ where, take, skip }: { where: { idVariacion: number }; take: number; skip: number }) => structuredClone(registrosVariacion.filter(r => r.idVariacion === where.idVariacion).sort((a, b) => +b.fechaCambio - +a.fechaCambio || b.idHistorial - a.idHistorial).slice(skip, skip + take)).map(({ idVariacion: _id, ...r }) => { void _id; return r }),
+    },
     $queryRaw: async (sql: TemplateStringsArray) => { assert.match(sql.join(''), /pg_trigger/); assert.match(sql.join(''), /trg_historial_precio_producto/); estado.consultasTrigger++; return [{ activo: estado.trigger }] },
     $transaction: async <T>(accion: (tx: PrismaClient) => Promise<T>, opciones: { isolationLevel: string }) => {
       assert.ok(['RepeatableRead', 'Serializable'].includes(opciones.isolationLevel))
@@ -53,7 +60,7 @@ function escenario() {
   }
   const db = doble as unknown as PrismaClient
   const controlador = (id: number | null = 10) => crearControladorProductos(db, async () => id === null ? null : { user: { idUsuario: id } })
-  return { estado, controlador, agregar, registros: () => registros, producto: () => producto, db }
+  return { estado, controlador, agregar, agregarVariacion, registros: () => registros, producto: () => producto, db }
 }
 const req = (query = '', cuerpo?: unknown) => new Request('http://localhost/api/productos/gestion/1/historial-precios' + query, {
   method: cuerpo === undefined ? 'GET' : 'PATCH', headers: { 'content-type': 'application/json', origin: 'http://localhost' },
@@ -85,6 +92,17 @@ test('historial vacío, precio inicial nulo y producto inactivo se consultan sin
   assert.equal(datos.producto.activo, false); assert.equal(datos.registros[0].precioAnterior, null)
   assert.equal((await e.controlador().historialPrecios(req(), '999')).status, 404)
   assert.equal(e.estado.escrituras, 0)
+})
+
+test('consulta el historial de una variación con el precio final y rechaza una variación ajena', async () => {
+  const e = escenario()
+  e.agregarVariacion(1200, 1300)
+  const datos = await (await e.controlador().historialPrecios(req('?variacion=10'), '1')).json()
+  assert.deepEqual(datos.historial, { tipo: 'variacion', idVariacion: 10, nombre: 'Grande', precioActual: 1300 })
+  assert.deepEqual(datos.variaciones, [{ idVariacion: 10, nombre: 'Grande', disponible: true, precio: 1300 }])
+  assert.equal(datos.registros[0].precioAnterior, 1200)
+  assert.equal((await e.controlador().historialPrecios(req('?variacion=99'), '1')).status, 404)
+  assert.equal((await e.controlador().historialPrecios(req('?variacion=01'), '1')).status, 400)
 })
 
 test('sesión, rol, cuenta activa y cambio obligatorio de contraseña se verifican antes del historial', async () => {

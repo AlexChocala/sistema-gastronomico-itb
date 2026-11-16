@@ -20,8 +20,9 @@ export function HistorialPreciosProducto({ producto, onCerrar }: {
   const dialogo = useRef<HTMLDialogElement>(null)
   const titulo = useId()
   const [pagina, setPagina] = useState(1)
+  const [idVariacion, setIdVariacion] = useState<number | null>(null)
   const [intento, setIntento] = useState(0)
-  const clave = `${producto.idProducto}/${pagina}/${intento}`
+  const clave = `${producto.idProducto}/${idVariacion ?? 'base'}/${pagina}/${intento}`
   const [resultado, setResultado] = useState<{ clave: string; datos: HistorialPrecios | null; error: string | null } | null>(null)
   const cargando = resultado?.clave !== clave
   const datos = resultado?.datos ?? null
@@ -36,12 +37,19 @@ export function HistorialPreciosProducto({ producto, onCerrar }: {
   useEffect(() => {
     let vigente = true
     const control = new AbortController()
-    solicitarJson<HistorialPrecios>(`/api/productos/gestion/${producto.idProducto}/historial-precios?pagina=${pagina}`,
+    const parametros = new URLSearchParams({ pagina: String(pagina) })
+    if (idVariacion !== null) parametros.set('variacion', String(idVariacion))
+    solicitarJson<HistorialPrecios>(`/api/productos/gestion/${producto.idProducto}/historial-precios?${parametros}`,
       { signal: control.signal }, { accion: 'cargar el historial de precios', mensajeNoEncontrado: 'El producto no está disponible o no tenés permiso para consultar su historial. Actualizá la lista de productos.' })
       .then(datos => { if (vigente) setResultado({ clave, datos, error: null }) })
       .catch(error => { if (vigente) setResultado({ clave, datos: null, error: error instanceof Error ? error.message : 'No pudimos cargar el historial de precios.' }) })
     return () => { vigente = false; control.abort() }
-  }, [producto.idProducto, pagina, clave])
+  }, [producto.idProducto, idVariacion, pagina, clave])
+
+  function elegirHistorial(siguiente: number | null) {
+    setIdVariacion(siguiente)
+    setPagina(1)
+  }
 
   function cerrar() { dialogo.current?.close(); onCerrar() }
 
@@ -56,14 +64,23 @@ export function HistorialPreciosProducto({ producto, onCerrar }: {
         </div>
         <Button variant="secundario" aria-label="Cerrar historial de precios" className="w-auto! shrink-0 rounded-full! px-3!" onClick={cerrar}><X className="size-4" aria-hidden="true" /></Button>
       </header>
-      <p className="text-sm text-muted">Precio base del producto, sin adicionales de variaciones ni extras. Horas de Argentina.</p>
       {cargando && <p role="status" className="text-sm text-muted">Cargando historial…</p>}
       {error && <Aviso tipo="error" accion={{ texto: 'Reintentar', onClick: () => setIntento(n => n + 1) }}>{error}</Aviso>}
-      {datos && !error && <>
-        <p className="text-sm">Precio base actual: <strong>{precio.format(datos.producto.precio)}</strong></p>
+      {datos && !error && !cargando && <>
+        <div className="flex min-w-0 gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Precio a consultar">
+          <Button variant={datos.historial.tipo === 'base' ? 'primario' : 'secundario'} className="w-auto! shrink-0 rounded-full!" role="tab" aria-selected={datos.historial.tipo === 'base'} onClick={() => elegirHistorial(null)}>Precio base</Button>
+          {datos.variaciones.map(variacion => <Button key={variacion.idVariacion}
+            variant={datos.historial.idVariacion === variacion.idVariacion ? 'primario' : 'secundario'}
+            className="w-auto! shrink-0 rounded-full!" role="tab"
+            aria-selected={datos.historial.idVariacion === variacion.idVariacion}
+            onClick={() => elegirHistorial(variacion.idVariacion)}>
+            {variacion.nombre} · {precio.format(variacion.precio)}{variacion.disponible ? '' : ' (inactiva)'}
+          </Button>)}
+        </div>
+        <p className="text-sm">{datos.historial.nombre} actual: <strong>{precio.format(datos.historial.precioActual)}</strong></p>
         {datos.registros.length ? <div className="min-h-0 overflow-auto rounded-2xl border border-border" aria-busy={cargando}>
           <table className="w-full min-w-lg text-center text-sm">
-            <caption className="sr-only">Cambios del precio base de {producto.nombre}</caption>
+            <caption className="sr-only">Cambios de {datos.historial.nombre.toLowerCase()} de {producto.nombre}</caption>
             <thead className="sticky top-0 bg-surface-muted text-muted"><tr>
               {['Fecha y hora', 'Precio anterior', 'Precio nuevo'].map(t => <th scope="col" key={t} className="px-4 py-3 text-center font-medium">{t}</th>)}
             </tr></thead>
@@ -73,7 +90,7 @@ export function HistorialPreciosProducto({ producto, onCerrar }: {
               <td className="px-4 py-3 tabular-nums">{precio.format(r.precioNuevo)}</td>
             </tr>)}</tbody>
           </table>
-        </div> : <p className="text-sm text-muted">Todavía no hay registros de precio para este producto.</p>}
+        </div> : <p className="text-sm text-muted">Todavía no hay cambios registrados para {datos.historial.tipo === 'base' ? 'el precio base' : `la variación ${datos.historial.nombre}`}. Los próximos cambios se guardarán automáticamente.</p>}
         <nav aria-label="Páginas del historial de precios" className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted">{datos.totalRegistros} registros · Página {datos.pagina} de {datos.totalPaginas}</p>
           <div className="flex gap-2">

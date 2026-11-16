@@ -10,12 +10,10 @@ import {
   Banknote, Bike, CalendarDays, CheckCheck, ChefHat, CircleCheck, Clock, ClipboardList, ExternalLink, Flame,
   Globe, Landmark, Receipt, ShoppingBag, Store, Wallet, type LucideIcon,
 } from '@/components/icons'
-import { MiTurno } from '@/components/asistencia/MiTurno'
-import { EnlacePantalla } from '@/components/asistencia/EnlacePantalla'
 import { EstadoConexion } from '@/components/pedidos/EstadoConexion'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import {
-  usePedidosPantalla, usePermisoPantallas,
+  usePedidosPantalla,
   type EstadoPedidoPantalla,
   type PedidoPantalla,
 } from '@/lib/pedidos/pedidos-pantallas'
@@ -102,7 +100,6 @@ const sinSuscripcion = () => () => {}
 // `puedeAbrirCaja`: el admin no carga pedidos, así que no ve el acceso a Caja.
 export function ResumenDelDia({ nombre, puedeAbrirCaja }: { nombre: string; puedeAbrirCaja: boolean }) {
   const { sucursal } = useSucursalActiva()
-  const permisoPantallas = usePermisoPantallas(puedeAbrirCaja)
   const { pedidos, cargando, error, recargar } = usePedidosPantalla(sucursal?.idSucursal ?? null)
   // "Hoy" y las horas dependen de la zona horaria del navegador: se calculan solo en el
   // cliente para no generar diferencias de hidratación con el render del servidor.
@@ -158,20 +155,19 @@ export function ResumenDelDia({ nombre, puedeAbrirCaja }: { nombre: string; pued
           </p>
         </div>
         {puedeAbrirCaja && (
-          <EnlacePantalla
+          <a
             href="/pantallas/caja"
-            habilitado={permisoPantallas.puedeRegistrar}
-            motivo={permisoPantallas.mensaje}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm text-on-accent transition-colors hover:bg-accent-hover"
           >
             <Wallet className="size-4" />
             Abrir caja
             <ExternalLink className="size-3.5" />
-          </EnlacePantalla>
+          </a>
         )}
       </header>
 
-      <MiTurno />
       <EstadoConexion error={error} onReintentar={() => void recargar()} />
 
       <section aria-label="Indicadores del día" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

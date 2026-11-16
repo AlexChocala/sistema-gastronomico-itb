@@ -14,14 +14,14 @@ test('éxito JSON conserva los datos y usa no-store', async t => {
     assert.equal(init?.cache, 'no-store')
     return Response.json({ registros: [], totalRegistros: 0 })
   })
-  assert.deepEqual(await solicitarJson('/api/asistencia'), { registros: [], totalRegistros: 0 })
+  assert.deepEqual(await solicitarJson('/api/productos'), { registros: [], totalRegistros: 0 })
   assert.equal(fetch.mock.callCount(), 1)
 })
 
 test('red caída no muestra Failed to fetch ni detalles de la excepción', async t => {
   t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('Failed to fetch postgresql://dato-privado') })
-  await assert.rejects(solicitarJson('/api/asistencia', undefined, { accion: 'cargar la asistencia' }), e => {
-    esError('conexion', /Problema de conexión.*cargar la asistencia/)(e)
+  await assert.rejects(solicitarJson('/api/productos', undefined, { accion: 'cargar los productos' }), e => {
+    esError('conexion', /Problema de conexión.*cargar los productos/)(e)
     assert.doesNotMatch((e as Error).message, /Failed to fetch|postgresql|dato-privado/)
     return true
   })
@@ -30,7 +30,7 @@ test('red caída no muestra Failed to fetch ni detalles de la excepción', async
 test('no se reenvían escrituras fallidas y se pide comprobar el resultado antes de repetir', async t => {
   const fetch = t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('NetworkError') })
   for (const method of ['POST', 'PUT']) {
-    await assert.rejects(solicitarJson('/api/asistencia', { method }, { accion: 'registrar la salida' }), esError('conexion', /comprobar si la operación quedó registrada antes de repetirla/))
+    await assert.rejects(solicitarJson('/api/productos', { method }, { accion: 'registrar la salida' }), esError('conexion', /comprobar si la operación quedó registrada antes de repetirla/))
   }
   assert.equal(fetch.mock.callCount(), 2)
 })
@@ -39,7 +39,7 @@ test('espera agotada interrumpe la solicitud y diferencia el mensaje de un error
   t.mock.method(globalThis, 'fetch', (_url: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
     init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
   }))
-  await assert.rejects(solicitarJson('/api/asistencia', { method: 'PUT' }, { accion: 'guardar el horario', tiempoMaximo: 5 }), esError('tiempo', /tiempo de espera.*guardar el horario.*comprobar/))
+  await assert.rejects(solicitarJson('/api/productos', { method: 'PUT' }, { accion: 'guardar el horario', tiempoMaximo: 5 }), esError('tiempo', /tiempo de espera.*guardar el horario.*comprobar/))
 })
 
 test('cancelar una consulta por desmontaje no se presenta como caída del servidor', async t => {
@@ -47,7 +47,7 @@ test('cancelar una consulta por desmontaje no se presenta como caída del servid
   t.mock.method(globalThis, 'fetch', (_url: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
     init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
   }))
-  const consulta = solicitarJson('/api/asistencia', { signal: control.signal })
+  const consulta = solicitarJson('/api/productos', { signal: control.signal })
   control.abort()
   await assert.rejects(consulta, esError('cancelada'))
 })
@@ -67,7 +67,7 @@ for (const [estado, tipo, texto] of [
   test(`HTTP ${estado}: explica ${tipo} sin atribuirlo a la conexión`, async t => {
     const error = estado === 403 ? 'Solo el administrador puede asignar horarios.' : estado === 409 ? 'El horario cambió. Actualizá la ficha.' : 'La tolerancia debe estar entre 0 y 120 minutos.'
     t.mock.method(globalThis, 'fetch', async () => Response.json({ error }, { status: estado }))
-    await assert.rejects(solicitarJson('/api/asistencia', undefined, { accion: 'guardar el horario' }), e => {
+    await assert.rejects(solicitarJson('/api/productos', undefined, { accion: 'guardar el horario' }), e => {
       esError(tipo, texto)(e); assert.equal((e as ErrorSolicitud).estado, estado); return true
     })
   })
@@ -75,7 +75,7 @@ for (const [estado, tipo, texto] of [
 
 test('un error 500 no expone SQL, rutas, contraseñas ni mensajes internos', async t => {
   t.mock.method(globalThis, 'fetch', async () => Response.json({ error: 'Prisma P1000 password=privado SELECT * FROM Usuario C:/servidor' }, { status: 500 }))
-  await assert.rejects(solicitarJson('/api/asistencia'), e => {
+  await assert.rejects(solicitarJson('/api/productos'), e => {
     esError('servidor')(e)
     assert.doesNotMatch((e as Error).message, /Prisma|P1000|password|SELECT|C:/)
     return true
@@ -86,7 +86,7 @@ test('HTML o JSON inválido en un 401/503 respeta el estado HTTP, no culpa a los
   const fetch = t.mock.method(globalThis, 'fetch')
   for (const [estado, tipo] of [[401, 'sesion'], [503, 'servidor']] as const) {
     fetch.mock.mockImplementation(async () => new Response('<html>Información interna</html>', { status: estado }))
-    await assert.rejects(solicitarJson('/api/asistencia'), esError(tipo))
+    await assert.rejects(solicitarJson('/api/productos'), esError(tipo))
   }
 })
 
@@ -94,7 +94,7 @@ test('una respuesta 200 ilegible o vacía no se presenta como éxito o falta de 
   const fetch = t.mock.method(globalThis, 'fetch')
   for (const respuesta of [new Response('<html>Privado</html>'), Response.json(null), Response.json('dato incompleto'), Response.json([])]) {
     fetch.mock.mockImplementation(async () => respuesta)
-    await assert.rejects(solicitarJson('/api/asistencia', { method: 'PUT' }), esError('respuesta', /comprobar si la operación quedó registrada/))
+    await assert.rejects(solicitarJson('/api/productos', { method: 'PUT' }), esError('respuesta', /comprobar si la operación quedó registrada/))
   }
 })
 
@@ -102,7 +102,7 @@ test('rechaza HTML y detalles malformados en errores esperados', async t => {
   const fetch = t.mock.method(globalThis, 'fetch')
   for (const error of ['<script>privado</script>', 'x'.repeat(401), { texto: 'privado' }, 'Privado\nStack']) {
     fetch.mock.mockImplementation(async () => Response.json({ error }, { status: 400 }))
-    await assert.rejects(solicitarJson('/api/asistencia'), e => {
+    await assert.rejects(solicitarJson('/api/productos'), e => {
       esError('datos')(e); assert.doesNotMatch((e as Error).message, /script|Privado|privado|Stack/); return true
     })
   }
@@ -110,22 +110,12 @@ test('rechaza HTML y detalles malformados en errores esperados', async t => {
 
 test('redirección al login identifica sesión vencida aunque el servidor responda HTML con 200', async t => {
   const respuesta = new Response('<html>Login</html>')
-  Object.defineProperties(respuesta, { redirected: { value: true }, url: { value: 'https://ejemplo.test/acceso/login?callbackUrl=asistencia' } })
+  Object.defineProperties(respuesta, { redirected: { value: true }, url: { value: 'https://ejemplo.test/acceso/login?callbackUrl=productos' } })
   t.mock.method(globalThis, 'fetch', async () => respuesta)
-  await assert.rejects(solicitarJson('/api/asistencia'), esError('sesion'))
+  await assert.rejects(solicitarJson('/api/productos'), esError('sesion'))
 })
 
 test('el menú puede mostrar errores públicos de la solicitud sin mostrar excepciones de generación', () => {
   assert.equal(mensajeErrorSolicitud(new ErrorSolicitud('permisos', 'No tenés permiso.')), 'No tenés permiso.')
   assert.equal(mensajeErrorSolicitud(new Error('Ruta interna, token privado'), 'No pudimos generar el archivo.'), 'No pudimos generar el archivo.')
-})
-
-
-test('un problema conocido de configuración pide ayuda al administrador, sin pedir revisar Internet', async t => {
-  t.mock.method(globalThis, 'fetch', async () => Response.json({ codigo: 'ASISTENCIA_NO_CONFIGURADA', error: 'P2021 detalle interno' }, { status: 503 }))
-  await assert.rejects(solicitarJson('/api/asistencia'), e => {
-    esError('servidor', /problema de configuración.*administrador/)(e)
-    assert.doesNotMatch((e as Error).message, /P2021|detalle interno|conexión/)
-    return true
-  })
 })

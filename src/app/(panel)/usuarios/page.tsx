@@ -11,7 +11,6 @@ import {
   ArrowUpDown, Copy, KeyRound, LockKeyhole, Pencil, Plus, Power, RotateCcw, Search, ShieldCheck, Store, Trash2, X,
 } from '@/components/icons'
 import { Desplegable } from '@/components/ui/Desplegable'
-import { BotonVerHistorial } from '@/components/asistencia/BotonVerHistorial'
 import { ExportarImportar } from '@/components/ui/ExportarImportar'
 import { hoyEnArgentina } from '@/lib/reportes/fechas'
 import { etiquetaRol, rolSinSucursal } from '@/lib/usuarios/roles'
@@ -619,7 +618,6 @@ export default function UsuariosPage() {
                     {esAdmin && vista === 'archivados' && (
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
-                          <BotonVerHistorial idUsuario={u.idUsuario} nombre={`${u.nombre} ${u.apellido}`} />
                           <button
                             type="button"
                             onClick={() => reactivarUsuario(u)}
@@ -635,7 +633,6 @@ export default function UsuariosPage() {
                     {esAdmin && vista === 'activos' && (
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
-                          <BotonVerHistorial idUsuario={u.idUsuario} nombre={`${u.nombre} ${u.apellido}`} />
                           <button
                             type="button"
                             onClick={() => abrirEditar(u)}

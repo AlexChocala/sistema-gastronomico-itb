@@ -25,14 +25,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Administrar cuentas es solo para admin; la asistencia del personal también admite supervisores. Configuración permite a todos elegir su apariencia;
-  // la página y las APIs reservan los datos del negocio al administrador.
+  // Administrar cuentas es solo para el administrador.
   const pathname = request.nextUrl.pathname
-  const esAsistencia = pathname === '/usuarios/asistencia' || pathname.startsWith('/usuarios/asistencia/')
-  if (esAsistencia && !['admin', 'supervisor'].includes(token.rol)) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
-  }
-  const soloAdmin = !esAsistencia && ['/usuarios'].some((ruta) => pathname === ruta || pathname.startsWith(ruta + '/'))
+  const soloAdmin = pathname === '/usuarios' || pathname.startsWith('/usuarios/')
   if (soloAdmin && token.rol !== 'admin') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
