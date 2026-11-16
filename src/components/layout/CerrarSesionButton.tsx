@@ -9,7 +9,6 @@ import { signOut } from 'next-auth/react'
 import { useState } from 'react'
 import { Aviso } from '@/components/ui/Aviso'
 import { LogOut } from '@/components/icons'
-import { confirmarSalidaConCambios, cancelarSalidaConCambios } from '@/lib/utils/salida-con-cambios'
 
 // `className` permite usarlo fuera del sidebar (ej: pantalla de configuración inicial).
 export function CerrarSesionButton({
@@ -22,11 +21,10 @@ export function CerrarSesionButton({
     <button
       type="button"
       onClick={async () => {
-        if (ocupado || !confirmarSalidaConCambios()) return
+        if (ocupado) return
         setError(''); setOcupado(true)
         try { await signOut({ callbackUrl: '/acceso/login' }) }
         catch {
-          cancelarSalidaConCambios()
           setError('No pudimos confirmar el cierre de sesión. Revisá tu conexión e intentá nuevamente.')
         } finally { setOcupado(false) }
       }}

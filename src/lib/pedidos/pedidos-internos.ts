@@ -13,7 +13,6 @@
 // no se pisan: la segunda recibe 409 y vuelve a cargar la lista.
 
 import type { Prisma, PrismaClient } from '@prisma/client'
-import { CODIGO_ASISTENCIA_REQUERIDA, MENSAJE_ASISTENCIA_REQUERIDA, turnoHabilitaPedidos, type PermisoRegistroPedidos, type TurnoParaPedidos } from '@/lib/asistencia/permiso-pedidos'
 import { ErrorSucursal, idValido, leerCuerpo, leerId } from '@/lib/sucursales/sucursales-validacion'
 import {
   ErrorPedido, MENSAJE_SUCURSAL_NO_DISPONIBLE, validarAccionPedido, validarPedidoCaja, validarCotizacionDelivery, validarBusquedaDireccion,
@@ -99,7 +98,6 @@ function responderError(error: unknown) {
   // ErrorSucursal llega desde leerCuerpo (415 / JSON inválido) y leerId.
   if (error instanceof ErrorSucursal) return responder({ error: error.message }, error.estado)
   const codigo = typeof error === 'object' && error !== null && 'code' in error ? error.code : null
-  if (codigo === 'P2021' || codigo === 'P2022') return responder({ error: 'No se pudo verificar la asistencia. Consultá al administrador antes de registrar pedidos.' }, 503)
   if (codigo === 'P2025') return responder({ error: 'No encontramos ese pedido en esta sucursal.' }, 404)
   if (codigo === 'P2034') return responder({ error: 'Otra operación se cruzó con esta. Intentá nuevamente.' }, 409)
   return responder({ error: 'No se pudo completar la operación. Intentá nuevamente más tarde.' }, 500)
@@ -112,34 +110,12 @@ function mismoOrigen(request: Request) {
 
 const conflicto = () => new ErrorPedido(409, MENSAJE_CONFLICTO_ESTADO)
 
-async function permisoParaCrearPedido(tx: Prisma.TransactionClient, idUsuario: number, idSucursal: number, reloj: () => Date, bloquear: boolean): Promise<PermisoRegistroPedidos> {
+async function exigirPermisoOperativo(tx: Prisma.TransactionClient, idUsuario: number, idSucursal: number) {
   // Se vuelve a leer dentro de la transacción: el rol y sucursal pudieron cambiar.
   const usuario = await tx.usuario.findUnique({ where: { idUsuario }, select: { activo: true, debeCambiarContrasena: true, idSucursal: true, rol: { select: { nombre: true } } } })
   if (!usuario?.activo || usuario.debeCambiarContrasena) throw new ErrorPedido(403, 'Tu usuario no está habilitado para registrar pedidos.')
   if (!['empleado', 'supervisor'].includes(usuario.rol.nombre)) throw new ErrorPedido(403, 'El administrador puede ver los pedidos, pero no cargarlos ni cambiarlos.')
   if (usuario.idSucursal !== idSucursal) throw new ErrorPedido(403, 'Tu sucursal asignada cambió. Actualizá la pantalla antes de registrar pedidos.')
-  // El bloqueo compartido impide cerrar la marca mientras se guarda este pedido.
-  // La consulta usa parámetros; no recibe identidad ni horas del navegador.
-  const turno = bloquear
-    ? (await tx.$queryRaw<TurnoParaPedidos[]>`
-        SELECT "idSucursal", "fechaJornada", "entradaPrevista", "salidaPrevista", "entrada", "salida"
-        FROM "AsistenciaUsuario"
-        WHERE "idUsuario" = ${idUsuario} AND "idSucursal" = ${idSucursal} AND "salida" IS NULL
-        FOR SHARE
-      `)[0]
-    : await tx.asistenciaUsuario.findFirst({ where: { idUsuario, idSucursal, salida: null }, select: { idSucursal: true, fechaJornada: true, entradaPrevista: true, salidaPrevista: true, entrada: true, salida: true } })
-  const ahora = reloj()
-  const habilitado = turnoHabilitaPedidos(turno, idSucursal, ahora)
-  const mensaje = habilitado ? null : turno && ahora >= turno.salidaPrevista
-    ? 'Tu horario laboral finalizó. Las pantallas se habilitan en tu próximo turno.'
-    : turno && ahora < turno.entradaPrevista ? 'Tu horario laboral todavía no comenzó.' : MENSAJE_ASISTENCIA_REQUERIDA
-  return { habilitado, requiereAsistencia: true, mensaje, ahora: ahora.toISOString(), habilitadoHasta: habilitado && turno ? turno.salidaPrevista.toISOString() : null }
-}
-
-function exigirPermisoVigente(permiso: PermisoRegistroPedidos, ahora: Date) {
-  if (!permiso.habilitado || !permiso.habilitadoHasta || ahora >= new Date(permiso.habilitadoHasta)) {
-    throw new ErrorPedido(403, permiso.mensaje ?? 'Tu horario laboral finalizó. No se guardó la operación.', { codigo: CODIGO_ASISTENCIA_REQUERIDA })
-  }
 }
 
 // `sucursalDe` resuelve la sucursal activa de la sesión (en la app, obtenerSucursalActiva):
@@ -148,7 +124,6 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
   db: PrismaClient,
   leerSesion: () => Promise<S | null>,
   sucursalDe: (sesion: S) => Promise<number | null>,
-  reloj: () => Date = () => new Date(),
 ) {
   // Supervisor y empleado operan los pedidos de su sucursal. El admin solo los ve: así no
   // carga ni mueve un pedido por error (por ejemplo, con otra sucursal activa).
@@ -180,10 +155,6 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
   }
 
   return {
-    permisoCaja: (request: Request) => proteger(request, true, async ({ idUsuario, idSucursal }) => {
-      const permiso = await db.$transaction(tx => permisoParaCrearPedido(tx, idUsuario, idSucursal, reloj, false))
-      return responder(permiso)
-    }),
     cotizarDelivery: (request: Request) => proteger(request, true, async ({ idSucursal }) => {
       const datos = validarCotizacionDelivery(await leerCuerpo(request), false)
       const cobertura = await prepararCoberturaDelivery(db, { idSucursal }, datos.direccion, datos.idLocalidad, datos.ubicacion)
@@ -225,8 +196,7 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
         ? await prepararCoberturaDelivery(db, { idSucursal }, pedido.direccion, pedido.idLocalidad, pedido.ubicacion)
         : null
       const creado = await db.$transaction(async (tx) => {
-        const permiso = await permisoParaCrearPedido(tx, idUsuario, idSucursal, reloj, true)
-        exigirPermisoVigente(permiso, reloj())
+        await exigirPermisoOperativo(tx, idUsuario, idSucursal)
         const sucursal = await tx.sucursal.findUnique({
           where: { idSucursal },
           select: camposCobertura,
@@ -241,7 +211,6 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
         const { lineas, total: subtotal } = await calcularLineas(tx, idSucursal, pedido.items)
         const total = Math.round((subtotal + recargoDelivery) * 100) / 100
         const idTipoEntrega = await buscarTipoEntrega(tx, pedido.tipoEntrega)
-        exigirPermisoVigente(permiso, reloj())
         const cliente = await tx.cliente.create({
           data: { nombre: pedido.cliente.nombre, telefono: pedido.cliente.telefono },
           select: { idCliente: true },
@@ -279,8 +248,7 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
         : null
 
       const actualizado = await db.$transaction(async (tx) => {
-        const permiso = await permisoParaCrearPedido(tx, idUsuario, idSucursal, reloj, true)
-        exigirPermisoVigente(permiso, reloj())
+        await exigirPermisoOperativo(tx, idUsuario, idSucursal)
         const fila = await tx.pedido.findFirst({ where: { idPedido, idSucursal }, select: camposPedido })
         if (!fila) throw new ErrorPedido(404, 'No encontramos ese pedido en esta sucursal.')
         const actual = aPantalla(fila)
@@ -318,7 +286,6 @@ export function crearControladorPedidosInternos<S extends SesionPersonal>(
 
         // Update condicional: solo si el pedido sigue exactamente como se leyó. Si otra
         // pantalla lo cambió en el medio, no toca nada (count 0) y se responde 409.
-        exigirPermisoVigente(permiso, reloj())
         const { count } = await tx.pedido.updateMany({
           where: {
             idPedido, idSucursal,

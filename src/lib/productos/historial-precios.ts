@@ -2,6 +2,8 @@ import type { Prisma } from '@prisma/client'
 
 export type HistorialPrecios = {
   producto: { idProducto: number; nombre: string; precio: number; activo: boolean }
+  variaciones: { idVariacion: number; nombre: string; disponible: boolean; precio: number }[]
+  historial: { tipo: 'base' | 'variacion'; idVariacion: number | null; nombre: string; precioActual: number }
   registros: { idHistorial: number; precioAnterior: number | null; precioNuevo: number; fechaCambio: string }[]
   pagina: number; porPagina: number; totalRegistros: number; totalPaginas: number
 }

@@ -18,9 +18,6 @@ function detallePublico(datos: unknown) {
 
 function errorHttp(estado: number, datos: unknown, accion: string, mensajeNoEncontrado?: string) {
   const detalle = detallePublico(datos)
-  if (estado === 503 && datos && typeof datos === 'object' && 'codigo' in datos && datos.codigo === 'ASISTENCIA_NO_CONFIGURADA') {
-    return new ErrorSolicitud('servidor', 'La asistencia no está disponible por un problema de configuración. Avisale al administrador para que lo revise.', estado)
-  }
   if (estado === 401) return new ErrorSolicitud('sesion', 'Tu sesión venció o no está iniciada. Volvé a iniciar sesión para continuar.', estado)
   if (estado === 403) return new ErrorSolicitud('permisos', `No tenés permiso para esta acción. ${detalle ?? 'Consultá al administrador si necesitás acceso.'}`, estado)
   if (estado === 404) return new ErrorSolicitud('permisos', mensajeNoEncontrado ?? 'No encontramos ese usuario dentro de tus permisos. Volvé al listado de usuarios y revisá la selección.', estado)
