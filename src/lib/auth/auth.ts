@@ -8,6 +8,13 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcrypt'
 import { prisma } from '@/lib/db/prisma'
 import type { RolNombre } from '@/types'
+import {
+  MAX_INTENTOS_FALLIDOS, MINUTOS_BLOQUEO, estaBloqueado, limpiarIntentos, normalizarEmail, registrarFallo,
+} from './limite-intentos'
+
+// Mensaje del error que lanza `authorize` cuando el email está bloqueado: llega al
+// formulario de login como `resultado.error`.
+export const ERROR_DEMASIADOS_INTENTOS = 'DEMASIADOS_INTENTOS'
 
 export const authOptions: AuthOptions = {
   // No hay modelos Session/Account en el schema, así que la sesión se guarda en un
@@ -33,6 +40,13 @@ export const authOptions: AuthOptions = {
           return null
         }
 
+        // Tras varios intentos fallidos con el mismo email se bloquea un rato (el login
+        // muestra un mensaje propio al recibir este error).
+        const claveIntentos = normalizarEmail(credentials.email)
+        if (estaBloqueado(claveIntentos)) {
+          throw new Error(ERROR_DEMASIADOS_INTENTOS)
+        }
+
         // Usuario.rol es una relación a la tabla Rol, no un string directo: hace falta
         // el include para poder armar el campo `rol` (nombre) que usa el resto de la app.
         const usuario = await prisma.usuario.findUnique({
@@ -40,13 +54,36 @@ export const authOptions: AuthOptions = {
           include: { rol: true },
         })
 
+        // También se cuentan los emails que no existen (en memoria), para no revelar cuáles sí.
         if (!usuario || !usuario.activo) {
+          registrarFallo(claveIntentos)
           return null
+        }
+
+        // Para un usuario real el bloqueo está en la base: vale en todas las instancias.
+        if (usuario.bloqueadoHasta && usuario.bloqueadoHasta > new Date()) {
+          throw new Error(ERROR_DEMASIADOS_INTENTOS)
         }
 
         const passwordValida = await bcrypt.compare(credentials.password, usuario.passwordHash)
         if (!passwordValida) {
+          registrarFallo(claveIntentos)
+          const { intentosFallidos } = await prisma.usuario.update({
+            where: { idUsuario: usuario.idUsuario },
+            data: { intentosFallidos: { increment: 1 } },
+            select: { intentosFallidos: true },
+          })
+          if (intentosFallidos >= MAX_INTENTOS_FALLIDOS) {
+            await prisma.usuario.update({
+              where: { idUsuario: usuario.idUsuario },
+              data: { intentosFallidos: 0, bloqueadoHasta: new Date(Date.now() + MINUTOS_BLOQUEO * 60 * 1000) },
+            })
+          }
           return null
+        }
+        limpiarIntentos(claveIntentos)
+        if (usuario.intentosFallidos > 0 || usuario.bloqueadoHasta) {
+          await prisma.usuario.update({ where: { idUsuario: usuario.idUsuario }, data: { intentosFallidos: 0, bloqueadoHasta: null } })
         }
 
         // Lo que se retorna acá es lo que NextAuth pasa como `user` al callback `jwt`.

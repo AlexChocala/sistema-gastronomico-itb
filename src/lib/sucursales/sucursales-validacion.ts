@@ -62,6 +62,7 @@ export function linkMapsValido(texto: string) {
 export const SLUGS_RESERVADOS = [
   'acceso', 'api', 'pantallas', 'pruebas', 'configuracion-inicial', 'configuracion',
   'dashboard', 'pedidos', 'productos', 'usuarios', 'sucursales', 'reportes', 'perfil',
+  'privacidad',
 ]
 
 export const MAX_SLUG = 60

@@ -114,7 +114,7 @@ export function ZonasDelivery({ idPrefijo, zonas, consulta, onCambiar }: {
     <div className="flex flex-col gap-2">
       <p className="text-sm font-medium">¿A qué localidades hacés delivery?</p>
       <p className="text-xs text-muted">
-        Tildá las localidades a las que llegás y poné cuánto cobrás el envío en cada una (0 = gratis). A las que no tildes no se puede pedir delivery.
+        Tildá las localidades donde hacés delivery y poné el costo de envío (0 = gratis).
       </p>
 
       {estado === 'esperando' && zonas.length === 0 && (

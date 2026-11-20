@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { ESTADOS_PEDIDO } from '@/lib/pedidos/pedidos-estados'
 import { prisma } from '@/lib/db/prisma'
-import type { Agrupacion, DatosReportes, FiltrosReportes, PedidoReporte, ProductoMasVendido, VentaPorPeriodo } from './tipos'
+import type { Agrupacion, DatosReportes, FiltrosReportes, PedidoReporte, ProductoMasVendido, TurnoReporte, VentaPorPeriodo } from './tipos'
 
 export class ErrorReporte extends Error {
   constructor(public status: number, mensaje: string) {
@@ -82,6 +82,7 @@ function periodoDe(dia: string, agrupacion: Agrupacion) {
 const camposPedido = {
   idPedido: true, fecha: true, idSucursal: true, origenPedido: true,
   metodoPago: true, estadoPago: true, estadoPedido: true, subtotal: true, recargoDelivery: true, total: true,
+  pagos: { select: { metodo: true, monto: true } },
   usuario: { select: { nombre: true, apellido: true } },
   cliente: { select: { nombre: true, apellido: true } },
   sucursal: { select: { nombre: true } },
@@ -97,7 +98,7 @@ type SucursalConsultada = { idSucursal: number; nombre: string }
 const dinero = (valor: number) => Math.round((valor + Number.EPSILON) * 100) / 100
 
 export function calcularReportes(
-  filtros: FiltrosReportes, pedidos: PedidoConsultado[], sucursales: SucursalConsultada[],
+  filtros: FiltrosReportes, pedidos: PedidoConsultado[], sucursales: SucursalConsultada[], turnos: TurnoReporte[] = [],
 ): DatosReportes {
   const periodos = new Map<string, VentaPorPeriodo>()
   const vecesPorDia = Array<number>(7).fill(0)
@@ -134,7 +135,7 @@ export function calcularReportes(
         (tipoEntrega !== 'retiro' && tipoEntrega !== 'delivery') || !estadoPedido) {
       throw new ErrorReporte(500, 'Hay pedidos con datos incompatibles con el reporte. Contactá al administrador.')
     }
-    const vendido = estadoPago === 'pagado'
+    const vendido = estadoPago === 'pagado' && estadoPedido !== 'cancelado'
     filas.push({
       idPedido: pedido.idPedido, fecha, sucursal: pedido.sucursal.nombre,
       cliente: [pedido.cliente.nombre, pedido.cliente.apellido].filter(Boolean).join(' '),
@@ -151,11 +152,15 @@ export function calcularReportes(
     if (!periodo) throw new Error('Pedido fuera del rango de reportes')
     for (const fila of [
       periodo, ventasPorHora[hora], porSucursal.get(pedido.idSucursal),
-      ventasPorMetodoPago.find((f) => f.metodoPago === metodoPago),
       ventasPorOrigen.find((f) => f.origen === origen),
       ventasPorEntrega.find((f) => f.tipoEntrega === tipoEntrega),
     ]) {
       if (fila) { fila.totalVendido += pedido.total; fila.cantidadPedidos++ }
+    }
+    // Sin pagos cargados (datos viejos), se toma todo el total con el método del pedido.
+    for (const pago of pedido.pagos?.length ? pedido.pagos : [{ metodo: metodoPago, monto: pedido.total }]) {
+      const fila = ventasPorMetodoPago.find((f) => f.metodoPago === pago.metodo)
+      if (fila) { fila.totalVendido += pago.monto; fila.cantidadPedidos++ }
     }
     totalVendido += pedido.total
     cantidadPedidosPagados++
@@ -191,6 +196,7 @@ export function calcularReportes(
       diaSemana, hora, promedioPedidos: Math.round(cantidad / vecesPorDia[diaSemana] * 10) / 10,
     })).sort((a, b) => a.diaSemana - b.diaSemana || a.hora - b.hora),
     pedidos: filas,
+    turnos,
   }
 }
 
@@ -211,6 +217,49 @@ export async function consultarReportes(filtros: FiltrosReportes): Promise<Datos
     select: camposPedido,
     orderBy: [{ fecha: 'desc' }, { idPedido: 'desc' }],
   })
-  return calcularReportes(filtros, pedidos, sucursales)
+  return calcularReportes(filtros, pedidos, sucursales, await consultarTurnos(filtros))
+}
+
+// Turnos de caja abiertos dentro del rango, con lo cobrado en cada uno.
+async function consultarTurnos(filtros: FiltrosReportes): Promise<TurnoReporte[]> {
+  const turnos = await prisma.turnoCaja.findMany({
+    where: {
+      fechaApertura: limitesDelRango(filtros),
+      ...(filtros.sucursal === 'todas' ? {} : { caja: { idSucursal: filtros.sucursal } }),
+    },
+    select: {
+      idTurno: true, fechaApertura: true, fechaCierre: true, montoInicial: true,
+      efectivoEsperado: true, efectivoContado: true,
+      caja: { select: { nombre: true, sucursal: { select: { nombre: true } } } },
+      usuarioApertura: { select: { nombre: true, apellido: true } },
+      usuarioCierre: { select: { nombre: true, apellido: true } },
+    },
+    orderBy: { fechaApertura: 'desc' },
+  })
+  if (turnos.length === 0) return []
+  const cobros = await prisma.pago.groupBy({
+    by: ['idTurno', 'metodo'],
+    where: { idTurno: { in: turnos.map((turno) => turno.idTurno) }, pedido: { estadoPedido: { not: 'cancelado' } } },
+    _sum: { monto: true },
+  })
+  const cobrado = (idTurno: number, metodo: string) =>
+    dinero(cobros.find((fila) => fila.idTurno === idTurno && fila.metodo === metodo)?._sum.monto ?? 0)
+  const nombre = (persona: { nombre: string; apellido: string } | null) => (persona ? `${persona.nombre} ${persona.apellido}` : null)
+
+  return turnos.map((turno) => ({
+    idTurno: turno.idTurno,
+    caja: turno.caja.nombre,
+    sucursal: turno.caja.sucursal.nombre,
+    abrio: nombre(turno.usuarioApertura) ?? '',
+    cerro: nombre(turno.usuarioCierre),
+    apertura: fechaArgentina(turno.fechaApertura).slice(0, 16),
+    cierre: turno.fechaCierre ? fechaArgentina(turno.fechaCierre).slice(0, 16) : null,
+    montoInicial: dinero(turno.montoInicial),
+    efectivoCobrado: cobrado(turno.idTurno, 'efectivo'),
+    transferenciaCobrada: cobrado(turno.idTurno, 'transferencia'),
+    efectivoEsperado: turno.efectivoEsperado,
+    efectivoContado: turno.efectivoContado,
+    diferencia: turno.efectivoContado !== null && turno.efectivoEsperado !== null ? dinero(turno.efectivoContado - turno.efectivoEsperado) : null,
+  }))
 }
 

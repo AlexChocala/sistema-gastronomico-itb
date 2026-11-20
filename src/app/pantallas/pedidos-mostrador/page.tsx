@@ -4,9 +4,13 @@
 // que ven los clientes. Solo muestra número y nombre de pila: nada de precios, productos
 // ni datos de contacto (la API pública no los devuelve). Lee el mismo estado que cambia
 // la pantalla de Cocina.
+// El número es lo que el cliente busca con su ticket en la mano, así que es lo más grande;
+// el nombre queda chico, de apoyo.
 
-import { use } from 'react'
 import { EstadoConexion } from '@/components/pedidos/EstadoConexion'
+import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
+import { LocalCerrado } from '@/components/caja/LocalCerrado'
+import { useLocalAbierto } from '@/lib/caja/turnos-cliente'
 import { usePedidosMostrador, type PedidoMostrador } from '@/lib/pedidos/pedidos-pantallas'
 
 function Columna({
@@ -26,11 +30,11 @@ function Columna({
         <span className={`size-4 rounded-full ${colorPunto}`} />
         {titulo}
       </h2>
-      <ul className="mt-8 flex flex-col gap-4">
+      <ul className="grid-cards mt-8 [--card-min:11rem]">
         {pedidos.map((pedido) => (
-          <li key={pedido.idPedido} className="screen-item flex items-baseline gap-5">
-            <span className="w-24 shrink-0 font-bold">#{pedido.idPedido}</span>
-            <span className="truncate">{pedido.cliente}</span>
+          <li key={pedido.idPedido} className="flex flex-col items-center gap-1 rounded-3xl bg-bg px-4 py-5 text-center">
+            <span className="screen-number">#{pedido.idPedido}</span>
+            <span className="max-w-full truncate text-muted">{pedido.cliente}</span>
           </li>
         ))}
       </ul>
@@ -38,32 +42,21 @@ function Columna({
   )
 }
 
-// Es pública (sin sesión), así que la sucursal viaja en la URL: ?sucursal=ID. El link
-// del sidebar ya la incluye.
-export default function PedidosMostradorPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ sucursal?: string }>
-}) {
-  const idSucursal = Number(use(searchParams).sucursal)
-  const sucursalValida = Number.isInteger(idSucursal) && idSucursal > 0
-  const { pedidos, error, recargar } = usePedidosMostrador(sucursalValida ? idSucursal : null)
-
-  if (!sucursalValida) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-bg p-6">
-        <p className="screen-item rounded-3xl bg-surface p-10 text-center text-muted">
-          Abrí esta pantalla desde el panel para elegir la sucursal.
-        </p>
-      </main>
-    )
-  }
+// La sucursal la resuelve el servidor: el acceso del equipo (link con código) o la sesión.
+export default function PedidosMostradorPage() {
+  const { sucursal } = useSucursalActiva()
+  const { pedidos, error, recargar } = usePedidosMostrador(sucursal?.idSucursal ?? null)
+  const localAbierto = useLocalAbierto()
 
   // La API ya filtra: solo pedidos para retirar en el local (de caja u online), porque los
   // delivery no los busca nadie en el mostrador, y solo en preparación o listos (los
   // "recibido" no: nadie confirmó todavía que se están preparando).
   const enPreparacion = pedidos.filter((pedido) => pedido.estado === 'en_preparacion')
   const paraRetirar = pedidos.filter((pedido) => pedido.estado === 'listo')
+
+
+  // Sin caja abierta y sin pedidos para retirar, la pantalla descansa.
+  if (localAbierto === false && pedidos.length === 0) return <LocalCerrado titulo="Pantalla del cliente" />
 
   return (
     <main className="grid min-h-screen gap-6 bg-bg p-6 md:grid-cols-2">

@@ -13,3 +13,5 @@ export default async function PedidosPage() {
     </main>
   )
 }
+
+export const metadata = { title: 'Pedidos' }

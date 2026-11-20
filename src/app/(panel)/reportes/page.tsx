@@ -25,3 +25,5 @@ export default async function ReportesPage() {
     </main>
   )
 }
+
+export const metadata = { title: 'Reportes' }

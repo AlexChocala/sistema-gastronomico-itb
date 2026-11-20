@@ -3,7 +3,7 @@
 // Pantalla de Pedidos del panel: seguimiento y cierre de cada pedido.
 //
 // Cada tarjeta muestra UNA acción principal según cómo se cargó el pedido:
-//   Transferencia online  pendiente_pago → "Confirmar pago" (recién ahí pasa a Cocina)
+//   Transferencia online  pendiente_pago → "Aceptar pedido" (recién ahí pasa a Cocina)
 //   Retiro    listo → "Marcar entregado"
 //   Delivery  listo → "Enviar con cadete" → "Marcar entregado"
 // Si el cliente cambia de idea, "Cambiar a delivery / retiro" es una acción secundaria
@@ -16,24 +16,26 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import {
-  Banknote, Bike, CheckCheck, ChefHat, CircleCheck, Landmark, RotateCcw, Search, ShoppingBag,
+  Banknote, Bike, CheckCheck, ChefHat, CircleCheck, Landmark, Plus, RotateCcw, Search, ShoppingBag, X,
   type LucideIcon,
 } from '@/components/icons'
 import { CotizadorDelivery, useCotizacionDelivery } from '@/components/pedidos/CotizadorDelivery'
 import { CamposDelivery, type ValoresDelivery } from '@/components/pedidos/CamposDelivery'
 import { DatosEntrega } from '@/components/pedidos/DatosEntrega'
 import { EstadoConexion } from '@/components/pedidos/EstadoConexion'
+import { EstadoPedidoTexto, EtiquetaEntrega, EtiquetaPago } from '@/components/pedidos/EtiquetasPedido'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import {
   puedeIrACocina,
   usePedidosPantalla,
   type DatosDelivery,
-  type EstadoPagoPantalla,
-  type EstadoPedidoPantalla,
   type PedidoPantalla,
   type ResultadoAccion,
 } from '@/lib/pedidos/pedidos-pantallas'
-import { puedeCambiarEntrega, textoOpciones } from '@/lib/pedidos/pedidos-estados'
+import { puedeCambiarEntrega, puedeCancelar, puedeModificar, textoOpciones } from '@/lib/pedidos/pedidos-estados'
+import { AgregarProductos } from '@/components/pedidos/AgregarProductos'
+import { ModalPin } from '@/components/caja/ModalPin'
+import { useTurnoCaja } from '@/lib/caja/turnos-cliente'
 import { erroresDatosDelivery } from '@/lib/pedidos/pedidos-validacion'
 
 const formatoPrecio = new Intl.NumberFormat('es-AR', {
@@ -61,27 +63,13 @@ function cuandoSeCargo(fechaIso: string) {
   return `${mismoDia(fecha, ayer) ? 'Ayer' : formatoDia.format(fecha)} · ${hora}`
 }
 
-const etiquetaEntrega = {
-  retiro: { texto: 'Para retirar', icono: ShoppingBag, clase: 'bg-accent-soft text-accent' },
-  delivery: { texto: 'Delivery', icono: Bike, clase: 'bg-warning-surface text-warning' },
-}
-
-const estados: Record<EstadoPedidoPantalla, { texto: string; color: string; punto: string }> = {
-  pendiente_pago: { texto: 'Esperando pago', color: 'text-warning', punto: 'bg-warning' },
-  recibido: { texto: 'Recibido', color: 'text-accent', punto: 'bg-accent' },
-  en_preparacion: { texto: 'En preparación', color: 'text-order-preparing', punto: 'bg-order-preparing' },
-  listo: { texto: 'Listo', color: 'text-order-ready', punto: 'bg-order-ready' },
-  enviado: { texto: 'Enviado', color: 'text-accent', punto: 'bg-accent' },
-  entregado: { texto: 'Entregado', color: 'text-order-delivered', punto: 'bg-order-delivered' },
-}
-
-const etiquetaPago: Record<EstadoPagoPantalla, string> = {
-  pendiente: 'Pago pendiente',
-  pendiente_verificacion: 'Transferencia a verificar',
-  pagado: 'Pagado',
-}
-
 const filtros = [
+  {
+    // Transferencias online esperando el comprobante: hay que aceptarlas para que pasen a Cocina.
+    valor: 'por_confirmar',
+    texto: 'Por confirmar',
+    incluye: (p: PedidoPantalla) => p.estado === 'pendiente_pago',
+  },
   {
     valor: 'por_entregar',
     texto: 'Por entregar',
@@ -96,14 +84,15 @@ const filtros = [
     // Efectivo a cobrar al entregar y transferencias sin confirmar.
     valor: 'pago_pendiente',
     texto: 'Pago pendiente',
-    incluye: (p: PedidoPantalla) => p.estadoPago !== 'pagado' && p.estado !== 'entregado',
+    incluye: (p: PedidoPantalla) => p.estadoPago !== 'pagado' && p.estado !== 'entregado' && p.estado !== 'cancelado',
   },
   { valor: 'entregados', texto: 'Entregados', incluye: (p: PedidoPantalla) => p.estado === 'entregado' },
+  { valor: 'cancelados', texto: 'Cancelados', incluye: (p: PedidoPantalla) => p.estado === 'cancelado' },
   { valor: 'todos', texto: 'Todos', incluye: () => true },
 ] as const
 
 // Solo llevan contador las pestañas que piden acción: si todas lo tienen, ninguno resalta.
-const filtrosConContador: readonly string[] = ['por_entregar', 'pago_pendiente']
+const filtrosConContador: readonly string[] = ['por_confirmar', 'por_entregar', 'pago_pendiente']
 
 type Filtro = (typeof filtros)[number]['valor']
 type FiltroEntrega = 'todas' | 'retiro' | 'delivery'
@@ -118,6 +107,8 @@ type AccionPrincipal = {
   icono: LucideIcon
   confirmacion: string
   ejecutar: () => Promise<ResultadoAccion>
+  // Entregar con efectivo por cobrar: pide el PIN de quien recibe la plata.
+  pideCobro?: boolean
 }
 
 // Decide el único botón principal de la tarjeta. `null` + `pista` cuando no hay nada
@@ -129,17 +120,19 @@ function accionPrincipal(
   const { idPedido, estado, tipoEntrega, estadoPago, metodoPago } = pedido
   const cobraAlEntregar = estadoPago !== 'pagado'
 
-  if (estado === 'entregado') return { accion: null, pista: '' }
+  if (estado === 'entregado' || estado === 'cancelado') return { accion: null, pista: '' }
+  // Efectivo online: se cobra al entregar. La transferencia sin confirmar se acepta antes.
+  const pideCobro = estadoPago === 'pendiente'
 
   if (estado === 'pendiente_pago') {
     return {
       accion: {
-        texto: 'Confirmar pago',
+        texto: 'Aceptar pedido',
         icono: Landmark,
-        confirmacion: `Pago del pedido #${idPedido} confirmado. Pasa a Cocina.`,
+        confirmacion: `Pedido #${idPedido} aceptado. Pasa a Cocina.`,
         ejecutar: () => acciones.confirmarPago(idPedido),
       },
-      pista: 'Verificá que la transferencia llegó antes de enviarlo a Cocina.',
+      pista: 'Aceptalo cuando te llegue el comprobante por WhatsApp.',
     }
   }
 
@@ -154,6 +147,7 @@ function accionPrincipal(
         icono: cobraAlEntregar ? Banknote : CheckCheck,
         confirmacion: `Pedido #${idPedido} entregado en mostrador.`,
         ejecutar: () => acciones.marcarEntregado(idPedido),
+        pideCobro,
       },
       pista: cobraAlEntregar ? `Cobrar ${formatoPrecio.format(pedido.total)} en ${metodoPago}.` : '',
     }
@@ -177,6 +171,7 @@ function accionPrincipal(
       icono: CheckCheck,
       confirmacion: `Pedido #${idPedido} entregado por delivery.`,
       ejecutar: () => acciones.marcarEntregado(idPedido),
+      pideCobro,
     },
     pista: cobraAlEntregar ? `El cadete cobra ${formatoPrecio.format(pedido.total)} en efectivo.` : '',
   }
@@ -247,7 +242,7 @@ function FormularioDelivery({
         <button
           type="submit"
           disabled={!valido || guardando}
-          className="cursor-pointer rounded-full bg-accent py-2 text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
+          className="cursor-pointer rounded-full bg-brand py-2 text-on-brand transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
         >
           {guardando ? 'Guardando…' : 'Guardar'}
         </button>
@@ -256,6 +251,9 @@ function FormularioDelivery({
     </form>
   )
 }
+
+const claseAccionSecundaria =
+  'inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs transition-colors hover:bg-bg disabled:cursor-not-allowed disabled:opacity-60'
 
 function TarjetaPedido({
   pedido,
@@ -266,6 +264,8 @@ function TarjetaPedido({
   onGuardarDelivery,
   onCancelarEdicion,
   onAccion,
+  onCancelarPedido,
+  onAgregarProductos,
   soloLectura,
 }: {
   pedido: PedidoPantalla
@@ -279,10 +279,9 @@ function TarjetaPedido({
   onGuardarDelivery: (datos: DatosDelivery) => void
   onCancelarEdicion: () => void
   onAccion: (accion: AccionPrincipal) => void
+  onCancelarPedido: () => void
+  onAgregarProductos: () => void
 }) {
-  const entrega = etiquetaEntrega[pedido.tipoEntrega]
-  const IconoEntrega = entrega.icono
-  const estado = estados[pedido.estado]
   const { accion, pista } = accionPrincipal(pedido, acciones)
   const sePuedeCambiarEntrega = puedeCambiarEntrega(pedido)
   const itemsVisibles = pedido.items.slice(0, 4)
@@ -296,27 +295,15 @@ function TarjetaPedido({
         <div className="min-w-0">
           <h3 className="truncate text-lg">{pedido.cliente}</h3>
           <p className="text-xs text-muted">
-            {cuandoSeCargo(pedido.fecha)} · {pedido.origen === 'online' ? 'Pedido online' : 'Cargado en caja'}
+            {cuandoSeCargo(pedido.fecha)} · {pedido.origen === 'online' ? 'Online' : 'Caja'}
           </p>
         </div>
         <span className="shrink-0 text-lg font-bold">#{pedido.idPedido}</span>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${entrega.clase}`}>
-          <IconoEntrega className="size-3.5" />
-          {entrega.texto}
-        </span>
-        <span className={`inline-flex items-center gap-1.5 text-xs ${estado.color}`}>
-          <span className={`size-1.5 rounded-full ${estado.punto}`} />
-          {estado.texto}
-        </span>
-        <span
-          className={`ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${pedido.estadoPago === 'pagado' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}
-        >
-          {pedido.metodoPago === 'efectivo' ? <Banknote className="size-3.5" /> : <Landmark className="size-3.5" />}
-          {etiquetaPago[pedido.estadoPago]}
-        </span>
+        <EtiquetaEntrega tipo={pedido.tipoEntrega} />
+        <EstadoPedidoTexto estado={pedido.estado} />
       </div>
 
       <ul className="flex flex-col gap-1.5 text-sm">
@@ -342,7 +329,7 @@ function TarjetaPedido({
 
       {pedido.aclaracion && (
         <p className="rounded-2xl bg-warning-surface px-3 py-2 text-sm break-words">
-          <span className="block text-xs text-warning">Aclaración para la cocina</span>
+          <span className="block text-xs text-muted">Aclaración para la cocina</span>
           {pedido.aclaracion}
         </p>
       )}
@@ -350,10 +337,19 @@ function TarjetaPedido({
       {/* Celular, dirección e indicaciones: solo para el personal (esta pantalla). */}
       {!editandoEntrega && <DatosEntrega pedido={pedido} />}
 
-      <div className="mt-auto flex flex-col gap-3 border-t border-border pt-4">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted">Total</span>
-          <span className="text-xl font-bold">{formatoPrecio.format(pedido.total)}</span>
+      <div className="mt-auto flex flex-col gap-4 border-t border-border pt-4">
+        {/* El total arriba a la derecha, grande; el pago va debajo, sin competir por el ancho. */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-sm text-muted">Total</span>
+            <span className="text-2xl font-bold tabular-nums">{formatoPrecio.format(pedido.total)}</span>
+          </div>
+          {/* Esperando el comprobante ya lo dice el estado. */}
+          {pedido.estado !== 'pendiente_pago' && (
+            <span className="self-start">
+              <EtiquetaPago estado={pedido.estadoPago} metodo={pedido.metodoPago} />
+            </span>
+          )}
         </div>
 
         {soloLectura ? null : accion ? (
@@ -361,7 +357,7 @@ function TarjetaPedido({
             type="button"
             onClick={() => onAccion(accion)}
             disabled={ocupado || editandoEntrega}
-            className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-accent py-3 text-sm text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand py-3 text-sm text-on-brand transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             <accion.icono className="size-4" />
             {accion.texto}
@@ -371,15 +367,19 @@ function TarjetaPedido({
             <CircleCheck className="size-4" />
             {pedido.tipoEntrega === 'delivery' ? 'Entregado por delivery' : 'Entregado en mostrador'}
           </p>
+        ) : pedido.estado === 'cancelado' ? (
+          <p className="inline-flex items-center justify-center gap-2 rounded-full bg-bg py-3 text-sm text-danger">
+            <X className="size-4" />
+            Pedido cancelado
+          </p>
         ) : (
-          <p className="inline-flex items-center justify-center gap-2 rounded-full bg-bg py-3 text-sm text-muted">
-            <ChefHat className="size-4" />
+          <p className="inline-flex items-center justify-center gap-2 rounded-full bg-bg px-4 py-3 text-center text-sm text-muted">
+            <ChefHat className="size-4 shrink-0" />
             {pista}
           </p>
         )}
 
-        {pedido.recargoDelivery > 0 && <p className="text-xs text-muted">Incluye recargo de envío: {formatoPrecio.format(pedido.recargoDelivery)}</p>}
-        {!soloLectura && accion && pista && <p className="-mt-1 text-center text-xs text-muted">{pista}</p>}
+        {!soloLectura && accion && pista && <p className="-mt-2 text-center text-xs text-muted">{pista}</p>}
 
         {soloLectura ? null : editandoEntrega ? (
           <FormularioDelivery
@@ -388,15 +388,28 @@ function TarjetaPedido({
             onGuardar={onGuardarDelivery}
             onCancelar={onCancelarEdicion}
           />
-        ) : sePuedeCambiarEntrega && (
-          <button
-            type="button"
-            onClick={onCambiarEntrega}
-            disabled={ocupado}
-            className="cursor-pointer self-center text-xs text-muted underline-offset-2 transition-colors hover:text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {pedido.tipoEntrega === 'retiro' ? 'Cambiar a delivery' : 'Cambiar a retiro en mostrador'}
-          </button>
+        ) : (sePuedeCambiarEntrega || puedeModificar(pedido) || puedeCancelar(pedido)) && (
+          // Acciones secundarias: botones chicos con borde e ícono, para que se vean como botones.
+          <div className="flex flex-wrap justify-center gap-2">
+            {puedeModificar(pedido) && (
+              <button type="button" onClick={onAgregarProductos} disabled={ocupado} className={claseAccionSecundaria}>
+                <Plus className="size-3.5" />
+                Agregar productos
+              </button>
+            )}
+            {sePuedeCambiarEntrega && (
+              <button type="button" onClick={onCambiarEntrega} disabled={ocupado} className={claseAccionSecundaria}>
+                {pedido.tipoEntrega === 'retiro' ? <Bike className="size-3.5" /> : <ShoppingBag className="size-3.5" />}
+                {pedido.tipoEntrega === 'retiro' ? 'Pasar a delivery' : 'Pasar a retiro'}
+              </button>
+            )}
+            {puedeCancelar(pedido) && (
+              <button type="button" onClick={onCancelarPedido} disabled={ocupado} className={claseAccionSecundaria + ' border-danger/40 text-danger hover:bg-danger/10'}>
+                <X className="size-3.5" />
+                Cancelar pedido
+              </button>
+            )}
+          </div>
         )}
       </div>
     </article>
@@ -425,6 +438,11 @@ export function GestionPedidos({ soloLectura }: { soloLectura: boolean }) {
   const [ocupados, setOcupados] = useState<ReadonlySet<number>>(new Set())
   // Pedido que muestra el formulario de "Cambiar a delivery".
   const [editandoEntrega, setEditandoEntrega] = useState<number | null>(null)
+  // Acción que espera el PIN de quien la hace: cobrar al entregar o cancelar.
+  const [pidiendoPin, setPidiendoPin] = useState<{ pedido: PedidoPantalla; tipo: 'cobro' | 'cancelar' } | null>(null)
+  const { caja, turno } = useTurnoCaja()
+  // Pedido al que se le están agregando productos.
+  const [agregandoA, setAgregandoA] = useState<PedidoPantalla | null>(null)
 
   // El aviso con "Deshacer" se oculta solo a los pocos segundos.
   useEffect(() => {
@@ -462,6 +480,10 @@ export function GestionPedidos({ soloLectura }: { soloLectura: boolean }) {
   }
 
   function ejecutar(pedido: PedidoPantalla, accion: AccionPrincipal) {
+    if (accion.pideCobro) {
+      setPidiendoPin({ pedido, tipo: 'cobro' })
+      return
+    }
     void correr(pedido.idPedido, accion.ejecutar, {
       texto: accion.confirmacion,
       deshacer: () => deshacerEstado(pedido.idPedido, pedido.estado),
@@ -510,7 +532,7 @@ export function GestionPedidos({ soloLectura }: { soloLectura: boolean }) {
         <h1 className="page-title">Pedidos</h1>
         <p className="mt-1 text-sm text-muted">
           {soloLectura
-            ? 'Seguí cada pedido de la sucursal. Los cargan y entregan supervisores y empleados.'
+            ? 'Seguimiento de los pedidos de la sucursal.'
             : 'Entregá, cobrá y seguí cada pedido de la sucursal.'}
         </p>
       </header>
@@ -538,7 +560,7 @@ export function GestionPedidos({ soloLectura }: { soloLectura: boolean }) {
                 >
                   {f.texto}
                   {filtrosConContador.includes(f.valor) && cantidad > 0 && (
-                    <span className="min-w-5 rounded-full bg-accent px-1.5 text-xs text-on-accent">
+                    <span className="min-w-5 rounded-full bg-brand px-1.5 text-xs text-on-brand">
                       {cantidad}
                     </span>
                   )}
@@ -592,12 +614,46 @@ export function GestionPedidos({ soloLectura }: { soloLectura: boolean }) {
               editandoEntrega={editandoEntrega === pedido.idPedido && pedido.tipoEntrega === 'retiro'}
               onAccion={(accion) => ejecutar(pedido, accion)}
               onCambiarEntrega={() => cambiarEntrega(pedido)}
+              onCancelarPedido={() => setPidiendoPin({ pedido, tipo: 'cancelar' })}
+              onAgregarProductos={() => setAgregandoA(pedido)}
               onGuardarDelivery={(datos) => void guardarDelivery(pedido, datos)}
               onCancelarEdicion={() => setEditandoEntrega(null)}
               soloLectura={soloLectura}
             />
           ))}
         </div>
+      )}
+
+      {agregandoA && (
+        <AgregarProductos
+          pedido={agregandoA}
+          onCerrar={() => setAgregandoA(null)}
+          onConfirmar={async (items, pin) => {
+            const resultado = await correr(agregandoA.idPedido, () => pedidosPantalla.agregarProductos(agregandoA.idPedido, items, pin))
+            return resultado.ok ? null : resultado.error
+          }}
+        />
+      )}
+
+      {pidiendoPin && (
+        <ModalPin
+          titulo={pidiendoPin.tipo === 'cobro' ? `Cobrar pedido #${pidiendoPin.pedido.idPedido}` : `Cancelar pedido #${pidiendoPin.pedido.idPedido}`}
+          descripcion={pidiendoPin.tipo === 'cobro' ? `Recibís ${formatoPrecio.format(pidiendoPin.pedido.total)} en efectivo.` : undefined}
+          textoBoton={pidiendoPin.tipo === 'cobro' ? 'Entregado y cobrado' : 'Cancelar pedido'}
+          pedirMotivo={pidiendoPin.tipo === 'cancelar'}
+          aviso={pidiendoPin.tipo === 'cobro' && !turno ? 'La caja está cerrada. Abrila desde Caja para registrar el cobro.' : undefined}
+          onCerrar={() => setPidiendoPin(null)}
+          onConfirmar={async (pin, motivo) => {
+            const { pedido, tipo } = pidiendoPin
+            const resultado = tipo === 'cobro'
+              ? await correr(pedido.idPedido, () => pedidosPantalla.marcarEntregado(pedido.idPedido, { pin, idCaja: caja!.idCaja }), {
+                  texto: `Pedido #${pedido.idPedido} entregado y cobrado.`,
+                  deshacer: () => deshacerEstado(pedido.idPedido, pedido.estado),
+                })
+              : await correr(pedido.idPedido, () => pedidosPantalla.cancelarPedido(pedido.idPedido, motivo, pin))
+            return resultado.ok ? null : resultado.error
+          }}
+        />
       )}
 
       {ultimaAccion && (

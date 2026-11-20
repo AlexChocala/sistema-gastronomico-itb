@@ -100,7 +100,7 @@ export function PedidoConfirmado({ pedido, slug, refTitulo }: {
               href={`${linkWhatsapp(sucursal.whatsapp)}?text=${textoWhatsapp}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-success px-5 py-3 font-medium text-on-accent transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success"
+              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-success px-5 py-3 font-medium text-on-brand transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success"
             >
               <IconoWhatsapp className="size-5" />
               Enviar comprobante por WhatsApp

@@ -43,7 +43,7 @@ export function AvatarNegocio({ nombre, logoUrl, tamano = 'grande' }: {
   return (
     <div
       aria-hidden="true"
-      className={`${clase} flex shrink-0 items-center justify-center rounded-full bg-accent font-bold text-on-accent shadow-sm ring-accent-soft`}
+      className={`${clase} flex shrink-0 items-center justify-center rounded-full bg-brand font-bold text-on-brand shadow-sm ring-accent-soft`}
     >
       {iniciales(nombre)}
     </div>
@@ -74,7 +74,7 @@ export function RedesNegocio({ negocio, fondo = 'bg-surface shadow-sm' }: {
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`${nombre} de ${negocio.nombre} (se abre en otra pestaña)`}
-            className={`flex size-11 items-center justify-center rounded-full ${fondo} text-text transition-colors hover:bg-accent hover:text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
+            className={`flex size-11 items-center justify-center rounded-full ${fondo} text-text transition-colors hover:bg-brand hover:text-on-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
           >
             <Icono className="size-5" />
           </a>

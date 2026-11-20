@@ -95,3 +95,5 @@ export default async function ConfiguracionInicialPage() {
     </PantallaConfiguracion>
   )
 }
+
+export const metadata = { title: 'Configuración inicial' }

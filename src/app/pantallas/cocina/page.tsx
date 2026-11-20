@@ -7,42 +7,38 @@
 // Al empezar un pedido (de Caja u online) se imprime su comanda para pegarla en la bolsa:
 // Cocina no depende del papel de Caja.
 // Se distingue de lejos: pendiente = tarjeta blanca y botón claro; en preparación =
-// tarjeta naranja suave y botón sólido.
+// borde de color y botón naranja sólido. Cada tarjeta muestra cuánto hace que se cargó el
+// pedido (y se marca si se demora), y los más viejos van primero.
 
 import { useEffect, useState } from 'react'
-import { Bike, CircleUserRound, Printer, ShoppingBag } from '@/components/icons'
+import { Clock, Printer, Volume2, VolumeOff } from '@/components/icons'
 import { EstadoConexion } from '@/components/pedidos/EstadoConexion'
+import { EstadoPedidoTexto, EtiquetaEntrega } from '@/components/pedidos/EtiquetasPedido'
+import { OpcionesItem } from '@/components/pedidos/OpcionesItem'
 import { ComandaCocina } from '@/components/pantallas/TicketsPedido'
 import { PastillaSucursal, useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import { puedeIrACocina, usePedidosPantalla, type PedidoPantalla } from '@/lib/pedidos/pedidos-pantallas'
-import { textoOpciones } from '@/lib/pedidos/pedidos-estados'
-
-const etiquetaEntrega = {
-  retiro: { texto: 'Para retirar', icono: ShoppingBag, clase: 'bg-accent-soft text-accent' },
-  delivery: { texto: 'Delivery', icono: Bike, clase: 'bg-warning-surface text-warning' },
-}
-
-// El estado se informa con una etiqueta; el verde queda para lo que ya está listo.
-const etiquetaEstado = {
-  nuevo: { texto: 'Nuevo', clasePunto: 'bg-muted', claseTexto: 'text-muted' },
-  enPreparacion: { texto: 'En preparación', clasePunto: 'bg-order-preparing', claseTexto: 'text-order-preparing' },
-}
+import { useAvisoPedidosNuevos } from '@/lib/pedidos/aviso-sonoro'
+import { LocalCerrado } from '@/components/caja/LocalCerrado'
+import { useLocalAbierto } from '@/lib/caja/turnos-cliente'
+import { colorEspera, esperaDe, useAhora } from '@/lib/pedidos/tiempo'
 
 function TarjetaPedido({
   pedido,
   onEmpezar,
   onListo,
   onImprimir,
+  ahora,
 }: {
   pedido: PedidoPantalla
   onEmpezar: () => Promise<{ ok: boolean }>
   onListo: () => Promise<{ ok: boolean }>
   onImprimir: () => void
+  ahora: number
 }) {
-  const entrega = etiquetaEntrega[pedido.tipoEntrega]
-  const IconoEntrega = entrega.icono
   const enPreparacion = pedido.estado === 'en_preparacion'
-  const estado = etiquetaEstado[enPreparacion ? 'enPreparacion' : 'nuevo']
+  // Cuenta desde que llegó a Cocina (una transferencia no cuenta la espera del comprobante).
+  const espera = pedido.fechaEnCocina ? esperaDe(pedido.fechaEnCocina, ahora) : null
   // Bloquea el botón hasta que responda el servidor: como queda en el mismo lugar,
   // un doble toque pasaría el pedido de "Nuevo" a "Listo" sin querer.
   const [enviando, setEnviando] = useState(false)
@@ -60,51 +56,54 @@ function TarjetaPedido({
 
   return (
     <article
-      className={`flex flex-col rounded-3xl border-2 p-5 shadow-sm ${
-        enPreparacion ? 'border-accent bg-accent-soft' : 'border-transparent bg-surface'
+      className={`flex flex-col rounded-3xl border-2 bg-surface p-5 shadow-sm ${
+        enPreparacion ? 'border-order-preparing' : 'border-transparent'
       }`}
     >
       <header className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <CircleUserRound className="size-6 shrink-0 text-order-ready" strokeWidth={1.75} />
-          <span className="truncate text-lg">{pedido.cliente}</span>
+        <span className="min-w-0 truncate text-lg">{pedido.cliente}</span>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={onImprimir}
+            aria-label="Imprimir ticket"
+            title="Imprimir ticket"
+            className="cursor-pointer rounded-full p-1.5 text-muted transition-colors hover:bg-bg hover:text-text"
+          >
+            <Printer className="size-5" />
+          </button>
+          <strong className="text-2xl font-bold">#{pedido.idPedido}</strong>
         </div>
-        <span className="shrink-0 text-lg">
-          Pedido <strong className="font-bold">#{pedido.idPedido}</strong>
-        </span>
       </header>
 
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm ${entrega.clase}`}>
-          <IconoEntrega className="size-4" strokeWidth={2} />
-          {entrega.texto}
-        </span>
-        <span className={`inline-flex items-center gap-1.5 text-sm ${estado.claseTexto}`}>
-          <span className={`size-2 rounded-full ${estado.clasePunto}`} />
-          {estado.texto}
-        </span>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <EtiquetaEntrega tipo={pedido.tipoEntrega} />
+        {espera && (
+          <span className={`inline-flex items-center gap-1.5 text-sm ${colorEspera(espera.minutos)}`}>
+            <Clock className="size-4" strokeWidth={2} />
+            {espera.texto}
+          </span>
+        )}
       </div>
+      {enPreparacion && <EstadoPedidoTexto estado={pedido.estado} className="mt-2" />}
 
       <ul className="mt-4 flex flex-1 flex-col gap-2 text-base">
         {/* Key por posición: el mismo producto puede venir con otras opciones. */}
-        {pedido.items.map((item, indice) => {
-          const opciones = textoOpciones(item.variacion, item.extras)
-          return (
-            <li key={indice} className="flex gap-2">
-              <span className="w-7 shrink-0 text-muted">{item.cantidad}x</span>
-              <span className="min-w-0">
-                {item.producto}
-                {opciones && <span className="block text-sm font-semibold break-words text-muted">{opciones}</span>}
-              </span>
-            </li>
-          )
-        })}
+        {pedido.items.map((item, indice) => (
+          <li key={indice} className="flex gap-2">
+            <span className="w-7 shrink-0 text-muted">{item.cantidad}x</span>
+            <div className="min-w-0">
+              {item.producto}
+              <OpcionesItem variacion={item.variacion} extras={item.extras} className="font-semibold" />
+            </div>
+          </li>
+        ))}
       </ul>
 
       {/* Instrucción para cocinar: destacada para que no se pase por alto. */}
       {pedido.aclaracion && (
         <p className="mt-4 rounded-2xl bg-warning-surface px-4 py-3 text-base font-semibold break-words">
-          <span className="block text-xs font-normal text-warning">Aclaración</span>
+          <span className="block text-xs font-normal text-muted">Aclaración</span>
           {pedido.aclaracion}
         </p>
       )}
@@ -116,19 +115,11 @@ function TarjetaPedido({
           disabled={enviando}
           className={`w-full cursor-pointer rounded-full py-3 font-semibold transition-colors disabled:cursor-wait disabled:opacity-60 ${
             enPreparacion
-              ? 'bg-accent text-on-accent hover:bg-accent-hover'
+              ? 'bg-brand text-on-brand hover:bg-brand-hover'
               : 'border-2 border-border bg-surface hover:bg-bg'
           }`}
         >
           {enPreparacion ? 'Pedido listo' : 'Empezar a preparar'}
-        </button>
-        <button
-          type="button"
-          onClick={onImprimir}
-          className="mt-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-full py-2 text-sm text-muted transition-colors hover:text-text"
-        >
-          <Printer className="size-4" />
-          Imprimir ticket
         </button>
       </div>
     </article>
@@ -137,6 +128,7 @@ function TarjetaPedido({
 
 export default function CocinaPage() {
   const { sucursal } = useSucursalActiva()
+  const ahora = useAhora()
   // Pedido cuya comanda se imprime: se renderiza oculto y recién ahí se abre el diálogo.
   const [paraImprimir, setParaImprimir] = useState<{ pedido: PedidoPantalla } | null>(null)
   useEffect(() => {
@@ -144,14 +136,27 @@ export default function CocinaPage() {
   }, [paraImprimir])
   const {
     pedidos, cargando, error, recargar, errorAccion, limpiarErrorAccion, marcarEnPreparacion, marcarListo,
-  } = usePedidosPantalla(sucursal?.idSucursal ?? null)
+  } = usePedidosPantalla(sucursal?.idSucursal ?? null, { segundoPlano: true })
 
   // Cocina solo ve lo que tiene que preparar (recibido / en preparación): las
   // transferencias sin confirmar no llegan, y enviado y entregado ya son de Pedidos.
-  // Primero los pendientes (los más viejos arriba), después los que ya están en preparación.
+  // Primero los pendientes, después los que ya están en preparación; en cada grupo, los
+  // que llevan más tiempo esperando van arriba.
   const pedidosActivos = pedidos.filter(puedeIrACocina)
-    .sort((a, b) => Number(a.estado === 'en_preparacion') - Number(b.estado === 'en_preparacion'))
+    .sort((a, b) =>
+      Number(a.estado === 'en_preparacion') - Number(b.estado === 'en_preparacion')
+      || new Date(a.fechaEnCocina ?? a.fecha).getTime() - new Date(b.fechaEnCocina ?? b.fecha).getTime())
+  // Suena cuando entra un pedido nuevo a Cocina.
+  const localAbierto = useLocalAbierto()
+  const { sonidoActivo, activar } = useAvisoPedidosNuevos(pedidosActivos.map((pedido) => pedido.idPedido), !cargando)
+  // Los que llevan más tiempo listos (sin que los retiren) van primero.
   const pedidosListos = pedidos.filter((pedido) => pedido.estado === 'listo')
+    .sort((a, b) => new Date(a.fechaListo ?? a.fecha).getTime() - new Date(b.fechaListo ?? b.fecha).getTime())
+
+  // Sin caja abierta y sin pedidos en curso, la pantalla descansa.
+  if (localAbierto === false && !cargando && pedidosActivos.length === 0 && pedidosListos.length === 0) {
+    return <LocalCerrado titulo="Cocina" />
+  }
 
   return (
     <>
@@ -167,6 +172,15 @@ export default function CocinaPage() {
               {pedidosActivos.length} {pedidosActivos.length === 1 ? 'pedido' : 'pedidos'} en curso
             </p>
           </div>
+          <button
+            type="button"
+            onClick={activar}
+            aria-label={sonidoActivo ? 'Sonido activado' : 'Activar sonido'}
+            title={sonidoActivo ? 'Sonido activado' : 'Activar sonido'}
+            className={`cursor-pointer rounded-full p-2.5 transition-colors hover:bg-surface ${sonidoActivo ? 'text-accent' : 'text-muted'}`}
+          >
+            {sonidoActivo ? <Volume2 className="size-6" /> : <VolumeOff className="size-6" />}
+          </button>
         </header>
 
         <EstadoConexion
@@ -181,11 +195,12 @@ export default function CocinaPage() {
         ) : pedidosActivos.length === 0 ? (
           <p className="rounded-3xl bg-surface p-10 text-center text-muted">No hay pedidos pendientes.</p>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] gap-5">
+          <div className="grid-cards [--card-min:18rem]">
             {pedidosActivos.map((pedido) => (
               <TarjetaPedido
                 key={pedido.idPedido}
                 pedido={pedido}
+                ahora={ahora}
                 onEmpezar={() => marcarEnPreparacion(pedido.idPedido)}
                 onListo={() => marcarListo(pedido.idPedido)}
                 onImprimir={() => setParaImprimir({ pedido })}
@@ -195,19 +210,23 @@ export default function CocinaPage() {
         )}
       </section>
 
-      <aside className="flex flex-col gap-4 rounded-3xl bg-surface p-5">
+      <aside className="flex flex-col gap-4 self-start rounded-3xl bg-surface p-5">
         <h2 className="text-xl font-semibold">Pedidos listos</h2>
         {pedidosListos.length === 0 ? (
           <p className="text-sm text-muted">Todavía no hay pedidos listos.</p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {pedidosListos.map((pedido) => (
-              <li key={pedido.idPedido} className="flex items-center gap-3 rounded-2xl bg-bg px-4 py-3">
-                <span className="size-2 shrink-0 rounded-full bg-order-ready" />
-                <span className="font-semibold">#{pedido.idPedido}</span>
-                <span className="truncate text-muted">{pedido.cliente}</span>
-              </li>
-            ))}
+            {pedidosListos.map((pedido) => {
+              const espera = pedido.fechaListo ? esperaDe(pedido.fechaListo, ahora) : null
+              return (
+                <li key={pedido.idPedido} className="flex items-center gap-3 rounded-2xl bg-bg px-4 py-3">
+                  <span className="size-2 shrink-0 rounded-full bg-order-ready" />
+                  <span className="font-semibold">#{pedido.idPedido}</span>
+                  <span className="min-w-0 flex-1 truncate text-muted">{pedido.cliente}</span>
+                  {espera && <span className={`shrink-0 text-xs ${colorEspera(espera.minutos)}`}>{espera.texto.replace('Hace ', '')}</span>}
+                </li>
+              )
+            })}
           </ul>
         )}
       </aside>

@@ -12,10 +12,10 @@ function PanelMarca() {
   return (
     <div
       aria-hidden="true"
-      className="relative flex h-full flex-col justify-center overflow-hidden rounded-3xl bg-accent p-10 text-on-accent"
+      className="relative flex h-full flex-col justify-center overflow-hidden rounded-3xl bg-brand p-10 text-on-brand"
     >
-      <span className="absolute -top-24 -right-24 size-80 rounded-full bg-on-accent/10" />
-      <span className="absolute -bottom-32 -left-20 size-96 rounded-full bg-on-accent/10" />
+      <span className="absolute -top-24 -right-24 size-80 rounded-full bg-on-brand/10" />
+      <span className="absolute -bottom-32 -left-20 size-96 rounded-full bg-on-brand/10" />
 
       <div className="relative flex flex-col gap-8">
         <div>
@@ -24,7 +24,7 @@ function PanelMarca() {
             <br />
             en un solo lugar.
           </p>
-          <p className="mt-3 max-w-sm text-sm text-on-accent/80">
+          <p className="mt-3 max-w-sm text-sm text-on-brand/80">
             Tomá pedidos, seguí la cocina en tiempo real y controlá las ventas de cada sucursal.
           </p>
         </div>

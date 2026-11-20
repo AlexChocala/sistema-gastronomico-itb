@@ -1,41 +1,38 @@
 'use client'
 
+// Selector Claro/Oscuro del encabezado de Configuración. Se aplica al instante: no
+// pasa por el botón Guardar del formulario del negocio.
+
 import { Moon, Sun } from '@/components/icons'
 import { useTema } from './ProveedorTema'
 
 const opciones = [
-  { valor: 'claro', texto: 'Claro', descripcion: 'Fondos claros y texto oscuro.', icono: Sun },
-  { valor: 'oscuro', texto: 'Oscuro', descripcion: 'Fondos oscuros y texto claro.', icono: Moon },
+  { valor: 'claro', texto: 'Claro', icono: Sun },
+  { valor: 'oscuro', texto: 'Oscuro', icono: Moon },
 ] as const
 
 export function ConfiguracionApariencia() {
   const { tema, elegirTema } = useTema()
 
   return (
-    <section aria-labelledby="titulo-apariencia" className="flex flex-col gap-5 rounded-3xl bg-surface p-6 shadow-sm">
-      <div>
-        <h2 id="titulo-apariencia" className="font-semibold">Apariencia</h2>
-        <p className="mt-1 text-sm text-muted">Elegí cómo ver el sistema. Tu elección se guarda en este navegador y se aplica a las pantallas del personal.</p>
-      </div>
-      <fieldset className="grid gap-3 sm:grid-cols-2">
-        <legend className="sr-only">Tema de la aplicación</legend>
-        {opciones.map(({ valor, texto, descripcion, icono: Icono }) => (
-          <label
-            key={valor}
-            className="flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-border p-4 transition-colors hover:border-accent/50 has-checked:border-accent has-checked:bg-accent-soft has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent"
-          >
-            <input
-              type="radio" name="tema" value={valor} checked={tema === valor}
-              onChange={() => elegirTema(valor)} className="sr-only"
-            />
-            <Icono className="size-6 shrink-0 text-accent" aria-hidden="true" />
-            <span className="flex flex-col gap-1">
-              <span className="text-sm font-semibold">{texto}</span>
-              <span className="text-xs text-muted">{descripcion}</span>
-            </span>
-          </label>
-        ))}
-      </fieldset>
-    </section>
+    <fieldset
+      title="Tu elección se guarda en este navegador y se aplica a las pantallas del personal."
+      className="flex shrink-0 gap-1 rounded-full border border-border bg-surface p-1"
+    >
+      <legend className="sr-only">Apariencia del sistema</legend>
+      {opciones.map(({ valor, texto, icono: Icono }) => (
+        <label
+          key={valor}
+          className="group flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-sm transition-colors hover:bg-accent-soft/60 has-checked:bg-brand has-checked:text-on-brand has-checked:hover:bg-brand has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent"
+        >
+          <input
+            type="radio" name="tema" value={valor} checked={tema === valor}
+            onChange={() => elegirTema(valor)} className="sr-only"
+          />
+          <Icono className="size-4 shrink-0 text-accent group-has-checked:text-on-brand" aria-hidden="true" />
+          {texto}
+        </label>
+      ))}
+    </fieldset>
   )
 }

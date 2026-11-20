@@ -46,7 +46,7 @@ const claseInput =
   'w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent'
 
 const claseBotonPrimario =
-  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-accent px-6 py-2.5 text-sm text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted'
+  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand px-6 py-2.5 text-sm text-on-brand transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted'
 
 const claseBotonSecundario =
   'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-border px-5 py-2.5 text-sm transition-colors hover:bg-bg disabled:cursor-not-allowed disabled:opacity-50'
@@ -182,6 +182,7 @@ export function ConfiguracionNegocioForm({ inicial, logoUrl: logoUrlInicial, tie
       const data = await subirImagen<RespuestaLogo>('/api/negocio/logo', archivo)
       setLogo({ logoUrl: data.negocio.logoUrl, tieneLogo: data.negocio.tieneLogo })
       setAvisoLogo('Logo guardado.')
+      router.refresh()
     } catch (e) {
       // Si falla, queda el logo anterior (el servidor no lo tocó).
       setErrorLogo(e instanceof Error ? e.message : 'No se pudo guardar el logo.')
@@ -200,6 +201,7 @@ export function ConfiguracionNegocioForm({ inicial, logoUrl: logoUrlInicial, tie
       const data = await quitarImagen<RespuestaLogo>('/api/negocio/logo')
       setLogo({ logoUrl: data.negocio.logoUrl, tieneLogo: data.negocio.tieneLogo })
       setAvisoLogo('Logo quitado.')
+      router.refresh()
     } catch (e) {
       setErrorLogo(e instanceof Error ? e.message : 'No se pudo quitar el logo.')
     } finally {
@@ -208,39 +210,12 @@ export function ConfiguracionNegocioForm({ inicial, logoUrl: logoUrlInicial, tie
   }
 
   return (
-    <form onSubmit={manejarSubmit} className="flex max-w-2xl flex-col gap-6">
+    <form onSubmit={manejarSubmit} className="grid gap-6 lg:grid-cols-2">
       <Seccion
         id="seccion-restaurante"
         titulo="Tu restaurante"
-        descripcion="El nombre y la descripción se muestran en el panel y en el menú digital que ven tus clientes."
+        descripcion="Así ven tu restaurante tus clientes en el menú digital."
       >
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between gap-3">
-            <label htmlFor="negocio-nombre" className="text-sm">Nombre del restaurante</label>
-            <Contador id="negocio-nombre-contador" actual={valores.nombre.length} maximo={MAX_NOMBRE_NEGOCIO} />
-          </div>
-          <input
-            id="negocio-nombre" value={valores.nombre} onChange={(e) => cambiar('nombre', e.target.value)}
-            required maxLength={MAX_NOMBRE_NEGOCIO} autoComplete="organization"
-            aria-describedby="negocio-nombre-contador"
-            className={claseInput}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between gap-3">
-            <label htmlFor="negocio-descripcion" className="text-sm">Descripción (opcional)</label>
-            <Contador id="negocio-descripcion-contador" actual={valores.descripcion.length} maximo={MAX_DESCRIPCION_NEGOCIO} />
-          </div>
-          <textarea
-            id="negocio-descripcion" value={valores.descripcion} onChange={(e) => cambiar('descripcion', e.target.value)}
-            maxLength={MAX_DESCRIPCION_NEGOCIO} rows={2} placeholder="Ej: Parrilla y algo más"
-            aria-describedby="negocio-descripcion-contador"
-            className="w-full resize-none rounded-2xl border border-border bg-surface px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent"
-          />
-        </div>
-      </Seccion>
-
-      <Seccion id="seccion-logo" titulo="Logo" descripcion="Solo se muestra en el menú digital para tus clientes.">
         <div className="flex flex-wrap items-center gap-4">
           {previaLogo || logo.logoUrl ? (
             // URL del bucket o vista previa local: no pasan por next/image.
@@ -254,7 +229,7 @@ export function ConfiguracionNegocioForm({ inicial, logoUrl: logoUrlInicial, tie
             <span
               aria-label="Sin logo: se muestran las iniciales del restaurante"
               role="img"
-              className="flex size-20 shrink-0 items-center justify-center rounded-full bg-accent text-2xl font-bold text-on-accent ring-4 ring-accent-soft"
+              className="flex size-20 shrink-0 items-center justify-center rounded-full bg-brand text-2xl font-bold text-on-brand ring-4 ring-accent-soft"
             >
               {iniciales(valores.nombre)}
             </span>
@@ -283,30 +258,36 @@ export function ConfiguracionNegocioForm({ inicial, logoUrl: logoUrlInicial, tie
               )}
             </div>
             <p id="logo-ayuda" className="text-xs text-muted">
-              {TEXTO_FORMATOS_IMAGEN}. Se ve redondo: usá una imagen cuadrada.
+              {TEXTO_FORMATOS_IMAGEN}
               {!logo.tieneLogo && ' Sin logo se muestran las iniciales.'}
             </p>
             {errorLogo && <p role="alert" className="text-xs text-danger">{errorLogo}</p>}
           </div>
         </div>
-      </Seccion>
-
-      <Seccion
-        id="seccion-redes"
-        titulo="Redes sociales"
-        descripcion="Solo aparecen en el menú digital las redes que cargues."
-      >
-        {redes.map((red) => (
-          <div key={red} className="flex flex-col gap-1.5">
-            <label htmlFor={`negocio-${red}`} className="text-sm">{REDES_SOCIALES[red].etiqueta} (opcional)</label>
-            <input
-              id={`negocio-${red}`} value={valores[red]} onChange={(e) => cambiar(red, e.target.value)}
-              type="text" inputMode="url" autoComplete="url" spellCheck={false}
-              maxLength={MAX_LINK_RED_SOCIAL} placeholder={REDES_SOCIALES[red].ejemplo}
-              className={claseInput}
-            />
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor="negocio-nombre" className="text-sm">Nombre del restaurante</label>
+            <Contador id="negocio-nombre-contador" actual={valores.nombre.length} maximo={MAX_NOMBRE_NEGOCIO} />
           </div>
-        ))}
+          <input
+            id="negocio-nombre" value={valores.nombre} onChange={(e) => cambiar('nombre', e.target.value)}
+            required maxLength={MAX_NOMBRE_NEGOCIO} autoComplete="organization"
+            aria-describedby="negocio-nombre-contador"
+            className={claseInput}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor="negocio-descripcion" className="text-sm">Descripción (opcional)</label>
+            <Contador id="negocio-descripcion-contador" actual={valores.descripcion.length} maximo={MAX_DESCRIPCION_NEGOCIO} />
+          </div>
+          <textarea
+            id="negocio-descripcion" value={valores.descripcion} onChange={(e) => cambiar('descripcion', e.target.value)}
+            maxLength={MAX_DESCRIPCION_NEGOCIO} rows={2} placeholder="Ej: Parrilla y algo más"
+            aria-describedby="negocio-descripcion-contador"
+            className="w-full resize-none rounded-2xl border border-border bg-surface px-4 py-2.5 text-sm outline-none transition-colors focus:border-accent"
+          />
+        </div>
       </Seccion>
 
       <Seccion
@@ -347,22 +328,47 @@ export function ConfiguracionNegocioForm({ inicial, logoUrl: logoUrlInicial, tie
           </div>
         </div>
         <p className="text-xs text-muted">
-          Hacen falta los tres datos. El CUIT/CUIL le permite al cliente comprobar que el titular que le muestra su banco es el correcto.
+          Hacen falta los tres datos. El CUIT/CUIL permite al cliente verificar al titular.
         </p>
       </Seccion>
 
-      {avisoLogo && <AvisoFlotante mensaje={avisoLogo} onCerrar={() => setAvisoLogo('')} />}
-      {error && <AvisoError>{error}</AvisoError>}
-      {exito && (
-        <p role="status" className="inline-flex items-center gap-2 rounded-2xl bg-success/10 px-4 py-3 text-sm text-success">
-          <CircleCheck className="size-4" />
-          {exito}
-        </p>
-      )}
+      <div className="lg:col-span-2">
+        <Seccion
+          id="seccion-redes"
+          titulo="Redes sociales"
+          descripcion="Solo aparecen en el menú digital las redes que cargues."
+        >
+          <div className="grid gap-4 md:grid-cols-3">
+            {redes.map((red) => (
+              <div key={red} className="flex flex-col gap-1.5">
+                <label htmlFor={`negocio-${red}`} className="text-sm">{REDES_SOCIALES[red].etiqueta} (opcional)</label>
+                <input
+                  id={`negocio-${red}`} value={valores[red]} onChange={(e) => cambiar(red, e.target.value)}
+                  type="text" inputMode="url" autoComplete="url" spellCheck={false}
+                  maxLength={MAX_LINK_RED_SOCIAL} placeholder={REDES_SOCIALES[red].ejemplo}
+                  className={claseInput}
+                />
+              </div>
+            ))}
+          </div>
+        </Seccion>
+      </div>
 
-      <button type="submit" disabled={guardando || quitandoLogo} className={`${claseBotonPrimario} self-start`}>
-        {guardando ? 'Guardando...' : 'Guardar cambios'}
-      </button>
+      {avisoLogo && <AvisoFlotante mensaje={avisoLogo} onCerrar={() => setAvisoLogo('')} />}
+
+      {/* Barra fija: Guardar siempre a la vista sin recorrer todo el formulario. */}
+      <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-end gap-3 lg:col-span-2">
+        {error && <div className="min-w-0 flex-1 rounded-2xl bg-surface shadow-lg"><AvisoError>{error}</AvisoError></div>}
+        {exito && (
+          <p role="status" className="inline-flex items-center gap-2 rounded-full bg-surface px-4 py-2.5 text-sm text-success shadow-lg ring-1 ring-border">
+            <CircleCheck className="size-4" />
+            {exito}
+          </p>
+        )}
+        <button type="submit" disabled={guardando || quitandoLogo} className={`${claseBotonPrimario} shadow-lg`}>
+          {guardando ? 'Guardando...' : 'Guardar cambios'}
+        </button>
+      </div>
     </form>
   )
 }

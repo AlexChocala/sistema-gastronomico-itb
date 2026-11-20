@@ -14,7 +14,8 @@ export function MapaDemanda({ demanda }: { demanda: DemandaEsperada[] }) {
   const promedios = new Map(demanda.map((d) => [`${d.diaSemana}-${d.hora}`, d.promedioPedidos]))
 
   return (
-    <div className="overflow-x-auto">
+    <div className="flex flex-col gap-3 overflow-x-auto">
+      <p className="text-sm text-muted">Pedidos promedio por día y hora. Cuanto más intenso el color, más pedidos.</p>
       <table className="text-xs">
         <caption className="sr-only">Promedio de pedidos por día de la semana y hora</caption>
         <thead>
@@ -36,7 +37,7 @@ export function MapaDemanda({ demanda }: { demanda: DemandaEsperada[] }) {
                   <td key={hora} className="p-0.5">
                     <div
                       title={`${DIAS_SEMANA[dia]} ${hora} h: ${formatear(promedio, 'numero')} pedidos en promedio`}
-                      className={`grid h-9 min-w-10 place-items-center rounded-md tabular-nums ${intensidad > 55 ? 'text-on-accent' : 'text-text'}`}
+                      className={`grid h-9 min-w-10 place-items-center rounded-md tabular-nums ${intensidad > 55 ? 'text-on-brand' : 'text-text'}`}
                       style={{ backgroundColor: `color-mix(in srgb, var(--accent) ${intensidad}%, var(--surface-muted))` }}
                     >
                       {promedio > 0 && formatear(promedio, 'numero')}

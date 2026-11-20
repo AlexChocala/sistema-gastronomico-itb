@@ -17,17 +17,19 @@
 //   marcarEnviado        listo → enviado (solo delivery)
 //   marcarEntregado      listo (retiro) | enviado (delivery) → entregado, y queda pagado
 //                        (entregar cobra el efectivo pendiente)
+//   cancelar             pendiente_pago | recibido → cancelado (solo antes de "En preparación";
+//                        lo hace el local, con motivo y PIN). Un pedido cancelado no se toca más.
 //   deshacer             vuelve UN paso atrás: solo al estado desde el que una de las
 //                        acciones de arriba lleva exactamente al estado actual.
 
-export type EstadoPedido = 'pendiente_pago' | 'recibido' | 'en_preparacion' | 'listo' | 'enviado' | 'entregado'
+export type EstadoPedido = 'pendiente_pago' | 'recibido' | 'en_preparacion' | 'listo' | 'enviado' | 'entregado' | 'cancelado'
 export type EstadoPago = 'pendiente' | 'pendiente_verificacion' | 'pagado'
 export type MetodoPago = 'efectivo' | 'transferencia'
 export type TipoEntrega = 'retiro' | 'delivery'
 export type OrigenPedido = 'mostrador' | 'online'
 
 export const ESTADOS_PEDIDO: readonly EstadoPedido[] = [
-  'pendiente_pago', 'recibido', 'en_preparacion', 'listo', 'enviado', 'entregado',
+  'pendiente_pago', 'recibido', 'en_preparacion', 'listo', 'enviado', 'entregado', 'cancelado',
 ]
 
 export type AccionEstado = 'confirmarPago' | 'marcarEnPreparacion' | 'marcarListo' | 'marcarEnviado' | 'marcarEntregado'
@@ -70,6 +72,9 @@ export interface PedidoPantalla extends PedidoTransicion {
   idPedido: number
   idSucursal: number
   fecha: string // ISO
+  // Cuándo llegó a Cocina y cuándo se marcó listo (ISO). Null si todavía no, o si es un pedido anterior.
+  fechaEnCocina: string | null
+  fechaListo: string | null
   cliente: string
   // Null en los pedidos de Caja para retirar (ahí no se pide).
   telefono: string | null
@@ -84,6 +89,9 @@ export interface PedidoPantalla extends PedidoTransicion {
   subtotal: number
   recargoDelivery: number
   total: number
+  // Lo cobrado hasta ahora, por método (puede ser más de uno: pago dividido). Vacío si todavía
+  // no se cobró nada.
+  pagos: { metodo: MetodoPago; monto: number }[]
 }
 
 // Lo único que ve el monitor público de Pedidos Mostrador: número, nombre de pila y estado.
@@ -109,7 +117,22 @@ export function puedeIrACocina(pedido: Pick<PedidoTransicion, 'estado'>) {
 
 // El tipo de entrega se puede cambiar solo antes de que el pedido salga.
 export function puedeCambiarEntrega(pedido: Pick<PedidoTransicion, 'estado'>) {
-  return pedido.estado !== 'enviado' && pedido.estado !== 'entregado'
+  return pedido.estado !== 'enviado' && pedido.estado !== 'entregado' && pedido.estado !== 'cancelado'
+}
+
+// Un pedido se puede cancelar solo antes de que empiece a prepararse.
+export function puedeCancelar(pedido: Pick<PedidoTransicion, 'estado'>) {
+  return pedido.estado === 'pendiente_pago' || pedido.estado === 'recibido'
+}
+
+// Se pueden agregar productos mientras no esté en preparación. Con transferencia, solo hasta
+// que se confirme el pago (después el importe cobrado dejaría de coincidir: se cancela y se
+// carga uno nuevo). El efectivo online se cobra al entregar, así que no tiene ese límite.
+// Los pedidos de Caja ya están cobrados: no se modifican.
+export function puedeModificar(pedido: Pick<PedidoTransicion, 'origen' | 'metodoPago' | 'estado'>) {
+  if (pedido.origen !== 'online') return false
+  if (pedido.metodoPago === 'transferencia') return pedido.estado === 'pendiente_pago'
+  return pedido.estado === 'recibido'
 }
 
 // Estados que resultan de aplicar `accion`, o null si no corresponde desde el estado actual.

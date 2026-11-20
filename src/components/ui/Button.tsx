@@ -6,7 +6,7 @@
 
 import type { ButtonHTMLAttributes } from 'react'
 
-type VarianteBoton = 'primario' | 'secundario' | 'acento'
+type VarianteBoton = 'secundario' | 'acento'
 // 'grande': botones principales del menú digital (mínimo 48px de alto, cómodo en celular).
 type TamanoBoton = 'normal' | 'grande'
 
@@ -16,9 +16,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const estilosPorVariante: Record<VarianteBoton, string> = {
-  primario: 'bg-primary text-on-primary hover:bg-primary-hover focus-visible:outline-primary',
-  secundario: 'bg-surface-muted text-text hover:bg-border focus-visible:outline-primary',
-  acento: 'bg-accent text-on-accent hover:bg-accent-hover focus-visible:outline-accent',
+  secundario: 'bg-surface-muted text-text hover:bg-border focus-visible:outline-accent',
+  acento: 'bg-brand text-on-brand hover:bg-brand-hover focus-visible:outline-accent',
 }
 
 const estilosPorTamano: Record<TamanoBoton, string> = {
@@ -26,12 +25,12 @@ const estilosPorTamano: Record<TamanoBoton, string> = {
   grande: 'min-h-12 rounded-xl px-5 py-3 text-base',
 }
 
-export function estilosBoton({ variant = 'primario', tamano = 'normal' }: { variant?: VarianteBoton; tamano?: TamanoBoton } = {}) {
+export function estilosBoton({ variant = 'acento', tamano = 'normal' }: { variant?: VarianteBoton; tamano?: TamanoBoton } = {}) {
   const estilosBase =
     'inline-flex w-full items-center justify-center gap-2 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2'
   return `${estilosBase} ${estilosPorVariante[variant]} ${estilosPorTamano[tamano]}`
 }
 
-export function Button({ variant = 'primario', tamano = 'normal', className = '', ...props }: ButtonProps) {
+export function Button({ variant = 'acento', tamano = 'normal', className = '', ...props }: ButtonProps) {
   return <button className={`${estilosBoton({ variant, tamano })} ${className}`} {...props} />
 }

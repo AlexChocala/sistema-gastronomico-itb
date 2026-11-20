@@ -4,6 +4,9 @@ import type { PrismaClient } from '@prisma/client'
 import { crearControladorPedidosInternos } from '../src/lib/pedidos/pedidos-internos'
 import { crearControladorPedidosOnline } from '../src/lib/pedidos/pedidos-online'
 
+// El PIN se guarda con una clave del servidor: las pruebas usan una propia.
+process.env.NEXTAUTH_SECRET ??= 'clave-de-prueba'
+
 function escenario() {
   const momento = new Date('2026-10-23T23:00:00Z')
   const estado = {
@@ -15,11 +18,13 @@ function escenario() {
     idPedido: 50, idSucursal: 1, idCliente: 1, idTipoEntrega: 1, fecha: momento, origenPedido: 'mostrador',
     estadoPedido: 'recibido', estadoPago: 'pagado', metodoPago: 'efectivo', direccion: null,
     referencias: null, aclaracion: null, subtotal: 1000, recargoDelivery: 0, total: 1000, idLocalidad: null,
-    cliente: { nombre: 'Mesa 4', apellido: null, telefono: null }, tipoEntrega: { nombre: 'retiro' }, localidad: null, detalles: [],
+    cliente: { nombre: 'Mesa 4', apellido: null, telefono: null }, tipoEntrega: { nombre: 'retiro' }, localidad: null, detalles: [], pagos: [],
   }
   const doble = {
-    usuario: { findUnique: async () => ({ activo: estado.activo, debeCambiarContrasena: estado.cambiarContrasena, idSucursal: estado.dentro && estado.sucursalAlGuardar ? estado.sucursalAlGuardar : estado.sucursal, rol: { nombre: estado.dentro && estado.rolAlGuardar ? estado.rolAlGuardar : estado.rol } }) },
-    sucursal: { findUnique: async () => ({ idSucursal: 1, activa: true, ofreceRetiro: true, ofreceDelivery: true, localidadesDelivery: [], slug: 'avellaneda' }) },
+    usuario: { findFirst: async () => ({ idUsuario: 2 }), update: async () => ({ pinIntentosFallidos: 0 }), findUnique: async () => ({ activo: estado.activo, debeCambiarContrasena: estado.cambiarContrasena, idSucursal: estado.dentro && estado.sucursalAlGuardar ? estado.sucursalAlGuardar : estado.sucursal, rol: { nombre: estado.dentro && estado.rolAlGuardar ? estado.rolAlGuardar : estado.rol } }) },
+    sucursal: { findUnique: async () => ({ idSucursal: 1, activa: true, ofreceRetiro: true, ofreceDelivery: true, localidadesDelivery: [], slug: 'avellaneda', pausaPedidosOnline: false, horarios: [] }) },
+    // Caja con turno abierto y un PIN que pertenece a la persona de la sesión.
+    turnoCaja: { findFirst: async () => ({ idTurno: 1, montoInicial: 0 }) },
     negocio: { findUnique: async () => null },
     producto: { findMany: async () => [{ idProducto: 1, nombre: 'Hamburguesa', precio: 1000, activo: true, categoria: { activa: true }, sucursales: [{ disponible: true }], variaciones: [], extras: [] }] },
     tipoEntrega: { findUnique: async () => ({ idTipoEntrega: 1 }) },
@@ -43,7 +48,7 @@ function escenario() {
   const controlador = crearControladorPedidosInternos(db, async () => estado.sesion ? { user: { idUsuario: 2, rol: 'supervisor' } } : null, async () => estado.sucursal)
   return { estado, controlador, db }
 }
-const cuerpo = { cliente: { nombre: 'Mesa 4' }, tipoEntrega: 'retiro', metodoPago: 'efectivo', items: [{ idProducto: 1, cantidad: 1 }] }
+const cuerpo = { cliente: { nombre: 'Mesa 4' }, tipoEntrega: 'retiro', metodoPago: 'efectivo', items: [{ idProducto: 1, cantidad: 1 }], idCaja: 1, pin: '1234' }
 function request(datos: unknown = cuerpo, method = 'POST') {
   return new Request('http://localhost:3000/api/pedidos/caja', { method, headers: { origin: 'http://localhost:3000', 'content-type': 'application/json' }, body: JSON.stringify(datos) })
 }
@@ -92,7 +97,7 @@ test('Caja no acepta un autor enviado por el navegador', async () => {
 test('un pedido de la carta conserva el autor vacío', async () => {
   const e = escenario()
   const controlador = crearControladorPedidosOnline(e.db)
-  const respuesta = await controlador.crear(request({ ...cuerpo, slugSucursal: 'avellaneda', cliente: { nombre: 'Juan', telefono: '1123456789' } }))
+  const respuesta = await controlador.crear(request({ ...cuerpo, idCaja: undefined, pin: undefined, slugSucursal: 'avellaneda', cliente: { nombre: 'Juan', telefono: '1123456789' } }))
   assert.equal(respuesta.status, 201)
   assert.equal(e.estado.pedidos, 1)
   assert.equal(e.estado.autor, null)

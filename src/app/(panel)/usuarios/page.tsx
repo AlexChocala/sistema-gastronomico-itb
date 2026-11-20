@@ -47,7 +47,7 @@ const claseCampo =
 const claseBotonSecundario =
   'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-border bg-surface px-4 py-2.5 text-sm transition-colors hover:bg-bg'
 const claseBotonAcento =
-  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm text-on-accent transition-colors hover:bg-accent-hover'
+  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm text-on-brand transition-colors hover:bg-brand-hover'
 const claseBotonIcono =
   'flex size-9 cursor-pointer items-center justify-center rounded-full transition-colors'
 type Vista = 'activos' | 'archivados'
@@ -501,7 +501,7 @@ export default function UsuariosPage() {
                 textoVacio="Todos los roles"
               />
             </div>
-            <div className="w-56">
+            <div className="w-64">
               <Desplegable
                 etiqueta="Sucursal"
                 icono={Store}
@@ -516,7 +516,7 @@ export default function UsuariosPage() {
                 textoVacio="Todas las sucursales"
               />
             </div>
-            <div className="w-56">
+            <div className="w-64">
               <Desplegable
                 etiqueta="Orden"
                 icono={ArrowUpDown}
@@ -531,10 +531,13 @@ export default function UsuariosPage() {
       </div>
 
       <section className="flex flex-col gap-3">
-        <p className="text-sm text-muted">
-          <span className="font-medium text-text">{usuariosVisibles.length}</span>{' '}
-          {usuariosVisibles.length === 1 ? 'usuario' : 'usuarios'}{vista === 'archivados' && (usuariosVisibles.length === 1 ? ' archivado' : ' archivados')}
-        </p>
+        {/* Sin filtros el total ya está en la pestaña; con filtros se cuenta lo que coincide. */}
+        {hayFiltros && (
+          <p className="text-sm text-muted">
+            <span className="font-medium text-text">{usuariosVisibles.length}</span>{' '}
+            {usuariosVisibles.length === 1 ? 'usuario' : 'usuarios'}
+          </p>
+        )}
 
         {usuariosVisibles.length === 0 ? (
           vista === 'archivados' && !hayFiltros ? (
@@ -554,25 +557,24 @@ export default function UsuariosPage() {
           )
         ) : (
           <div className="overflow-x-auto rounded-3xl bg-surface p-2 shadow-sm">
-            <table className="w-full min-w-[44rem] text-center text-sm">
+            <table className="w-full min-w-[44rem] text-left text-sm">
               <thead>
                 <tr className="text-xs text-muted">
                   <th className="w-20 px-4 py-3 font-medium" scope="col">Perfil</th>
                   <th className="px-4 py-3 font-medium">Usuario</th>
                   <th className="px-4 py-3 font-medium">Rol</th>
                   <th className="px-4 py-3 font-medium">Sucursal</th>
-                  <th className="px-4 py-3 font-medium">Estado</th>
-                  {esAdmin && <th className="px-4 py-3 text-center font-medium">Acciones</th>}
+                  {esAdmin && <th className="px-4 py-3 text-right font-medium">Acciones</th>}
                 </tr>
               </thead>
               <tbody>
                 {usuariosVisibles.map((u) => (
                   <tr
                     key={u.idUsuario}
-                    className={`border-t border-bg transition-colors ${u.idUsuario === idUsuarioSesion ? 'bg-surface-muted' : 'hover:bg-surface-muted/60 [html[data-tema=oscuro]_&]:hover:bg-bg/60'} ${u.activo ? '' : 'text-muted'}`}
+                    className={`border-t border-bg transition-colors hover:bg-surface-muted/60 [html[data-tema=oscuro]_&]:hover:bg-bg/60 ${u.activo ? '' : 'text-muted'}`}
                   >
                     <td className="w-20 px-4 py-3">
-                      <div className="flex justify-center">
+                      <div className="flex justify-start">
                         {u.fotoPerfilUrl ? (
                           // URL del bucket: no pasa por next/image.
                           // eslint-disable-next-line @next/next/no-img-element
@@ -591,7 +593,7 @@ export default function UsuariosPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="mx-auto w-full max-w-xs text-center">
+                      <div className="w-full max-w-xs">
                         <p className="truncate font-medium">{u.nombre} {u.apellido}</p>
                         <p className="truncate text-xs text-muted">{u.email}</p>
                       </div>
@@ -609,15 +611,9 @@ export default function UsuariosPage() {
                         <span className="text-muted">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1.5 text-xs ${u.activo ? 'text-success' : 'text-muted'}`}>
-                        <span className={`size-1.5 rounded-full ${u.activo ? 'bg-success' : 'bg-muted'}`} />
-                        {u.activo ? 'Activo' : 'Archivado'}
-                      </span>
-                    </td>
                     {esAdmin && vista === 'archivados' && (
                       <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => reactivarUsuario(u)}
@@ -632,7 +628,7 @@ export default function UsuariosPage() {
                     )}
                     {esAdmin && vista === 'activos' && (
                       <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-1">
+                        <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
                             onClick={() => abrirEditar(u)}
@@ -659,7 +655,7 @@ export default function UsuariosPage() {
                             onClick={() => archivarUsuario(u)}
                             aria-label={`Archivar ${u.nombre} ${u.apellido}`}
                             title="Archivar"
-                            className={`${claseBotonIcono} text-danger hover:bg-danger/10`}
+                            className={`${claseBotonIcono} text-muted hover:bg-danger/10 hover:text-danger`}
                           >
                             <Power className="size-4" />
                           </button>
@@ -677,7 +673,7 @@ export default function UsuariosPage() {
       {mostrarForm && esAdmin && (
         // El scroll va en el fondo y no en el formulario: así la lista de un desplegable
         // puede salir del recuadro sin quedar recortada. `m-auto` centra sin cortar arriba.
-        <div className="fixed inset-0 z-50 flex overflow-y-auto bg-overlay/40 p-4">
+        <div className="fixed inset-0 z-50 flex overflow-y-auto bg-overlay p-4">
           <form
             onSubmit={handleSubmit}
             role="dialog"
@@ -780,7 +776,7 @@ export default function UsuariosPage() {
       )}
 
       {confirmarRestablecer && esAdmin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4">
           <div
             role="alertdialog"
             aria-modal="true"

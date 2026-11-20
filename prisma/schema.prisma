@@ -75,6 +75,8 @@ model Sucursal {
   radioDeliveryKm Float?
   recargoFueraRadio Float?
   radioMaximoKm   Float?
+  // El local puede pausar los pedidos online a mano, aunque esté dentro del horario.
+  pausaPedidosOnline Boolean @default(false)
   // latitud/longitud: ubicación del local (Georef). Se usa para listar las localidades
   // cercanas al configurar el delivery y para sugerir direcciones al cliente.
   latitud         Float?
@@ -88,6 +90,9 @@ model Sucursal {
   pedidos            Pedido[]
   localidadesDelivery SucursalLocalidad[]
   slugsAnteriores     SlugAnterior[]
+  cajas               Caja[]
+  horarios            HorarioSucursal[]
+  accesosPantalla     AccesoPantalla[]
 }
 
 // Zonas de delivery: a qué localidades entrega cada sucursal y cuánto cobra el envío en
@@ -120,7 +125,24 @@ model Usuario {
   idSucursal Int?
   sucursal   Sucursal? @relation(fields: [idSucursal], references: [idSucursal])
 
+  // PIN de 4 dígitos para cobrar en Caja y en "Entregado y cobrado". No se guarda el PIN: se
+  // guarda su HMAC (con una clave del servidor), que es igual para el mismo PIN. Así se puede
+  // exigir que dos personas no tengan el mismo y buscar a quién pertenece un PIN al cobrar.
+  // Null = todavía no eligió PIN.
+  pinClave String? @unique
+  // Bloqueo por intentos fallidos, guardado en la base para que valga en todas las
+  // instancias. El login lleva su cuenta; los PIN equivocados se cuentan sobre la persona
+  // que tiene la sesión abierta en Caja (no se sabe de quién era el PIN que se probó).
+  intentosFallidos    Int       @default(0)
+  bloqueadoHasta      DateTime?
+  pinIntentosFallidos Int       @default(0)
+  pinBloqueadoHasta   DateTime?
+
   pedidosCargados   Pedido[]
+  turnosAbiertos    TurnoCaja[]    @relation("TurnoApertura")
+  turnosCerrados    TurnoCaja[]    @relation("TurnoCierre")
+  pagosCobrados     Pago[]
+  eventosPedido     EventoPedido[]
 }
 
 model Categoria {
@@ -237,6 +259,12 @@ model Pedido {
   idPedido Int      @id @default(autoincrement())
   fecha    DateTime @default(now())
 
+  // Cuándo llegó a Cocina (estado "recibido"). Una transferencia no cuenta hasta que se
+  // confirma el pago. Null en pedidos que todavía no llegaron o que se cargaron antes.
+  fechaEnCocina DateTime?
+  // Cuándo se marcó "listo". Null si todavía no está listo.
+  fechaListo    DateTime?
+
   origenPedido String
   estadoPedido String
   metodoPago   String
@@ -272,7 +300,8 @@ model Pedido {
   descuento   Descuento? @relation(fields: [idDescuento], references: [idDescuento])
 
   detalles  DetallePedido[]
-
+  pagos     Pago[]
+  eventos   EventoPedido[]
 }
 
 model DetallePedido {
@@ -342,6 +371,130 @@ model SlugAnterior {
   creadoEn   DateTime @default(now())
 
   sucursal Sucursal @relation(fields: [idSucursal], references: [idSucursal])
+
+  @@index([idSucursal])
+}
+
+// ---- Caja, pagos y registro de acciones ----
+
+// Puesto de cobro de una sucursal. Un local chico tiene una; uno grande, varias a la vez.
+model Caja {
+  idCaja     Int     @id @default(autoincrement())
+  nombre     String
+  activa     Boolean @default(true)
+
+  idSucursal Int
+  sucursal   Sucursal @relation(fields: [idSucursal], references: [idSucursal])
+
+  turnos TurnoCaja[]
+
+  @@unique([idSucursal, nombre])
+}
+
+// Un turno va de la apertura al cierre de una caja (no es por día: puede haber dos en el
+// mismo día). El responsable es quien abrió. Una caja tiene a lo sumo un turno abierto
+// (la migración lo asegura con un índice único parcial).
+model TurnoCaja {
+  idTurno       Int       @id @default(autoincrement())
+  fechaApertura DateTime  @default(now())
+  fechaCierre   DateTime?
+  // Efectivo con el que se abre la caja.
+  montoInicial  Float     @default(0)
+  // Arqueo al cerrar: lo que el sistema esperaba (inicial + efectivo cobrado) y lo que se
+  // contó. La diferencia se calcula restando.
+  efectivoEsperado Float?
+  efectivoContado  Float?
+  observacion      String?
+
+  idCaja Int
+  caja   Caja @relation(fields: [idCaja], references: [idCaja])
+
+  idUsuarioApertura Int
+  usuarioApertura   Usuario @relation("TurnoApertura", fields: [idUsuarioApertura], references: [idUsuario])
+
+  idUsuarioCierre Int?
+  usuarioCierre   Usuario? @relation("TurnoCierre", fields: [idUsuarioCierre], references: [idUsuario])
+
+  pagos Pago[]
+
+  @@index([idCaja, fechaApertura])
+}
+
+// Cada cobro de un pedido. Un pedido puede tener varios (pago dividido entre efectivo y
+// transferencia). Pedido.metodoPago pasa a valer 'mixto' en esos casos.
+model Pago {
+  idPago  Int      @id @default(autoincrement())
+  // 'efectivo' o 'transferencia'.
+  metodo  String
+  monto   Float
+  fecha   DateTime @default(now())
+
+  idPedido Int
+  pedido   Pedido @relation(fields: [idPedido], references: [idPedido])
+
+  // Quién cobró (se identifica con su PIN). Null en pagos anteriores a esta tabla.
+  idUsuario Int?
+  usuario   Usuario? @relation(fields: [idUsuario], references: [idUsuario])
+
+  // Turno de caja en el que entró la plata. Null en pagos anteriores a esta tabla.
+  idTurno Int?
+  turno   TurnoCaja? @relation(fields: [idTurno], references: [idTurno])
+
+  @@index([idPedido])
+  @@index([idTurno])
+}
+
+// Acciones sensibles sobre un pedido: cancelación y modificación, con quién, cuándo y por
+// qué. Cocina y Entregas no registran a nadie. Contar las cancelaciones de un celular sale
+// de acá (tipo 'cancelacion' + el celular del cliente del pedido).
+model EventoPedido {
+  idEvento Int      @id @default(autoincrement())
+  // 'cancelacion' | 'modificacion'.
+  tipo     String
+  motivo   String?
+  // Qué cambió (por ejemplo, los productos agregados).
+  detalle  Json?
+  fecha    DateTime @default(now())
+
+  idPedido Int
+  pedido   Pedido @relation(fields: [idPedido], references: [idPedido])
+
+  idUsuario Int?
+  usuario   Usuario? @relation(fields: [idUsuario], references: [idUsuario])
+
+  @@index([idPedido])
+}
+
+// Horario en que cada sucursal acepta pedidos online. Una fila por franja: un local con
+// turno partido (8 a 13 y 18 a 23:30) tiene dos filas el mismo día. Los horarios se guardan
+// en minutos desde las 00:00 (hora de Argentina); si el local cierra pasada la medianoche,
+// cierraMin supera 1440. Sin filas = sin restricción (se mantiene el comportamiento actual).
+model HorarioSucursal {
+  idHorario  Int @id @default(autoincrement())
+  // 0 = domingo ... 6 = sábado.
+  diaSemana  Int
+  abreMin    Int
+  cierraMin  Int
+
+  idSucursal Int
+  sucursal   Sucursal @relation(fields: [idSucursal], references: [idSucursal])
+
+  @@index([idSucursal, diaSemana])
+}
+
+// Acceso propio de una pantalla (Cocina, Entregas, Mostrador) de una sucursal: no depende
+// de la sesión de ninguna persona. El link lleva un código al azar; acá solo se guarda su
+// hash. El administrador lo puede revocar.
+model AccesoPantalla {
+  idAcceso  Int       @id @default(autoincrement())
+  // 'cocina' | 'entregas' | 'mostrador'.
+  tipo      String
+  tokenHash String    @unique
+  creadoEn  DateTime  @default(now())
+  revocadoEn DateTime?
+
+  idSucursal Int
+  sucursal   Sucursal @relation(fields: [idSucursal], references: [idSucursal])
 
   @@index([idSucursal])
 }

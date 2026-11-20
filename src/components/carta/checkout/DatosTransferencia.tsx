@@ -41,7 +41,7 @@ function BotonCopiar({ valor, etiqueta }: { valor: string; etiqueta: string }) {
       type="button"
       onClick={copiar}
       aria-label={`Copiar ${etiqueta}`}
-      className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-surface px-3 text-sm text-accent shadow-sm transition-colors hover:bg-accent hover:text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent cursor-pointer"
+      className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-surface px-3 text-sm text-accent shadow-sm transition-colors hover:bg-brand hover:text-on-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent cursor-pointer"
     >
       {estado === 'copiado' ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
       <span aria-live="polite">

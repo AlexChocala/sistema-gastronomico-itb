@@ -121,7 +121,7 @@ function TarjetaSucursal({ sucursal }: { sucursal: SucursalPublica }) {
           target="_blank"
           rel="noopener noreferrer"
           aria-label={`Escribirle por WhatsApp a ${sucursal.nombre}`}
-          className="flex w-12 shrink-0 items-center justify-center self-center rounded-2xl bg-bg py-3 text-success transition-colors hover:bg-success hover:text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success"
+          className="flex w-12 shrink-0 items-center justify-center self-center rounded-2xl bg-bg py-3 text-success transition-colors hover:bg-success hover:text-on-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success"
         >
           <IconoWhatsapp className="size-6" />
         </a>

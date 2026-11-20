@@ -96,7 +96,7 @@ export function CrearCategoriaRapida({
           className="min-w-0 flex-1 rounded-full border border-border bg-surface px-4 py-2 outline-none focus:ring-2 focus:ring-accent"
         />
         <button type="button" onClick={() => void crear()} disabled={!nombre.trim() || creando}
-          className="shrink-0 cursor-pointer rounded-full bg-accent px-4 py-2 font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted">
+          className="shrink-0 cursor-pointer rounded-full bg-brand px-4 py-2 font-medium text-on-brand transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted">
           {creando ? 'Creando…' : 'Crear'}
         </button>
       </div>

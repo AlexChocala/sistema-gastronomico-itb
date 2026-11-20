@@ -67,7 +67,7 @@ export function NavCategorias({ categorias }: { categorias: { idCategoria: numbe
                 onClick={(evento) => irA(evento, categoria.idCategoria)}
                 aria-current={esActiva ? 'true' : undefined}
                 className={`flex min-h-11 items-center rounded-full px-4 text-sm whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                  esActiva ? 'bg-accent text-on-accent shadow-sm' : 'bg-surface text-text hover:bg-accent-soft'
+                  esActiva ? 'bg-brand text-on-brand shadow-sm' : 'bg-surface text-text hover:bg-accent-soft'
                 }`}
               >
                 {categoria.nombre}

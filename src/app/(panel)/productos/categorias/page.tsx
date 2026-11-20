@@ -20,3 +20,5 @@ export default async function CategoriasPage() {
     </main>
   )
 }
+
+export const metadata = { title: 'Categorías' }

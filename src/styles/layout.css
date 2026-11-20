@@ -1,0 +1,65 @@
+/* =========================================
+   LAYOUT — medidas del sidebar
+   Para agrandar o achicar el menú, tocá solo este bloque.
+========================================= */
+
+:root {
+  --sidebar-texto: 0.875rem;       /* 14px — texto de cada ítem */
+  --sidebar-titulo: 0.75rem;       /* 12px — "PRINCIPAL", "OPERACIONES" */
+  --sidebar-icono: 1.25rem;        /* 20px */
+  --sidebar-item-padding-y: 0.75rem;
+  --sidebar-item-padding-x: 1rem;
+  --sidebar-item-radio: 9999px;    /* 9999px = pastilla; 0.75rem = rectángulo redondeado */
+}
+
+/* Ítem del menú lateral (links, pendientes, cerrar sesión). */
+@utility nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: var(--sidebar-item-padding-y) var(--sidebar-item-padding-x);
+  border-radius: var(--sidebar-item-radio);
+  font-size: var(--sidebar-texto);
+  transition: background-color 150ms, color 150ms;
+}
+
+/* Scroll sin barra visible (sigue scrolleando con rueda o touch). */
+@utility scrollbar-oculta {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* =========================================
+   PATRONES REUTILIZABLES — tarjetas, grillas y etiquetas
+   Se usan igual en Pedidos, Cocina, Entregas, Productos, Categorías y Sucursales.
+========================================= */
+
+/* Contenedor blanco redondeado de cada bloque de una página. */
+@utility panel-card {
+  border-radius: var(--radius-3xl);
+  background-color: var(--surface);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Grilla de tarjetas que se acomoda sola. --card-min cambia el ancho mínimo (17rem por defecto). */
+@utility grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-min, 17rem), 1fr));
+  gap: 1.25rem;
+}
+
+/* Etiqueta chica en forma de píldora (tipo de entrega, estado de pago, estado del pedido). */
+@utility chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 9999px;
+  padding: 0.25rem 0.75rem;
+  font-size: var(--text-xs);
+  line-height: var(--text-xs--line-height);
+  white-space: nowrap;
+}

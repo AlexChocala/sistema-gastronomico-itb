@@ -6,10 +6,13 @@ import { prisma } from '@/lib/db/prisma'
 import { ordenarVariaciones } from '@/lib/productos/variacion-principal'
 import { urlImagenPublica } from '@/lib/storage/imagenes'
 import { coberturaConfigurada } from './radio-delivery'
+import { estaAbierta } from './horario-online'
+import { textoHorario } from './horario-bloques'
 
 const camposSucursalPublica = {
   idSucursal: true, nombre: true, slug: true, direccion: true, horario: true, whatsapp: true, linkMaps: true,
   ofreceRetiro: true, ofreceDelivery: true,
+  pausaPedidosOnline: true, horarios: { select: { diaSemana: true, abreMin: true, cierraMin: true } },
   latitud: true, longitud: true, _count: { select: { localidadesDelivery: true } },
   localidad: { select: { nombre: true, provincia: { select: { nombre: true } } } },
 } satisfies Prisma.SucursalSelect
@@ -17,8 +20,10 @@ const camposSucursalPublica = {
 type FilaSucursalPublica = Prisma.SucursalGetPayload<{ select: typeof camposSucursalPublica }>
 
 // Las zonas y la ubicación no viajan al navegador: solo si el delivery está configurado.
-export type SucursalPublica = Omit<FilaSucursalPublica, 'localidad' | '_count' | 'latitud' | 'longitud'> & {
+export type SucursalPublica = Omit<FilaSucursalPublica, 'localidad' | '_count' | 'latitud' | 'longitud' | 'pausaPedidosOnline' | 'horarios'> & {
   localidad: string; provincia: string; deliveryConfigurado: boolean
+  // Dentro del horario de pedidos online y sin pausa. Se calcula al armar la página.
+  aceptaPedidos: boolean
 }
 
 export type SucursalPublicaDetalle = SucursalPublica & {
@@ -26,9 +31,11 @@ export type SucursalPublicaDetalle = SucursalPublica & {
   localidadesDelivery: { idLocalidad: number; nombre: string }[]
 }
 
-function aPublica({ localidad, _count, latitud, longitud, ...resto }: FilaSucursalPublica): SucursalPublica {
+function aPublica({ localidad, _count, latitud, longitud, pausaPedidosOnline, horarios, ...resto }: FilaSucursalPublica): SucursalPublica {
   return {
-    ...resto, localidad: localidad.nombre, provincia: localidad.provincia.nombre,
+    // El horario sale de lo cargado (con los días); el texto viejo escrito a mano ya no se usa.
+    ...resto, horario: textoHorario(horarios), localidad: localidad.nombre, provincia: localidad.provincia.nombre,
+    aceptaPedidos: estaAbierta({ pausaPedidosOnline, horarios }),
     deliveryConfigurado: coberturaConfigurada({ cantidadZonas: _count.localidadesDelivery, latitud, longitud }),
   }
 }

@@ -33,9 +33,12 @@ export function LoginForm() {
 
       if (!resultado || resultado.error || !resultado.ok) {
         // Un fallo del servidor no significa que la contraseña sea incorrecta.
+        // 'DEMASIADOS_INTENTOS' = ERROR_DEMASIADOS_INTENTOS (lib/auth/auth.ts, que es solo de servidor).
         setError(resultado?.error === 'CredentialsSignin'
           ? 'Email o contraseña incorrectos'
-          : 'No se pudo iniciar sesión por un problema del sistema. Intentá nuevamente más tarde.')
+          : resultado?.error === 'DEMASIADOS_INTENTOS'
+            ? 'Demasiados intentos. Probá de nuevo en 15 minutos.'
+            : 'No se pudo iniciar sesión por un problema del sistema. Intentá nuevamente más tarde.')
         return
       }
 

@@ -27,3 +27,5 @@ export default async function ExtrasPage({ searchParams }: Props) {
     </main>
   )
 }
+
+export const metadata = { title: 'Extras' }

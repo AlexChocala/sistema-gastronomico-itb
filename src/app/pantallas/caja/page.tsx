@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, Banknote, Bike, CircleCheck, Landmark, Minus, Plus, Printer, Search, ShoppingBag, Trash2, X,
+  ArrowLeft, Banknote, Bike, CircleCheck, Landmark, LockKeyhole, Minus, Plus, Printer, Search, ShoppingBag, Trash2, X,
 } from '@/components/icons'
 import { SelectorCantidad } from '@/components/carta/compartidos/SelectorCantidad'
 import { IconoCategoria } from '@/components/icons/IconoCategoria'
@@ -31,9 +31,14 @@ import {
   ErrorPedido, MAX_ACLARACION, MAX_CANTIDAD_ITEM, MAX_EXTRAS_ITEM, MAX_NOMBRE_CLIENTE,
   claveCombinacion, erroresDatosDelivery, validarPedidoCaja,
 } from '@/lib/pedidos/pedidos-validacion'
-import { textoOpciones } from '@/lib/pedidos/pedidos-estados'
+import { OpcionesItem } from '@/components/pedidos/OpcionesItem'
+import { CampoMonto, CampoPinCaja } from '@/components/caja/CamposCaja'
+import { AperturaCaja, CierreCaja } from '@/components/caja/TurnoCaja'
+import { useTurnoCaja } from '@/lib/caja/turnos-cliente'
 
 const TODAS = 'Todos'
+// Billetes que circulan en Argentina: atajos del panel de cobro.
+const BILLETES = [100, 200, 500, 1000, 2000, 10000, 20000]
 
 const formatoPrecio = new Intl.NumberFormat('es-AR', {
   style: 'currency',
@@ -190,7 +195,7 @@ function ModalProductoCaja({
       onClick={(evento) => {
         if (evento.target === evento.currentTarget) dialogo.current?.close()
       }}
-      className="m-auto w-full max-w-md rounded-3xl bg-surface p-0 text-text shadow-xl backdrop:bg-overlay/50"
+      className="m-auto w-full max-w-md rounded-3xl bg-surface p-0 text-text shadow-xl backdrop:bg-overlay"
     >
       <div className="flex max-h-[85dvh] flex-col">
         <div className="flex items-start justify-between gap-3 p-5 pb-3">
@@ -294,7 +299,7 @@ function ModalProductoCaja({
                 onAgregar(combinaciones)
                 dialogo.current?.close()
               }}
-              className="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-full bg-accent py-3.5 text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
+              className="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-full bg-brand py-3.5 text-on-brand transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
             >
               <Plus className="size-5" />
               Agregar al pedido
@@ -326,14 +331,13 @@ function LineaCarritoItem({
   onConfirmarQuitar: () => void
 }) {
   const { producto, variacion, extras, cantidad } = linea
-  const opciones = textoOpciones(variacion?.nombre ?? null, extras.map((extra) => extra.nombre))
 
   return (
     <li className="flex flex-col gap-3 rounded-2xl bg-bg p-4">
       <div className="flex items-start justify-between gap-3">
         <span className="leading-tight">
           {producto.nombre}
-          {opciones && <span className="block text-xs break-words text-muted">{opciones}</span>}
+          <OpcionesItem variacion={variacion?.nombre ?? null} extras={extras.map((extra) => extra.nombre)} />
         </span>
         <span className="shrink-0 font-semibold">{formatoPrecio.format(precioUnitario(linea) * cantidad)}</span>
       </div>
@@ -356,7 +360,7 @@ function LineaCarritoItem({
             <button
               type="button"
               onClick={onConfirmarQuitar}
-              className="cursor-pointer rounded-full bg-danger py-2 text-on-primary hover:opacity-90"
+              className="cursor-pointer rounded-full bg-danger py-2 text-on-danger hover:opacity-90"
             >
               Confirmar
             </button>
@@ -411,9 +415,22 @@ function PanelCobro({
   error,
   onCambiarMetodo,
   onCambiarPagaCon,
+  pin,
+  onCambiarPin,
+  dividido,
+  onCambiarDividido,
+  efectivoDividido,
+  onCambiarEfectivoDividido,
   onVolver,
   onConfirmar,
 }: {
+  pin: string
+  onCambiarPin: (pin: string) => void
+  // Pago dividido: una parte en efectivo y el resto por transferencia.
+  dividido: boolean
+  onCambiarDividido: (dividido: boolean) => void
+  efectivoDividido: string
+  onCambiarEfectivoDividido: (digitos: string) => void
   total: number
   metodoPago: MetodoPagoPantalla
   pagaCon: string
@@ -425,8 +442,13 @@ function PanelCobro({
   onConfirmar: () => void
 }) {
   const montoRecibido = Number(pagaCon)
+  const conPuntos = (digitos: string) => digitos.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
   const faltante = total - montoRecibido
-  const pagoValido = metodoPago === 'transferencia' || (pagaCon !== '' && faltante <= 0)
+  const efectivoParte = Number(efectivoDividido)
+  const divididoValido = efectivoDividido !== '' && efectivoParte > 0 && efectivoParte < total
+  const pagoValido = /^\d{4}$/.test(pin) && (dividido
+    ? divididoValido
+    : metodoPago === 'transferencia' || (pagaCon !== '' && faltante <= 0))
 
   return (
     <div className="flex flex-1 flex-col gap-5">
@@ -442,38 +464,88 @@ function PanelCobro({
             <button
               key={valor}
               type="button"
-              onClick={() => onCambiarMetodo(valor)}
-              aria-pressed={metodoPago === valor}
-              className={`flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 py-4 text-sm transition-colors ${metodoPago === valor ? 'border-accent bg-accent-soft text-text' : 'border-border text-muted hover:text-text'}`}
+              onClick={() => { onCambiarDividido(false); onCambiarMetodo(valor) }}
+              aria-pressed={!dividido && metodoPago === valor}
+              className={`flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 py-4 text-sm transition-colors ${!dividido && metodoPago === valor ? 'border-accent bg-accent-soft text-text' : 'border-border text-muted hover:text-text'}`}
             >
-              <Icono className={`size-6 ${metodoPago === valor ? 'text-accent' : ''}`} strokeWidth={1.75} />
+              <Icono className={`size-6 ${!dividido && metodoPago === valor ? 'text-accent' : ''}`} strokeWidth={1.75} />
               {texto}
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={() => onCambiarDividido(!dividido)}
+          aria-pressed={dividido}
+          className={`cursor-pointer rounded-full border-2 py-2 text-sm transition-colors ${dividido ? 'border-accent bg-accent-soft text-text' : 'border-border text-muted hover:text-text'}`}
+        >
+          Dividir pago
+        </button>
       </div>
 
-      {metodoPago === 'efectivo' ? (
+      {dividido ? (
+        <div className="flex flex-col gap-3">
+          <CampoMonto id="dividido-efectivo" etiqueta="En efectivo" valor={efectivoDividido} onCambiar={onCambiarEfectivoDividido} />
+          {efectivoDividido !== '' && !divididoValido ? (
+            <p role="alert" className="text-sm text-danger">El efectivo tiene que ser menor al total.</p>
+          ) : (
+            <p className="flex items-baseline justify-between">
+              <span className="text-sm">Por transferencia</span>
+              <span className="text-lg font-bold">{formatoPrecio.format(divididoValido ? Math.round((total - efectivoParte) * 100) / 100 : total)}</span>
+            </p>
+          )}
+          <p className="rounded-2xl bg-warning-surface p-4 text-sm">Verificá que la transferencia esté acreditada antes de confirmar.</p>
+        </div>
+      ) : metodoPago === 'efectivo' ? (
         <div className="flex flex-col gap-2">
           <label htmlFor="paga-con" className="text-sm">
             Paga con
           </label>
-          <input
-            id="paga-con"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={pagaCon}
-            onChange={(e) => onCambiarPagaCon(e.target.value)}
-            placeholder={String(total)}
-            className="rounded-full border border-border bg-surface px-4 py-2.5 text-lg outline-none focus:border-accent"
-          />
-          {pagaCon !== '' && (
-            <p className={`flex justify-between text-sm ${faltante > 0 ? 'text-danger' : ''}`}>
-              <span>{faltante > 0 ? 'Falta' : 'Vuelto'}</span>
-              <span className="text-lg font-bold">{formatoPrecio.format(Math.abs(faltante))}</span>
+          {/* Se escribe solo con números y se muestra con puntos de miles: 2000 → 2.000. */}
+          <div className="relative">
+            <span aria-hidden="true" className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-lg text-muted">$</span>
+            <input
+              id="paga-con"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              value={conPuntos(pagaCon)}
+              onChange={(e) => onCambiarPagaCon(e.target.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 9))}
+              placeholder={conPuntos(String(total))}
+              className="w-full rounded-full border border-border bg-surface py-2.5 pr-4 pl-9 text-lg outline-none focus:border-accent"
+            />
+          </div>
+          {/* Atajos: el pago justo y los billetes que alcanzan (los 3 más cercanos). Un toque completa el campo. */}
+          <div className="flex flex-wrap gap-2">
+            {[total, ...BILLETES.filter((billete) => billete >= total).slice(0, 3)]
+              .filter((monto, indice, montos) => montos.indexOf(monto) === indice)
+              .map((monto, indice) => {
+                const elegido = pagaCon === String(monto)
+                return (
+                  <button
+                    key={monto}
+                    type="button"
+                    onClick={() => onCambiarPagaCon(String(monto))}
+                    aria-pressed={elegido}
+                    className={`min-h-11 min-w-20 cursor-pointer rounded-full border-2 px-4 text-sm font-semibold transition-colors ${elegido ? 'border-accent bg-accent-soft text-text' : 'border-border text-muted hover:border-accent hover:text-text'}`}
+                  >
+                    {indice === 0 ? 'Justo' : `$ ${conPuntos(String(monto))}`}
+                  </button>
+                )
+              })}
+          </div>
+          {/* Tres estados, cada uno con su palabra (el color no va solo): falta, justo, vuelto. */}
+          {pagaCon !== '' && (faltante === 0 ? (
+            <p className="flex items-center justify-between text-success">
+              <span className="text-sm">Pago justo</span>
+              <CircleCheck className="size-8" />
             </p>
-          )}
+          ) : (
+            <p className={`flex items-baseline justify-between ${faltante > 0 ? 'text-sm text-danger' : ''}`}>
+              <span className="text-sm">{faltante > 0 ? 'Falta' : 'Vuelto'}</span>
+              <span className={`font-bold ${faltante > 0 ? 'text-lg' : 'text-3xl'}`}>{formatoPrecio.format(Math.abs(faltante))}</span>
+            </p>
+          ))}
         </div>
       ) : (
         <p className="rounded-2xl bg-warning-surface p-4 text-sm">
@@ -481,13 +553,17 @@ function PanelCobro({
         </p>
       )}
 
+      <div className="mt-auto flex flex-col gap-2">
+        <CampoPinCaja id="cobro-pin" valor={pin} onCambiar={onCambiarPin} etiqueta="Tu PIN (quién cobra)" />
+      </div>
+
       {error && (
-        <p role="alert" className="mt-auto rounded-2xl bg-danger/10 p-4 text-sm text-danger">
+        <p role="alert" className="rounded-2xl bg-danger/10 p-4 text-sm text-danger">
           {error}
         </p>
       )}
 
-      <div className={`${error ? '' : 'mt-auto '}grid grid-cols-[auto_1fr] gap-2`}>
+      <div className="grid grid-cols-[auto_1fr] gap-2">
         <button
           type="button"
           onClick={onVolver}
@@ -501,7 +577,7 @@ function PanelCobro({
           type="button"
           onClick={onConfirmar}
           disabled={!pagoValido || enviando}
-          className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-accent py-3.5 text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
+          className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand py-3.5 text-on-brand transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
         >
           <CircleCheck className="size-5" />
           {enviando ? 'Registrando…' : 'Confirmar pago'}
@@ -541,6 +617,11 @@ export default function CajaPage() {
   const [cobrando, setCobrando] = useState(false)
   const [metodoPago, setMetodoPago] = useState<MetodoPagoPantalla>('efectivo')
   const [pagaCon, setPagaCon] = useState('')
+  const [pin, setPin] = useState('')
+  const [dividido, setDividido] = useState(false)
+  const [efectivoDividido, setEfectivoDividido] = useState('')
+  const turnos = useTurnoCaja()
+  const [cerrandoCaja, setCerrandoCaja] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [errorCobro, setErrorCobro] = useState<string | null>(null)
   // Aviso sobre el carrito (por ejemplo, productos que se quedaron sin stock al cobrar).
@@ -658,16 +739,30 @@ export default function CajaPage() {
     setConfirmandoQuitar(null)
     setMetodoPago('efectivo')
     setPagaCon('')
+    setPin('')
+    setDividido(false)
+    setEfectivoDividido('')
     setErrorCobro(null)
     setCobrando(true)
   }
 
   async function confirmarPago() {
-    if (enviando || recargoDelivery === null) return
+    if (enviando || recargoDelivery === null || !turnos.caja) return
+    const parteEfectivo = Number(efectivoDividido)
     const datos = {
       cliente,
       tipoEntrega,
-      metodoPago,
+      metodoPago: dividido ? ('efectivo' as const) : metodoPago,
+      idCaja: turnos.caja.idCaja,
+      pin,
+      ...(dividido
+        ? {
+            pagos: [
+              { metodo: 'efectivo' as const, monto: parteEfectivo },
+              { metodo: 'transferencia' as const, monto: Math.round((total - parteEfectivo) * 100) / 100 },
+            ],
+          }
+        : {}),
       aclaracion,
       items: carrito.map((linea) => ({
         idProducto: linea.producto.idProducto,
@@ -712,11 +807,15 @@ export default function CajaPage() {
         setAvisoCarrito(MENSAJE_PRODUCTOS_NO_DISPONIBLES)
         return
       }
+      // La caja se cerró desde otra pantalla: se vuelve a leer su estado.
+      if (resultado.estado === 409) void turnos.recargar()
+      setPin('')
       setErrorCobro(resultado.error)
       return
     }
 
-    setUltimoCobrado({ pedido: resultado.pedido, pagaCon: metodoPago === 'efectivo' ? Number(pagaCon) : null })
+    setUltimoCobrado({ pedido: resultado.pedido, pagaCon: !dividido && metodoPago === 'efectivo' ? Number(pagaCon) : null })
+    setPin('')
     setOrdenImpresion((n) => n + 1)
     setCobrando(false)
     setCarrito([])
@@ -724,6 +823,17 @@ export default function CajaPage() {
     setAclaracion('')
     setTipoEntrega('retiro')
     setEntrega(VALORES_DELIVERY_VACIOS)
+  }
+
+  if (turnos.cargando) {
+    return <p className="p-10 text-center text-muted">Cargando…</p>
+  }
+  if (!turnos.caja) {
+    return <p role="alert" className="p-10 text-center text-muted">Esta sucursal no tiene cajas. Pedile al administrador que cree una.</p>
+  }
+  // Mientras se ve el resumen del cierre, el turno todavía figura abierto: así no desaparece.
+  if (!turnos.turno) {
+    return <AperturaCaja cajas={turnos.cajas} caja={turnos.caja} onElegirCaja={turnos.elegirCaja} onAbrir={turnos.abrir} />
   }
 
   return (
@@ -734,6 +844,15 @@ export default function CajaPage() {
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="page-title">Caja</h1>
               <PastillaSucursal />
+              {/* Con borde, para que se note que es un botón (la sucursal de al lado solo informa). */}
+              <button
+                type="button"
+                onClick={() => setCerrandoCaja(true)}
+                className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border px-4 py-2 text-sm transition-colors hover:bg-surface"
+              >
+                <LockKeyhole className="size-4 text-muted" />
+                Cerrar caja
+              </button>
             </div>
             <Campanita />
           </header>
@@ -802,12 +921,20 @@ export default function CajaPage() {
               error={errorCobro}
               onCambiarMetodo={setMetodoPago}
               onCambiarPagaCon={setPagaCon}
+              pin={pin}
+              onCambiarPin={setPin}
+              dividido={dividido}
+              onCambiarDividido={setDividido}
+              efectivoDividido={efectivoDividido}
+              onCambiarEfectivoDividido={setEfectivoDividido}
               onVolver={() => setCobrando(false)}
               onConfirmar={() => void confirmarPago()}
             />
           ) : (
             <>
-              <div className="-mx-1 flex max-h-[45vh] shrink-0 flex-col gap-3 overflow-y-auto px-1 pb-1">
+              {/* Un solo scroll para datos, productos y aclaración: el total y Cobrar quedan siempre a la vista. */}
+              <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-1 pb-1">
+              <div className="flex flex-col gap-3">
                 <input
                   value={cliente}
                   onChange={(e) => setCliente(e.target.value)}
@@ -847,7 +974,7 @@ export default function CajaPage() {
                 <p role="alert" className="rounded-2xl bg-warning-surface p-3 text-sm">{avisoCarrito}</p>
               )}
 
-              <ul className="-mx-1 flex flex-1 flex-col gap-3 overflow-y-auto px-1">
+              <ul className="flex flex-col gap-3">
                 {carrito.length === 0 &&
                   (ultimoCobrado ? (
                     <li className="flex flex-col items-center gap-3 rounded-2xl bg-bg p-6 text-center text-sm">
@@ -887,16 +1014,20 @@ export default function CajaPage() {
               </ul>
 
               {carrito.length > 0 && (
-                <textarea
-                  value={aclaracion}
-                  onChange={(e) => setAclaracion(e.target.value)}
-                  maxLength={MAX_ACLARACION}
-                  rows={2}
-                  placeholder="Aclaración para la cocina (opcional). Ej: una sin cebolla"
-                  aria-label="Aclaración para la cocina"
-                  className="shrink-0 resize-none rounded-2xl border border-border bg-surface px-4 py-2.5 text-sm outline-none placeholder:text-muted focus:border-accent"
-                />
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="caja-aclaracion" className="text-sm">Aclaración para la cocina (opcional)</label>
+                  <textarea
+                    id="caja-aclaracion"
+                    value={aclaracion}
+                    onChange={(e) => setAclaracion(e.target.value)}
+                    maxLength={MAX_ACLARACION}
+                    rows={2}
+                    placeholder="Ej: una sin cebolla"
+                    className="w-full resize-none rounded-2xl border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
+                  />
+                </div>
               )}
+              </div>
 
               {tipoEntrega === 'delivery' && <CotizadorDelivery cotizador={cotizador} disabled={enviando || !entrega.direccion.trim()} />}
               {tipoEntrega === 'delivery' && <p className="text-sm">Subtotal: {formatoPrecio.format(subtotal)} · Envío: {recargoDelivery === null ? 'por calcular' : formatoPrecio.format(recargoDelivery)}</p>}
@@ -914,7 +1045,7 @@ export default function CajaPage() {
                   type="button"
                   onClick={empezarCobro}
                   disabled={!puedeCobrar}
-                  className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-accent py-3.5 text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
+                  className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand py-3.5 text-on-brand transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted"
                 >
                   <Banknote className="size-5" />
                   Cobrar
@@ -925,6 +1056,15 @@ export default function CajaPage() {
           )}
         </aside>
       </main>
+
+      {cerrandoCaja && (
+        <CierreCaja
+          caja={turnos.caja}
+          porCobrar={turnos.porCobrar}
+          onCerrar={turnos.cerrar}
+          onSalir={() => { setCerrandoCaja(false); void turnos.recargar() }}
+        />
+      )}
 
       {eligiendo && (
         <ModalProductoCaja

@@ -9,11 +9,13 @@ export function textoProductos(cantidad: number) {
   return `${cantidad} ${cantidad === 1 ? 'producto' : 'productos'}`
 }
 
-export function BarraCarrito({ slug, cantidadTotal, total, aviso }: {
+export function BarraCarrito({ slug, cantidadTotal, total, aviso, bloqueada = false }: {
   slug: string
   cantidadTotal: number
   total: number
   aviso?: string | null
+  // El local no toma pedidos ahora: la barra se ve apagada y no lleva al carrito.
+  bloqueada?: boolean
 }) {
   if (cantidadTotal === 0) return null
   return (
@@ -25,15 +27,24 @@ export function BarraCarrito({ slug, cantidadTotal, total, aviso }: {
             {aviso}
           </p>
         )}
-        <Link
+        {bloqueada && (
+          <div aria-disabled="true" className="flex min-h-14 cursor-not-allowed items-center gap-3 rounded-2xl bg-surface-muted px-4 text-muted shadow-lg">
+            <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-surface">
+              <ShoppingCart className="size-5" aria-hidden="true" />
+            </span>
+            <span className="flex-1 font-semibold">Pedidos pausados por ahora</span>
+            <span className="font-semibold tabular-nums">{formatearPrecio(total)}</span>
+          </div>
+        )}
+        {!bloqueada && <Link
           href={`/${slug}/carrito`}
-          className="flex min-h-14 items-center gap-3 rounded-2xl bg-accent px-4 text-on-accent shadow-lg transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="flex min-h-14 items-center gap-3 rounded-2xl bg-brand px-4 text-on-brand shadow-lg transition-colors hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
-          <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-on-accent/20">
+          <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-on-brand/20">
             <ShoppingCart className="size-5" aria-hidden="true" />
             <span
               aria-hidden="true"
-              className="absolute -top-1 -right-1 flex min-w-5 items-center justify-center rounded-full bg-on-accent px-1 text-xs font-bold text-accent tabular-nums"
+              className="absolute -top-1 -right-1 flex min-w-5 items-center justify-center rounded-full bg-on-brand px-1 text-xs font-bold text-accent tabular-nums"
             >
               {cantidadTotal}
             </span>
@@ -44,7 +55,7 @@ export function BarraCarrito({ slug, cantidadTotal, total, aviso }: {
           </span>
           <span className="font-semibold tabular-nums">{formatearPrecio(total)}</span>
           <ChevronRight className="size-5 shrink-0" aria-hidden="true" />
-        </Link>
+        </Link>}
       </div>
     </div>
   )

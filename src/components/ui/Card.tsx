@@ -1,6 +1,6 @@
 // Contenedor genérico con borde y sombra suave, para envolver los formularios de
 // components/forms sin repetir esas clases de Tailwind en cada página. Los colores
-// salen de los tokens de styles/globals.css.
+// salen de los tokens de styles/theme.css.
 
 import type { ReactNode } from 'react'
 

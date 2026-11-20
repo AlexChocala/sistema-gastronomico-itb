@@ -124,7 +124,7 @@ export function CampoFotoPerfil({ idUsuario, iniciales, fotoUrl: fotoUrlInicial 
           )}
         </div>
         <p id="foto-perfil-ayuda" className="text-xs text-muted">
-          {TEXTO_FORMATOS_IMAGEN}. Se ve redonda: usá una imagen cuadrada.
+          {TEXTO_FORMATOS_IMAGEN}
           {!fotoUrl && ' Sin foto se muestran tus iniciales.'}
         </p>
         {error && <p role="alert" className="text-xs text-danger">{error}</p>}

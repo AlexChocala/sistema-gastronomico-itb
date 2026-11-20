@@ -1,0 +1,99 @@
+/* =========================================
+   TEMA — valores de color y medidas
+   Acá se cambia cómo se ve el sistema. Los nombres que usa Tailwind
+   (bg-surface, text-muted…) se conectan en tokens.css.
+========================================= */
+
+/* ---- Base (claro) ---- */
+
+:root {
+  color-scheme: light;
+  --bg: #f4f4f5;            /* fondo del contenido */
+  --surface: #ffffff;       /* tarjetas, sidebar, inputs */
+  --surface-muted: #e4e4e7; /* ítem activo, botón secundario */
+  --border: #d4d4d8;
+  --overlay: rgb(24 24 27 / 0.4); /* fondo de los modales: velo que oscurece lo de atrás */
+
+  --text: #18181b;
+  --text-muted: #52525b;
+}
+
+/* ---- Acento: color de marca ----
+   Para cambiar el naranja, tocá solo este bloque (y su versión oscura más abajo). */
+
+:root {
+  --accent: #f97316;        /* logo, ícono activo, destacados */
+  --accent-hover: #ea580c;
+  --accent-soft: #ffedd5;   /* fondo del avatar y badges */
+
+  /* Relleno de botones y tarjetas de marca (bg-brand). */
+  --brand: #f97316;
+  --brand-hover: #ea580c;
+  --on-brand: #ffffff;      /* texto sobre --brand */
+}
+
+/* ---- Estados: feedback de la UI ---- */
+
+:root {
+  --success: #16a34a;
+  --danger: #dc2626;
+  --on-danger: #ffffff;     /* texto sobre --danger */
+  --warning: #ca8a04;
+  --warning-surface: #fefce8;
+
+  /* Paleta de Aviso y AvisoFlotante (components/ui): color del ícono + fondo del aviso. */
+  --success-surface: #f0fdf4;
+  --danger-surface: #fef2f2;
+  --info: #2563eb;
+  --info-surface: #eff6ff;
+  --toast: #18181b;         /* fondo del aviso flotante */
+  --on-toast: #fafafa;      /* texto sobre --toast */
+}
+
+/* ---- Estado de pedidos: cocina / mostrador / pedidos ---- */
+
+:root {
+  --order-received: #52525b;  /* gris neutro: el naranja queda para las acciones */
+  --order-preparing: #d97706; /* ámbar vivo: va en el punto y el borde; el texto de este estado usa el color normal */
+  --order-ready: #15803d;
+  --order-sent: #0e7490;      /* delivery en camino */
+  --order-delivered: #1d5fd8; /* azul "verificado": distinto del verde de "Listo" */
+}
+
+/* ---- Oscuro ----
+   Solo pantalla: al imprimir se conservan los colores claros y el papel blanco. */
+
+@media screen {
+  :root[data-tema="oscuro"] {
+    color-scheme: dark;
+    --bg: #0f0f11;
+    --surface: #1f1f24;
+    --surface-muted: #2f2f35;
+    --border: #45454f;
+    --text: #fafafa;
+    --text-muted: #b4b4bf;
+    --overlay: rgb(0 0 0 / 0.7);
+    --accent: #f97316;
+    --accent-hover: #fb923c;
+    --accent-soft: #3c2615;
+    --brand: #cf5f2a;         /* naranja menos saturado: no encandila sobre fondo oscuro */
+    --brand-hover: #dd6c37;
+    --on-brand: #ffffff;
+    --success: #4ade80;
+    --danger: #f87171;
+    --on-danger: #1a120a;
+    --warning: #facc15;
+    --warning-surface: #30290d;
+    --success-surface: #112b1c;
+    --danger-surface: #351a1c;
+    --info: #60a5fa;
+    --info-surface: #17263c;
+    --toast: #fafafa;
+    --on-toast: #18181b;
+    --order-received: #b4b4bf;
+    --order-preparing: #facc15;
+    --order-ready: #4ade80;
+    --order-sent: #22d3ee;
+    --order-delivered: #80aaff;
+  }
+}

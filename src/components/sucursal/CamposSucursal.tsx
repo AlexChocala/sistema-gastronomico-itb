@@ -67,13 +67,15 @@ const claseEtiqueta = 'text-sm font-medium'
 const claseAyuda = 'text-xs text-muted'
 
 // Bloque con título del formulario: agrupa los campos por tema.
-export function SeccionFormulario({ icono: Icono, titulo, children }: {
+export function SeccionFormulario({ icono: Icono, titulo, tarjeta = false, children }: {
   icono: LucideIcon
   titulo: string
+  // Suelta sobre el fondo de la página (tarjeta blanca), en vez de una caja gris dentro de otra.
+  tarjeta?: boolean
   children: React.ReactNode
 }) {
   return (
-    <section className="flex flex-col gap-3 rounded-2xl bg-bg p-4">
+    <section className={`flex flex-col gap-3 ${tarjeta ? 'rounded-3xl bg-surface p-6 shadow-sm' : 'rounded-2xl bg-bg p-4'}`}>
       <h3 className="flex items-center gap-2.5 font-semibold">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
           <Icono className="size-4" strokeWidth={1.75} aria-hidden="true" />
@@ -94,6 +96,12 @@ interface CamposSucursalProps {
   localidades: LocalidadOpcion[]
   // Muestra textos de ayuda debajo de algunos campos (para quien carga por primera vez).
   conAyudas?: boolean
+  // Datos y ubicación a la izquierda, formas de entrega a la derecha (pantalla Sucursales).
+  dosColumnas?: boolean
+  // Bloque extra justo debajo de los datos del local (solo con dosColumnas).
+  extraTrasDatos?: React.ReactNode
+  // Bloque extra al final de la columna izquierda (solo con dosColumnas).
+  extraIzquierda?: React.ReactNode
   onCambiar: <C extends keyof ValoresSucursal>(campo: C, valor: ValoresSucursal[C]) => void
   onCambiarLocalidadNueva: (campo: keyof ValoresLocalidadNueva, valor: string) => void
   onUsarLocalidadNueva: (usar: boolean) => void
@@ -106,6 +114,9 @@ export function CamposSucursal({
   usarLocalidadNueva,
   localidades,
   conAyudas = false,
+  dosColumnas = false,
+  extraTrasDatos,
+  extraIzquierda,
   onCambiar,
   onCambiarLocalidadNueva,
   onUsarLocalidadNueva,
@@ -151,10 +162,9 @@ export function CamposSucursal({
   const linkMapsCargado = valores.linkMaps.trim()
   const linkMapsInvalido = linkMapsCargado !== '' && !linkMapsValido(linkMapsCargado)
 
-  return (
-    <div className="flex flex-col gap-4">
-      <SeccionFormulario icono={Store} titulo="Datos del local">
-        <div className="grid gap-4 sm:grid-cols-3">
+  const datos = (
+      <SeccionFormulario icono={Store} titulo="Datos del local" tarjeta={dosColumnas}>
+        <div className={`grid gap-4 ${dosColumnas ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
           <div className="flex flex-col gap-1.5">
             <label htmlFor={id('nombre')} className={claseEtiqueta}>Nombre</label>
             <input
@@ -179,19 +189,12 @@ export function CamposSucursal({
               className={claseInput}
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor={id('horario')} className={claseEtiqueta}>Horario</label>
-            <input
-              id={id('horario')} name="horario" value={valores.horario} onChange={cambiar}
-              placeholder="Ej: 9 a 22hs"
-              maxLength={100}
-              className={claseInput}
-            />
-          </div>
         </div>
       </SeccionFormulario>
+  )
 
-      <SeccionFormulario icono={MapPin} titulo="Ubicación">
+  const ubicacion = (
+      <SeccionFormulario icono={MapPin} titulo="Ubicación" tarjeta={dosColumnas}>
         <div className="grid gap-4 sm:grid-cols-2">
           {/* Localidad: un solo campo que arranca vacío. Buscás, elegís una sugerencia y queda fija. */}
           <div className={`flex flex-col gap-1.5 ${manual ? 'sm:col-span-2' : ''}`}>
@@ -327,8 +330,10 @@ export function CamposSucursal({
           </div>
         </div>
       </SeccionFormulario>
+  )
 
-      <SeccionFormulario icono={Bike} titulo="Formas de entrega">
+  const entrega = (
+      <SeccionFormulario icono={Bike} titulo="Formas de entrega" tarjeta={dosColumnas}>
         <fieldset className="grid gap-3 sm:grid-cols-2">
           <legend className="sr-only">Formas de entrega</legend>
           {formasEntrega.map(({ campo, etiqueta, icono: Icono }) => (
@@ -341,13 +346,13 @@ export function CamposSucursal({
                 checked={valores[campo]}
                 onChange={(e) => onCambiar(campo, e.target.checked)}
               />
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-bg text-muted transition-colors group-has-checked:bg-accent group-has-checked:text-on-accent">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-bg text-muted transition-colors group-has-checked:bg-brand group-has-checked:text-on-brand">
                 <Icono className="size-4" strokeWidth={1.75} aria-hidden="true" />
               </span>
               <span className="min-w-0 flex-1 text-sm font-medium">{etiqueta}</span>
               <span
                 aria-hidden="true"
-                className="flex size-5 shrink-0 items-center justify-center rounded-full border-2 border-border text-on-accent transition-colors group-has-checked:border-accent group-has-checked:bg-accent"
+                className="flex size-5 shrink-0 items-center justify-center rounded-full border-2 border-border text-on-brand transition-colors group-has-checked:border-accent group-has-checked:bg-brand"
               >
                 <Check className="size-3 opacity-0 group-has-checked:opacity-100" strokeWidth={3} />
               </span>
@@ -382,6 +387,27 @@ export function CamposSucursal({
           </div>
         )}
       </SeccionFormulario>
+  )
+
+  if (dosColumnas) {
+    return (
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <div className="flex flex-col gap-6">
+          {datos}
+          {extraTrasDatos}
+          {ubicacion}
+          {extraIzquierda}
+        </div>
+        {entrega}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {datos}
+      {ubicacion}
+      {entrega}
     </div>
   )
 }

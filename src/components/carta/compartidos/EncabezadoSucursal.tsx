@@ -76,6 +76,12 @@ export function EncabezadoSucursal({ negocio, sucursal, variasSucursales }: {
           )}
         </ul>
 
+        {!sucursal.aceptaPedidos && (
+          <p role="status" className="rounded-2xl bg-warning-surface px-4 py-3 text-sm">
+            Ahora no estamos tomando pedidos online.
+          </p>
+        )}
+
         <ChipsEntrega ofreceRetiro={sucursal.ofreceRetiro} ofreceDelivery={sucursal.ofreceDelivery} />
 
         {/* Contacto en una sola fila: WhatsApp y redes juntos (en celular se parten si no entran). */}
@@ -86,7 +92,7 @@ export function EncabezadoSucursal({ negocio, sucursal, variasSucursales }: {
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Escribirle por WhatsApp a ${sucursal.nombre} (se abre en otra pestaña)`}
-              className={`inline-flex min-h-11 items-center gap-2 rounded-full bg-bg px-4 text-sm text-success transition-colors hover:bg-success hover:text-on-accent ${claseFoco}`}
+              className={`inline-flex min-h-11 items-center gap-2 rounded-full bg-bg px-4 text-sm text-success transition-colors hover:bg-success hover:text-on-brand ${claseFoco}`}
             >
               <IconoWhatsapp className="size-5" />
               WhatsApp

@@ -6,7 +6,7 @@ import { Minus, Plus } from '@/components/icons'
 import { MAX_CANTIDAD_ITEM } from '@/lib/pedidos/pedidos-validacion'
 
 const claseBoton =
-  'flex size-11 items-center justify-center rounded-full text-accent transition-colors hover:bg-accent hover:text-on-accent disabled:cursor-not-allowed disabled:text-muted disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent cursor-pointer'
+  'flex size-11 items-center justify-center rounded-full text-accent transition-colors hover:bg-brand hover:text-on-brand disabled:cursor-not-allowed disabled:text-muted disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent cursor-pointer'
 
 export function SelectorCantidad({ nombre, cantidad, minimo = 1, onSumar, onRestar }: {
   nombre: string

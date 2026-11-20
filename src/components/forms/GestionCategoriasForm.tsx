@@ -13,7 +13,7 @@ const claseCampo =
 const claseBotonSecundario =
   'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-border bg-surface px-4 py-2.5 text-sm transition-colors hover:bg-bg disabled:cursor-not-allowed disabled:opacity-50'
 const claseBotonAcento =
-  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted'
+  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm text-on-brand transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted'
 const claseBotonIcono =
   'flex size-9 cursor-pointer items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50'
 
@@ -370,21 +370,19 @@ export function GestionCategoriasForm({ rol }: { rol: RolNombre }) {
           <p className="rounded-3xl bg-surface p-10 text-center text-muted">No hay categorías cargadas.</p>
         )}
 
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4">
+        <div className="grid-cards [--card-min:15rem]">
           {categorias.map((categoria) => (
             <article
               key={categoria.idCategoria}
-              className={`flex flex-col gap-4 rounded-3xl bg-surface p-5 shadow-sm transition-shadow hover:shadow-md ${categoria.activa ? '' : 'opacity-60'}`}
+              className={`panel-card flex flex-col gap-4 transition-shadow hover:shadow-md ${categoria.activa ? '' : 'opacity-60'}`}
             >
-              <div className="flex items-center justify-between gap-3">
-                <span className={`inline-flex items-center gap-1.5 text-xs ${categoria.activa ? 'text-success' : 'text-muted'}`}>
-                  <span className={`size-1.5 rounded-full ${categoria.activa ? 'bg-success' : 'bg-muted'}`} />
-                  {categoria.activa ? 'Activa' : 'Inactiva'}
+              {/* Solo se marca la inactiva. El orden en el menú se ve por el lugar de la tarjeta. */}
+              {!categoria.activa && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+                  <span className="size-1.5 rounded-full bg-muted" />
+                  Inactiva
                 </span>
-                <span className="rounded-full bg-bg px-2.5 py-1 text-xs text-muted" title="Orden en el menú">
-                  Orden {categoria.orden}
-                </span>
-              </div>
+              )}
 
               <div className="flex items-center gap-3">
                 <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
@@ -392,16 +390,14 @@ export function GestionCategoriasForm({ rol }: { rol: RolNombre }) {
                 </span>
                 <div className="min-w-0">
                   <h3 className="leading-tight">{categoria.nombre}</h3>
-                  <p className="mt-0.5 line-clamp-2 text-xs text-muted">
-                    {categoria.descripcion || 'Sin descripción.'}
-                  </p>
+                  {categoria.descripcion && (
+                    <p className="mt-0.5 line-clamp-2 text-xs text-muted">{categoria.descripcion}</p>
+                  )}
                 </div>
               </div>
 
               {categoria.nombresVariaciones.length > 0 && (
-                <p className="text-xs text-muted">
-                  Variaciones: <span className="text-text">{categoria.nombresVariaciones.join(' · ')}</span>
-                </p>
+                <p className="text-xs text-text">{categoria.nombresVariaciones.join(' · ')}</p>
               )}
 
         {(rol === 'admin' || rol === 'supervisor') && categoria.activa && (
@@ -410,7 +406,8 @@ export function GestionCategoriasForm({ rol }: { rol: RolNombre }) {
                   onClick={() => router.push(`/productos/extras?categoria=${categoria.idCategoria}`)}
                   className="inline-flex w-fit cursor-pointer items-center gap-1.5 text-sm text-accent hover:underline"
                 >
-                  <Plus className="size-4" />
+                  {/* El "+" solo cuando se va a agregar; con extras cargados es un acceso a verlos. */}
+                  {categoria._count.extras === 0 && <Plus className="size-4" />}
                   {textoExtras(categoria._count.extras)}
                 </button>
               )}
@@ -440,7 +437,7 @@ export function GestionCategoriasForm({ rol }: { rol: RolNombre }) {
                     disabled={cargando}
                     aria-label={`${categoria.activa ? 'Desactivar' : 'Activar'} ${categoria.nombre}`}
                     title={categoria.activa ? 'Desactivar' : 'Activar'}
-                    className={`${claseBotonIcono} ${categoria.activa ? 'text-danger hover:bg-danger/10' : 'text-success hover:bg-success/10'}`}
+                    className={`${claseBotonIcono} ${categoria.activa ? 'text-muted hover:bg-danger/10 hover:text-danger' : 'text-success hover:bg-success/10'}`}
                   >
                     <Power className="size-4" />
                   </button>
@@ -452,7 +449,7 @@ export function GestionCategoriasForm({ rol }: { rol: RolNombre }) {
       </section>
 
       {mostrarFormulario && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4">
           <form
             onSubmit={guardar}
             role="dialog"

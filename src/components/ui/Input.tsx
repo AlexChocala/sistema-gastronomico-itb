@@ -1,6 +1,6 @@
 // Input genérico con label y mensaje de error opcional, para no repetir ese markup
 // en cada formulario de components/forms. Los colores salen de los tokens de
-// styles/globals.css.
+// styles/theme.css.
 
 import type { InputHTMLAttributes } from 'react'
 
@@ -21,7 +21,7 @@ export function Input({ label, error, id, className = '', ...props }: InputProps
         id={id}
         aria-invalid={error ? true : undefined}
         aria-describedby={idError}
-        className={`rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-primary ${className}`}
+        className={`rounded-md border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent ${className}`}
         {...props}
       />
       {error && <span id={idError} className="text-sm text-danger">{error}</span>}

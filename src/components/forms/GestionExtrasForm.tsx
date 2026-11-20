@@ -12,7 +12,7 @@ const claseCampo =
 const claseBotonSecundario =
   'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-border bg-surface px-4 py-2.5 text-sm transition-colors hover:bg-bg disabled:cursor-not-allowed disabled:opacity-50'
 const claseBotonAcento =
-  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted'
+  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm text-on-brand transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted'
 const claseBotonIcono =
   'flex size-9 cursor-pointer items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50'
 
@@ -262,28 +262,36 @@ export function GestionExtrasForm({ idCategoriaInicial }: { idCategoriaInicial: 
           </div>
         )}
 
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4">
+        <div className="grid-cards [--card-min:15rem]">
           {extrasDeCategoria.map((extra) => (
             <article
               key={extra.idExtra}
-              className={`flex flex-col gap-4 rounded-3xl bg-surface p-5 shadow-sm transition-shadow hover:shadow-md ${extra.activo ? '' : 'opacity-60'}`}
+              className={`panel-card flex flex-col gap-4 transition-shadow hover:shadow-md ${extra.activo ? '' : 'opacity-60'}`}
             >
-              <span className={`inline-flex items-center gap-1.5 text-xs ${extra.activo ? 'text-success' : 'text-muted'}`}>
-                <span className={`size-1.5 rounded-full ${extra.activo ? 'bg-success' : 'bg-muted'}`} />
-                {extra.activo ? 'Activo' : 'Inactivo'}
-              </span>
+              {/* Solo se marca el inactivo: si todos dicen "Activo", la etiqueta no informa. */}
+              {!extra.activo && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+                  <span className="size-1.5 rounded-full bg-muted" />
+                  Inactivo
+                </span>
+              )}
 
               <div className="min-w-0">
                 <h3 className="leading-tight">{extra.nombre}</h3>
-                <p className="mt-0.5 text-sm text-muted tabular-nums">{textoPrecio(extra.precioAdicional)}</p>
+                <p className="mt-0.5 text-lg font-bold tabular-nums">{textoPrecio(extra.precioAdicional)}</p>
               </div>
 
               <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-4">
                 <p className="inline-flex items-center gap-2 text-sm text-muted">
                   <Package className="size-4" />
                   <span>
-                    <span className="font-bold text-text">{extra.productos.length}</span> de {productosDeCategoria.length}{' '}
-                    {productosDeCategoria.length === 1 ? 'producto' : 'productos'}
+                    {extra.productos.length === 0 ? (
+                      'En ningún producto'
+                    ) : extra.productos.length >= productosDeCategoria.length ? (
+                      'En todos los productos'
+                    ) : (
+                      <>En <span className="font-bold text-text">{extra.productos.length}</span> de {productosDeCategoria.length} productos</>
+                    )}
                   </span>
                 </p>
                 <div className="flex gap-1">
@@ -303,7 +311,7 @@ export function GestionExtrasForm({ idCategoriaInicial }: { idCategoriaInicial: 
                     disabled={cargando}
                     aria-label={`${extra.activo ? 'Desactivar' : 'Activar'} ${extra.nombre}`}
                     title={extra.activo ? 'Desactivar' : 'Activar'}
-                    className={`${claseBotonIcono} ${extra.activo ? 'text-danger hover:bg-danger/10' : 'text-success hover:bg-success/10'}`}
+                    className={`${claseBotonIcono} ${extra.activo ? 'text-muted hover:bg-danger/10 hover:text-danger' : 'text-success hover:bg-success/10'}`}
                   >
                     <Power className="size-4" />
                   </button>
@@ -315,7 +323,7 @@ export function GestionExtrasForm({ idCategoriaInicial }: { idCategoriaInicial: 
       </section>
 
       {mostrarFormulario && categoria && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4">
           <form
             onSubmit={guardar}
             role="dialog"

@@ -242,5 +242,6 @@ export function generarDatosDeEjemplo(filtros: FiltrosReportes): DatosReportes {
         subtotal: p.subtotal, recargoDelivery: 0, total: p.total,
       }))
       .reverse(),
+    turnos: [],
   }
 }

@@ -3,7 +3,7 @@
 // hasta que cambia la situación o se cierra. Para confirmar una acción rápida que se va
 // sola, usá AvisoFlotante.
 //
-// Los colores salen de los tokens de styles/globals.css (--success/--success-surface, etc.).
+// Los colores salen de los tokens de styles/theme.css (--success/--success-surface, etc.).
 // Sin estado propio: si se puede cerrar o tiene acción, lo decide quien lo usa.
 
 import type { ReactNode } from 'react'

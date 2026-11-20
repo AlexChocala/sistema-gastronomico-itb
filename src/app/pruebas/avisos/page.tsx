@@ -38,7 +38,7 @@ export default function GuiaAvisosPage() {
           <h1 className="page-title">Guía de avisos</h1>
           <p className="text-muted">
             Cómo le avisamos a la persona qué pasó. Usá esta página para elegir el componente correcto y
-            para ajustar los colores en styles/globals.css.
+            para ajustar los colores en styles/theme.css.
           </p>
         </header>
 
@@ -95,7 +95,7 @@ export default function GuiaAvisosPage() {
         <section className={tarjeta}>
           <h2 className="text-lg font-semibold">Paleta</h2>
           <p className="text-sm font-normal text-muted">
-            Pares color + fondo. Para cambiarlos, editá estas variables en styles/globals.css.
+            Pares color + fondo. Para cambiarlos, editá estas variables en styles/theme.css.
           </p>
           <ul className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
             {paleta.map((par) => (

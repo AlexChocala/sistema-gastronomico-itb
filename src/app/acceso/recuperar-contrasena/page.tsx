@@ -5,3 +5,5 @@ import { RecuperarContrasenaForm } from '@/components/forms/RecuperarContrasenaF
 export default function ForgotPasswordPage() {
   return <RecuperarContrasenaForm />
 }
+
+export const metadata = { title: 'Recuperar contraseña' }

@@ -81,7 +81,7 @@ export function Campanita() {
       >
         <Bell strokeWidth={1.75} className="size-5" />
         {cantidad > 0 && (
-          <span className="absolute -top-1 -right-1 flex min-w-5 items-center justify-center rounded-full bg-danger px-1 text-xs font-semibold text-on-primary">
+          <span className="absolute -top-1 -right-1 flex min-w-5 items-center justify-center rounded-full bg-danger px-1 text-xs font-semibold text-on-danger">
             {cantidad > 9 ? '9+' : cantidad}
           </span>
         )}

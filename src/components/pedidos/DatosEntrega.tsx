@@ -6,7 +6,7 @@ import { MapPin, Phone } from '@/components/icons'
 import type { PedidoPantalla } from '@/lib/pedidos/pedidos-pantallas'
 
 // 1123493023 → 11 2349-3023 (solo para leerlo; el link usa los dígitos).
-function formatearCelular(digitos: string) {
+export function formatearCelular(digitos: string) {
   return digitos.length === 10 ? `${digitos.slice(0, 2)} ${digitos.slice(2, 6)}-${digitos.slice(6)}` : digitos
 }
 
@@ -27,7 +27,10 @@ export function DatosEntrega({
           <MapPin className="mt-0.5 size-4 shrink-0 text-muted" />
           <span className="min-w-0">
             {direccion}
-            {localidad && <span className="text-muted">, {localidad}</span>}
+            {/* Las direcciones online ya traen la localidad: no se repite. */}
+            {localidad && !direccion.toLowerCase().includes(localidad.toLowerCase()) && (
+              <span className="text-muted">, {localidad}</span>
+            )}
           </span>
         </p>
       )}

@@ -18,6 +18,7 @@ function pedido(estadoPedido: string, idPedido = 1, estadoPago = 'pagado'): Pedi
     usuario: { nombre: 'Ana', apellido: 'Pérez' }, cliente: { nombre: 'Juan', apellido: null },
     sucursal: { nombre: 'Avellaneda' }, tipoEntrega: { nombre: 'retiro' },
     detalles: [{ idProducto: 1, cantidad: 1, subtotal: 1000, producto: { nombre: 'Hamburguesa' } }],
+    pagos: [{ metodo: 'efectivo', monto: 1000 }],
   }
 }
 
@@ -30,6 +31,7 @@ function consultas(pedidos: Pedido[] = []) {
     '@/lib/pedidos/pedidos-estados': { ESTADOS_PEDIDO },
     '@/lib/db/prisma': { prisma: {
       sucursal: { findMany: async () => [{ idSucursal: 1, nombre: 'Avellaneda' }] },
+      turnoCaja: { findMany: async () => [] },
       pedido: { findMany: async ({ select, where }: { select: Record<string, boolean>; where: Record<string, unknown> }) => {
         assert.equal(select.estadoPedido, true)
         assert.equal('estadoPedido' in where, false, 'No debe filtrar solo entregados')
@@ -58,8 +60,8 @@ test('representa todos los estados con nombres legibles en la tabla compartida p
   assert.ok(columna >= 0)
   const filas = detalle.filas(datos, 'dia')
   assert.ok(filas.every(f => f.length === detalle.columnas.length))
-  assert.deepEqual(Array.from(filas, f => f[columna]).sort(), ['Pendiente de pago', 'Recibido', 'En preparación', 'Listo', 'Enviado', 'Entregado'].sort())
-  assert.equal(datos.pedidos.length, 6)
+  assert.deepEqual(Array.from(filas, f => f[columna]).sort(), ['Pendiente de pago', 'Recibido', 'En preparación', 'Listo', 'Enviado', 'Entregado', 'Cancelado'].sort())
+  assert.equal(datos.pedidos.length, 7)
 })
 
 test('un pagado en preparación suma como venta; un pendiente permanece visible y no suma', () => {

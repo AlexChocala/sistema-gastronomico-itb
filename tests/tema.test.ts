@@ -164,10 +164,10 @@ async function renderizarConfiguracion(rol: string | null) {
   }
   return { apariencia: contiene(arbol, Apariencia), negocio: contiene(arbol, Negocio), consultasNegocio }
 }
+// Configuración es solo del administrador: los demás roles vuelven al Dashboard.
 for (const rol of ['empleado', 'supervisor']) {
-  test(`${rol}: Configuración muestra apariencia sin consultar ni exponer los datos del negocio`, async () => {
-    const salida = await renderizarConfiguracion(rol)
-    assert.deepEqual(salida, { apariencia: true, negocio: false, consultasNegocio: 0 })
+  test(`${rol}: Configuración lo manda al Dashboard sin exponer los datos del negocio`, async () => {
+    await assert.rejects(renderizarConfiguracion(rol), /REDIRECT:\/dashboard/)
   })
 }
 test('administrador conserva apariencia y el formulario del negocio', async () => {
@@ -196,9 +196,10 @@ async function pasarPorProxy(ruta: string, rol: string | null) {
   const resultado = await exports.proxy({ url: `http://localhost:3000${ruta}`, nextUrl: { pathname: ruta } })
   return { permitido: resultado.permitido, destino: resultado.destino }
 }
-test('el proxy permite Configuración a todos los roles con sesión', async () => {
-  for (const rol of ['admin', 'supervisor', 'empleado']) {
-    assert.equal((await pasarPorProxy('/configuracion', rol)).permitido, true)
+test('el proxy reserva Configuración al administrador', async () => {
+  assert.equal((await pasarPorProxy('/configuracion', 'admin')).permitido, true)
+  for (const rol of ['supervisor', 'empleado']) {
+    assert.deepEqual(await pasarPorProxy('/configuracion', rol), { permitido: false, destino: '/dashboard' })
   }
 })
 test('el proxy conserva la exigencia de sesión en Configuración', async () => {

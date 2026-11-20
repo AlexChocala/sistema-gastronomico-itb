@@ -7,12 +7,14 @@ import { validarLocalidadNueva } from './localidades-validacion'
 import { coberturaConfigurada, coordenadasValidas, MENSAJE_ZONAS, type ZonaDelivery } from './radio-delivery'
 import { geocodificarDireccion, localidadesCercanas } from './geocodificacion'
 import { camposZonas } from './cobertura-delivery'
+import { textoHorario } from './horario-bloques'
 
 type Sesion = { user: { idUsuario: number } } | null
 
 const camposSucursal = {
   idSucursal: true, nombre: true, slug: true, direccion: true, whatsapp: true, horario: true, linkMaps: true, activa: true,
   ofreceRetiro: true, ofreceDelivery: true, idLocalidad: true,
+  horarios: { select: { diaSemana: true, abreMin: true, cierraMin: true } },
   latitud: true, longitud: true, localidadesDelivery: camposZonas,
   localidad: { select: { idLocalidad: true, nombre: true, provincia: { select: { idProvincia: true, nombre: true } } } },
 } satisfies Prisma.SucursalSelect
@@ -219,7 +221,8 @@ export function crearControladorSucursales(db: PrismaClient, leerSesion: () => P
           orderBy: [{ nombre: 'asc' }],
         }),
       ])
-      return responder({ sucursales, localidades })
+      // El horario que se muestra sale del horario cargado (con los días), no del texto viejo.
+      return responder({ sucursales: sucursales.map(({ horarios, ...sucursal }) => ({ ...sucursal, horario: textoHorario(horarios) })), localidades })
     }),
 
     // Localidades cercanas a la dirección del local, para elegir a cuáles hacer delivery.

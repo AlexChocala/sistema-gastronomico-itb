@@ -51,7 +51,7 @@ const contexto = { localidad: 'Avellaneda', provincia: 'Buenos Aires' }
 const sucursalBase = {
   idSucursal: 1, nombre: 'Avellaneda', slug: 'avellaneda', activa: true, ofreceDelivery: true, ofreceRetiro: true,
   direccion: 'Olavarría 65', idLocalidad: 1, ...origen,
-  whatsapp: '1123456789', localidadesDelivery: zonasBase,
+  whatsapp: '1123456789', localidadesDelivery: zonasBase, pausaPedidosOnline: false, horarios: [] as { diaSemana: number; abreMin: number; cierraMin: number }[],
 }
 // Lo que recibe prepararSucursal como sucursal anterior al editar.
 function anterior(sucursal: typeof sucursalBase) {
@@ -150,13 +150,14 @@ function escenario() {
     estadoPedido: 'recibido', estadoPago: 'pagado', metodoPago: 'efectivo', direccion: null,
     referencias: null, aclaracion: null, subtotal: 1000, recargoDelivery: 0, total: 1000, idLocalidad: null,
     cliente: { nombre: 'Juan', apellido: null, telefono: '1123456789' }, tipoEntrega: { nombre: 'retiro' },
-    localidad: null, detalles: [],
+    localidad: null, detalles: [], pagos: [],
   }
   const dbDoble = {
     sucursal: { findUnique: async () => structuredClone(sucursal) },
     localidad: { findUnique: async () => ({ idLocalidad: 1, nombre: 'Avellaneda', provincia: { nombre: 'Buenos Aires' } }) },
     sucursalLocalidad: { findMany: async () => sucursal.localidadesDelivery },
-    usuario: { findUnique: async () => ({ idSucursal: 1, activo: true, debeCambiarContrasena: false, rol: { nombre: estado.rol } }) },
+    usuario: { findFirst: async () => ({ idUsuario: 2 }), update: async () => ({ pinIntentosFallidos: 0 }), findUnique: async () => ({ idSucursal: 1, activo: true, debeCambiarContrasena: false, rol: { nombre: estado.rol } }) },
+    turnoCaja: { findFirst: async () => ({ idTurno: 1, montoInicial: 0 }) },
     negocio: { findUnique: async () => null },
     tipoEntrega: { findUnique: async () => ({ idTipoEntrega: 2 }) },
     producto: { findMany: async () => [{ idProducto: 1, nombre: 'Hamburguesa', precio: 1000, activo: true, categoria: { activa: true }, sucursales: [{ disponible: true }], variaciones: [], extras: [] }] },
@@ -196,6 +197,7 @@ function request(cuerpo: unknown, method = 'POST') {
     method, headers: { 'Content-Type': 'application/json', origin: 'http://localhost:3000', 'x-forwarded-for': `prueba-${++ip}` }, body: JSON.stringify(cuerpo),
   })
 }
+const conCaja = <T extends object>(cuerpo: T) => ({ ...cuerpo, idCaja: 1, pin: '1234' })
 const cuerpoDelivery = {
   cliente: { nombre: 'Juan', telefono: '1123456789' }, tipoEntrega: 'delivery', metodoPago: 'efectivo',
   direccion: 'Olavarría 100, Avellaneda, Buenos Aires', recargoDeliveryAceptado: 0, items: [{ idProducto: 1, cantidad: 1 }],
@@ -203,7 +205,7 @@ const cuerpoDelivery = {
 for (const canal of ['online', 'caja', 'cambiarEntrega'] as const) {
   async function enviar(e: ReturnType<typeof escenario>) {
     if (canal === 'online') return e.online.crear(request({ ...cuerpoDelivery, slugSucursal: 'avellaneda' }))
-    if (canal === 'caja') return e.interno.crearCaja(request(cuerpoDelivery))
+    if (canal === 'caja') return e.interno.crearCaja(request(conCaja(cuerpoDelivery)))
     return e.interno.actualizar(request({ accion: 'cambiarTipoEntrega', tipoEntrega: 'delivery', direccion: cuerpoDelivery.direccion, telefono: cuerpoDelivery.cliente.telefono, recargoDeliveryAceptado: 0 }, 'PATCH'), '20')
   }
   test(`${canal}: otra localidad con costo exige aceptar el recargo antes de guardar`, async () => {
@@ -235,7 +237,7 @@ test('retiro funciona sin cobertura ni acceso a Georef, tanto online como Caja',
   e.sucursal.localidadesDelivery = []
   globalThis.fetch = async () => { assert.fail('Retiro no consulta Georef') }
   const cuerpo = { cliente: { nombre: 'Juan' }, tipoEntrega: 'retiro', metodoPago: 'efectivo', items: cuerpoDelivery.items }
-  assert.equal((await e.interno.crearCaja(request(cuerpo))).status, 201)
+  assert.equal((await e.interno.crearCaja(request(conCaja(cuerpo)))).status, 201)
   assert.equal((await e.online.crear(request({ ...cuerpo, cliente: cuerpoDelivery.cliente, slugSucursal: 'avellaneda' }))).status, 201)
 })
 test('no se aceptan coordenadas ni radio enviados por el comprador para evitar la validación', () => {
@@ -300,7 +302,7 @@ test('las operaciones del personal conservan la exigencia de sesión antes de co
   const e = escenario()
   const sinSesion = crearControladorPedidosInternos(e.db, async () => null, async () => 1)
   globalThis.fetch = async () => { assert.fail('Sin sesión no consulta Georef') }
-  assert.equal((await sinSesion.crearCaja(request(cuerpoDelivery))).status, 401)
+  assert.equal((await sinSesion.crearCaja(request(conCaja(cuerpoDelivery)))).status, 401)
   assert.equal((await sinSesion.actualizar(request({ accion: 'cambiarTipoEntrega', tipoEntrega: 'delivery', direccion: cuerpoDelivery.direccion, telefono: '1123456789' }, 'PATCH'), '20')).status, 401)
   assert.equal(e.estado.clientes + e.estado.pedidos + e.estado.cambios, 0)
 })
@@ -309,7 +311,7 @@ test('las direcciones incompletas se rechazan en los tres puntos de entrada sin 
   globalThis.fetch = async () => { assert.fail('Dirección incompleta no consulta Georef') }
   const cuerpo = { ...cuerpoDelivery, direccion: 'Olavarría 100' }
   assert.equal((await e.online.crear(request({ ...cuerpo, slugSucursal: 'avellaneda' }))).status, 400)
-  assert.equal((await e.interno.crearCaja(request(cuerpo))).status, 400)
+  assert.equal((await e.interno.crearCaja(request(conCaja(cuerpo)))).status, 400)
   assert.equal((await e.interno.actualizar(request({ accion: 'cambiarTipoEntrega', tipoEntrega: 'delivery', direccion: cuerpo.direccion, telefono: '1123456789' }, 'PATCH'), '20')).status, 400)
   assert.equal(e.estado.clientes + e.estado.pedidos + e.estado.cambios, 0)
 })
@@ -349,7 +351,7 @@ for (const canal of ['online', 'caja'] as const) {
     const e = escenario()
     mockGeoref([direccionGeoref(lejos)])
     const cuerpo = { ...cuerpoDelivery, recargoDeliveryAceptado: 2500 }
-    const respuesta = canal === 'online' ? await e.online.crear(request({ ...cuerpo, slugSucursal: 'avellaneda' })) : await e.interno.crearCaja(request(cuerpo))
+    const respuesta = canal === 'online' ? await e.online.crear(request({ ...cuerpo, slugSucursal: 'avellaneda' })) : await e.interno.crearCaja(request(conCaja(cuerpo)))
     assert.equal(respuesta.status, 201, JSON.stringify(await respuesta.clone().json()))
     const { pedido } = await respuesta.json()
     assert.equal(pedido.subtotal, 1000)
@@ -365,7 +367,7 @@ for (const canal of ['online', 'caja'] as const) {
     mockGeoref([direccionGeoref(lejos)])
     e.estado.cambiarTarifa = true
     const cuerpo = { ...cuerpoDelivery, recargoDeliveryAceptado: 2500, slugSucursal: 'avellaneda' }
-    const respuesta = canal === 'online' ? await e.online.crear(request(cuerpo)) : await e.interno.crearCaja(request({ ...cuerpoDelivery, recargoDeliveryAceptado: 2500 }))
+    const respuesta = canal === 'online' ? await e.online.crear(request(cuerpo)) : await e.interno.crearCaja(request(conCaja({ ...cuerpoDelivery, recargoDeliveryAceptado: 2500 })))
     assert.equal(respuesta.status, 409)
     assert.equal(e.estado.clientes + e.estado.pedidos + e.estado.cambios, 0)
   })

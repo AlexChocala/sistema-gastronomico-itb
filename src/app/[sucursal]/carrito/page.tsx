@@ -8,7 +8,7 @@ import { obtenerSucursalOFallar, productosDelMenu } from '../datos'
 
 export async function generateMetadata({ params }: PageProps<'/[sucursal]/carrito'>): Promise<Metadata> {
   const { sucursal, negocio } = await obtenerSucursalOFallar((await params).sucursal)
-  return { title: `Tu carrito · ${sucursal.nombre} · ${negocio.nombre}` }
+  return { title: { absolute: `Tu carrito · ${sucursal.nombre} · ${negocio.nombre}` } }
 }
 
 export default async function PaginaCarrito({ params }: PageProps<'/[sucursal]/carrito'>) {

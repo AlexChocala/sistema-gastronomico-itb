@@ -17,6 +17,7 @@ import { recargoDeliveryValido } from '@/lib/sucursales/radio-delivery'
 import { ACCIONES_ESTADO, ESTADOS_PEDIDO, type AccionEstado, type EstadoPedido } from './pedidos-estados'
 import { idValido, whatsappValido } from '@/lib/sucursales/sucursales-validacion'
 import { MENSAJE_DIRECCION_COMPLETA, separarDireccion } from '@/lib/sucursales/radio-delivery'
+import { MENSAJE_PIN, pinValido } from '@/lib/caja/pin-formato'
 
 export class ErrorPedido extends Error {
   constructor(public estado: number, mensaje: string, public extra: Record<string, unknown> = {}) {
@@ -37,10 +38,10 @@ export const MAX_ACLARACION = 200
 
 export const MENSAJE_SUCURSAL_NO_DISPONIBLE = 'Esta sucursal no existe o no está disponible.'
 export const MENSAJE_TELEFONO =
-  'Ingresá tu celular con código de área, sin 0 ni 15 (10 números). Ej: 1123493023 o 3777412142.'
+  'Ingresá tu celular con código de área, sin 0 ni 15 (10 números). Ej: 1123493023.'
 // Las mismas reglas, redactadas para el personal (Caja y Pedidos).
 export const MENSAJE_TELEFONO_CLIENTE =
-  'Ingresá el celular del cliente con código de área, sin 0 ni 15 (10 números). Ej: 1123493023 o 3777412142.'
+  'Ingresá el celular del cliente con código de área, sin 0 ni 15 (10 números). Ej: 1123493023.'
 export const MENSAJE_NOMBRE =
   `Ingresá tu nombre: solo letras, entre ${MIN_NOMBRE_CLIENTE} y ${MAX_NOMBRE_CLIENTE} caracteres.`
 export const MENSAJE_NOMBRE_CLIENTE = `El nombre del cliente debe tener entre 1 y ${MAX_NOMBRE_CLIENTE} caracteres.`
@@ -332,6 +333,31 @@ export type PedidoCajaValidado = {
   aclaracion: string | null
   items: ItemPedidoOnline[]
   recargoDeliveryAceptado: number | null
+  // Caja donde se cobra y PIN de quien cobra (queda como responsable del cobro).
+  idCaja: number
+  pin: string
+  // Pago dividido: cada parte con su método. Sin esto, se paga todo con `metodoPago`.
+  pagos: PagoCaja[] | null
+}
+
+export type PagoCaja = { metodo: MetodoPagoOnline; monto: number }
+
+const MAX_MONTO_PAGO = 100_000_000
+
+// Hasta dos pagos, uno por método (efectivo y transferencia), con monto positivo.
+function validarPagos(valor: unknown): PagoCaja[] | null {
+  if (valor === undefined) return null
+  const mensaje = 'Revisá cómo se divide el pago.'
+  if (!Array.isArray(valor) || valor.length < 1 || valor.length > 2) throw new ErrorPedido(400, mensaje)
+  const pagos = valor.map((pago): PagoCaja => {
+    const datos = objeto(pago, mensaje)
+    soloCampos(datos, ['metodo', 'monto'], mensaje)
+    if (datos.metodo !== 'efectivo' && datos.metodo !== 'transferencia') throw new ErrorPedido(400, mensaje)
+    if (typeof datos.monto !== 'number' || !Number.isFinite(datos.monto) || datos.monto <= 0 || datos.monto > MAX_MONTO_PAGO) throw new ErrorPedido(400, mensaje)
+    return { metodo: datos.metodo, monto: Math.round(datos.monto * 100) / 100 }
+  })
+  if (pagos.length === 2 && pagos[0].metodo === pagos[1].metodo) throw new ErrorPedido(400, mensaje)
+  return pagos
 }
 
 const CAMPOS_DELIVERY = ['direccion', 'idLocalidad', 'ubicacion', 'referencias']
@@ -343,7 +369,7 @@ export function validarPedidoCaja(cuerpo: unknown): PedidoCajaValidado {
   const datos = objeto(cuerpo, 'Enviá un objeto JSON con los datos del pedido.')
   soloCampos(
     datos,
-    ['cliente', 'tipoEntrega', 'metodoPago', 'aclaracion', 'items', 'recargoDeliveryAceptado', ...CAMPOS_DELIVERY],
+    ['cliente', 'tipoEntrega', 'metodoPago', 'aclaracion', 'items', 'recargoDeliveryAceptado', 'idCaja', 'pin', 'pagos', ...CAMPOS_DELIVERY],
     'El pedido tiene campos que no se reconocen.',
   )
 
@@ -366,6 +392,11 @@ export function validarPedidoCaja(cuerpo: unknown): PedidoCajaValidado {
   const metodoPago = datos.metodoPago
   const aclaracion = validarAclaracion(datos.aclaracion)
   const items = validarItems(datos.items)
+  if (!idValido(datos.idCaja)) throw new ErrorPedido(400, 'Elegí la caja.')
+  const idCaja = datos.idCaja
+  if (!pinValido(datos.pin)) throw new ErrorPedido(400, MENSAJE_PIN)
+  const pin = datos.pin
+  const pagos = validarPagos(datos.pagos)
 
   if (tipoEntrega === 'retiro') {
     if ('telefono' in cliente || CAMPOS_DELIVERY.some((campo) => campo in datos)) {
@@ -374,6 +405,7 @@ export function validarPedidoCaja(cuerpo: unknown): PedidoCajaValidado {
     return {
       cliente: { nombre, telefono: null }, tipoEntrega, metodoPago,
       direccion: null, idLocalidad: null, ubicacion: null, referencias: null, aclaracion, items, recargoDeliveryAceptado: null,
+      idCaja, pin, pagos,
     }
   }
 
@@ -381,13 +413,19 @@ export function validarPedidoCaja(cuerpo: unknown): PedidoCajaValidado {
   return {
     cliente: { nombre, telefono: entrega.telefono }, tipoEntrega, metodoPago,
     direccion: entrega.direccion, idLocalidad: entrega.idLocalidad, ubicacion: entrega.ubicacion, referencias: entrega.referencias, aclaracion, items, recargoDeliveryAceptado: entrega.recargoDeliveryAceptado,
+    idCaja, pin, pagos,
   }
 }
 
 // ---- Acciones del personal (PATCH /api/pedidos/{id}) ----
 
+export const MAX_MOTIVO = 200
+
 export type AccionPedido =
-  | { accion: AccionEstado }
+  // "Entregado y cobrado" pide PIN y caja cuando hay efectivo por cobrar (lo decide el servidor).
+  | { accion: AccionEstado; pin: string | null; idCaja: number | null }
+  | { accion: 'cancelar'; motivo: string; pin: string }
+  | { accion: 'agregarProductos'; items: ItemPedidoOnline[]; pin: string }
   | { accion: 'deshacer'; estadoAnterior: EstadoPedido }
   | { accion: 'cambiarTipoEntrega'; tipoEntrega: 'retiro' }
   | ({ accion: 'cambiarTipoEntrega'; tipoEntrega: 'delivery' } & DatosDeliveryValidados)
@@ -397,8 +435,25 @@ export function validarAccionPedido(cuerpo: unknown): AccionPedido {
   const { accion } = datos
 
   if (typeof accion === 'string' && (ACCIONES_ESTADO as readonly string[]).includes(accion)) {
-    soloCampos(datos, ['accion'], 'La acción tiene campos que no se reconocen.')
-    return { accion: accion as AccionEstado }
+    soloCampos(datos, accion === 'marcarEntregado' ? ['accion', 'pin', 'idCaja'] : ['accion'], 'La acción tiene campos que no se reconocen.')
+    if (datos.pin !== undefined && !pinValido(datos.pin)) throw new ErrorPedido(400, MENSAJE_PIN)
+    if (datos.idCaja !== undefined && !idValido(datos.idCaja)) throw new ErrorPedido(400, 'Elegí la caja.')
+    return { accion: accion as AccionEstado, pin: (datos.pin as string | undefined) ?? null, idCaja: (datos.idCaja as number | undefined) ?? null }
+  }
+
+  if (accion === 'cancelar') {
+    soloCampos(datos, ['accion', 'motivo', 'pin'], 'La acción tiene campos que no se reconocen.')
+    if (typeof datos.motivo !== 'string' || datos.motivo.trim().length < 3 || datos.motivo.trim().length > MAX_MOTIVO) {
+      throw new ErrorPedido(400, `Escribí el motivo de la cancelación (hasta ${MAX_MOTIVO} caracteres).`)
+    }
+    if (!pinValido(datos.pin)) throw new ErrorPedido(400, MENSAJE_PIN)
+    return { accion, motivo: datos.motivo.trim(), pin: datos.pin }
+  }
+
+  if (accion === 'agregarProductos') {
+    soloCampos(datos, ['accion', 'items', 'pin'], 'La acción tiene campos que no se reconocen.')
+    if (!pinValido(datos.pin)) throw new ErrorPedido(400, MENSAJE_PIN)
+    return { accion, items: validarItems(datos.items), pin: datos.pin }
   }
 
   if (accion === 'deshacer') {

@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { UtensilsCrossed, type LucideIcon } from '@/components/icons'
 
 export const claseBotonAcento =
-  'inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-accent py-3 text-sm text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted'
+  'inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand py-3 text-sm text-on-brand transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted'
 
 export const claseEnlaceSecundario =
   'inline-flex items-center justify-center gap-2 text-sm text-muted transition-colors hover:text-text'
@@ -14,12 +14,19 @@ export const claseEnlaceSecundario =
 // "Kiddo / con Mise": el restaurante en texto y Mise como marca del software. Sin nombre
 // (sistema todavía sin configurar) muestra solo "Mise". Nunca muestra el logo del negocio:
 // el panel interno mantiene los colores de Mise.
-export function LogoMise({ nombreNegocio }: { nombreNegocio?: string | null }) {
+// Con `logoUrl` se muestra el logo del restaurante; sin él, el ícono de Mise.
+export function LogoMise({ nombreNegocio, logoUrl }: { nombreNegocio?: string | null; logoUrl?: string | null }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent">
-        <UtensilsCrossed size={18} strokeWidth={2} />
-      </span>
+      {logoUrl ? (
+        // URL del bucket: no pasa por next/image.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={logoUrl} alt="" className="size-9 shrink-0 rounded-full object-cover" />
+      ) : (
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand text-on-brand">
+          <UtensilsCrossed size={18} strokeWidth={2} />
+        </span>
+      )}
       {nombreNegocio ? (
         <span className="flex min-w-0 flex-col">
           <span className="truncate leading-tight font-semibold tracking-tight" title={nombreNegocio}>

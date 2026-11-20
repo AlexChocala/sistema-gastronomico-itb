@@ -54,10 +54,13 @@ export function MenuUsuario({ nombre, rol, fotoUrl }: { nombre: string; rol: str
             <User strokeWidth={1.75} className="size-(--sidebar-icono) shrink-0" />
             Perfil
           </Link>
-          <Link href="/configuracion" onClick={() => setAbierto(false)} className={claseOpcion + ' hover:text-text'}>
-            <Settings strokeWidth={1.75} className="size-(--sidebar-icono) shrink-0" />
-            Configuración
-          </Link>
+          {/* Configuración es solo del administrador. */}
+          {rol === 'admin' && (
+            <Link href="/configuracion" onClick={() => setAbierto(false)} className={claseOpcion + ' hover:text-text'}>
+              <Settings strokeWidth={1.75} className="size-(--sidebar-icono) shrink-0" />
+              Configuración
+            </Link>
+          )}
           <CerrarSesionButton className={claseOpcion + ' hover:text-danger'} />
         </div>
       )}

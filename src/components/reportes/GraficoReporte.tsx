@@ -1,7 +1,7 @@
 'use client'
 
 // Gráfico de una pestaña de Reportes con chart.js. Registra solo las piezas que usa.
-// Los colores salen de los tokens de styles/globals.css.
+// Los colores salen de los tokens de styles/theme.css.
 
 import {
   ArcElement, BarElement, CategoryScale, Chart as ChartJS, Legend, LinearScale, LineElement, PointElement, Tooltip,
@@ -49,11 +49,14 @@ export function GraficoReporte({ tipo, etiquetas, valores, nombreSerie, formato 
 
   if (tipo === 'torta') {
     const colores = ['--accent', '--info', '--success', '--warning', '--order-delivered'].map(token)
+    // El porcentaje va en la leyenda: con solo el nombre no se ve cuánto pesa cada parte.
+    const total = valores.reduce((suma, valor) => suma + valor, 0)
+    const conPorcentaje = etiquetas.map((etiqueta, i) => `${etiqueta} ${total > 0 ? Math.round((valores[i] / total) * 100) : 0}%`)
     return (
       <div className="relative mx-auto h-72 w-full max-w-sm">
         <Doughnut
           plugins={plugins}
-          data={{ labels: etiquetas, datasets: [{ label: nombreSerie, data: valores, backgroundColor: colores, borderColor: token('--surface') }] }}
+          data={{ labels: conPorcentaje, datasets: [{ label: nombreSerie, data: valores, backgroundColor: colores, borderColor: token('--surface') }] }}
           options={{
             maintainAspectRatio: false,
             plugins: {
@@ -68,7 +71,11 @@ export function GraficoReporte({ tipo, etiquetas, valores, nombreSerie, formato 
 
   const horizontal = tipo === 'barrasHorizontales'
   const ejeValores = { beginAtZero: true, ticks: { color: textoSuave, callback: (valor: string | number) => aTexto(Number(valor)) }, grid: { color: borde } }
-  const ejeEtiquetas = { ticks: { color: textoSuave }, grid: { display: false } }
+  // Fechas y horas siempre horizontales; si no entran todas, se muestran algunas.
+  const ejeEtiquetas = {
+    ticks: horizontal ? { color: textoSuave } : { color: textoSuave, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
+    grid: { display: false },
+  }
   const leyenda = { display: false }
   const tooltip = { callbacks: { label: (item: { raw: unknown }) => `${nombreSerie}: ${aTexto(item.raw as number)}` } }
 

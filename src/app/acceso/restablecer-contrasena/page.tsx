@@ -42,3 +42,5 @@ export default async function ResetPasswordPage({
 
   return <RestablecerContrasenaForm token={token!} />
 }
+
+export const metadata = { title: 'Restablecer contraseña' }

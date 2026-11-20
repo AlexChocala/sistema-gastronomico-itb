@@ -18,7 +18,9 @@ export default async function ConfiguracionPage() {
     select: { rol: { select: { nombre: true } } },
   })
   if (!usuario) redirect('/acceso/login')
+  // Configuración es solo del administrador (el servidor lo vuelve a comprobar aunque escriban la URL).
   const esAdmin = usuario.rol.nombre === 'admin'
+  if (!esAdmin) redirect('/dashboard')
 
   const negocio = esAdmin ? await prisma.negocio.findUnique({
     where: { idNegocio: 1 },
@@ -32,12 +34,13 @@ export default async function ConfiguracionPage() {
 
   return (
     <main className="flex flex-col gap-6 p-6" lang="es">
-      <header>
-        <h1 className="page-title">Configuración</h1>
-        <p className="mt-1 text-sm text-muted">{esAdmin ? 'La apariencia del sistema y los datos de tu restaurante.' : 'Personalizá la apariencia del sistema.'}</p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="page-title">Configuración</h1>
+          <p className="mt-1 text-sm text-muted">{esAdmin ? 'La apariencia del sistema y los datos de tu restaurante.' : 'Personalizá la apariencia del sistema.'}</p>
+        </div>
+        <ConfiguracionApariencia />
       </header>
-
-      <ConfiguracionApariencia />
 
       {esAdmin && negocio && <ConfiguracionNegocioForm
         inicial={{
@@ -56,3 +59,5 @@ export default async function ConfiguracionPage() {
     </main>
   )
 }
+
+export const metadata = { title: 'Configuración' }

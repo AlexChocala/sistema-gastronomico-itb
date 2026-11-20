@@ -17,7 +17,8 @@ import { FotoProducto } from '@/components/carta/compartidos/FotoProducto'
 import { NavCategorias, idSeccion } from './NavCategorias'
 import { ModalProducto } from './ModalProducto'
 
-export function MenuSucursal({ slug, categorias }: { slug: string; categorias: CategoriaMenu[] }) {
+// `aceptaPedidos` false (fuera de horario o en pausa): se puede mirar la carta, pero no agregar ni pedir.
+export function MenuSucursal({ slug, categorias, aceptaPedidos = true }: { slug: string; categorias: CategoriaMenu[]; aceptaPedidos?: boolean }) {
   const carrito = useCarrito(slug)
   const { reconciliar } = carrito
   // Aviso visible (topes alcanzados) y anuncio solo para lectores de pantalla.
@@ -144,9 +145,14 @@ export function MenuSucursal({ slug, categorias }: { slug: string; categorias: C
                     <button
                       type="button"
                       onClick={() => setElegido({ producto, categoria: categoria.nombre })}
+                      disabled={!aceptaPedidos}
                       aria-haspopup="dialog"
                       aria-label={`Agregar ${producto.nombre}${enCarrito > 0 ? ` (${enCarrito} en tu carrito)` : ''}`}
-                      className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent transition-colors after:absolute after:inset-0 after:content-[''] hover:bg-accent hover:text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent cursor-pointer"
+                      className={`flex size-11 shrink-0 items-center justify-center rounded-full transition-colors after:absolute after:inset-0 after:content-[''] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                        aceptaPedidos
+                          ? 'cursor-pointer bg-accent-soft text-accent hover:bg-brand hover:text-on-brand'
+                          : 'cursor-not-allowed bg-surface-muted text-muted opacity-60'
+                      }`}
                     >
                       <Plus className="size-5" aria-hidden="true" />
                     </button>
@@ -159,9 +165,9 @@ export function MenuSucursal({ slug, categorias }: { slug: string; categorias: C
       </div>
 
       <p className="sr-only" aria-live="polite">{anuncio}</p>
-      <BarraCarrito slug={slug} cantidadTotal={carrito.cantidadTotal} total={carrito.total} aviso={aviso} />
+      <BarraCarrito slug={slug} cantidadTotal={carrito.cantidadTotal} total={carrito.total} aviso={aviso} bloqueada={!aceptaPedidos} />
 
-      {elegido && (
+      {elegido && aceptaPedidos && (
         <ModalProducto
           key={elegido.producto.idProducto}
           producto={elegido.producto}

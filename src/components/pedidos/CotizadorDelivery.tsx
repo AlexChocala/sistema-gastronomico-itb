@@ -48,25 +48,34 @@ export function useCotizacionDelivery(direccion: string, slug?: string) {
     }
   }
 
-  return { cotizacion: vigente?.cotizacion ?? null, error: vigente?.error ?? null, consultando, ubicacion, calcular, invalidar }
+  // Una dirección escrita a mano parece completa cuando ya tiene calle y número.
+  const direccionCompleta = direccion.trim().length >= 5 && /\d/.test(direccion)
+
+  return { cotizacion: vigente?.cotizacion ?? null, error: vigente?.error ?? null, consultando, ubicacion, direccionCompleta, calcular, invalidar }
 }
 
 // El costo aparece solo al elegir una dirección de la lista. "Calcular envío" queda como
 // respaldo por si las sugerencias no cargan y la dirección se escribe completa a mano.
+// Sin caja: es una línea de estado que no cambia de forma al pasar de uno a otro; solo el
+// error lleva caja, porque ahí hay que actuar.
 export function CotizadorDelivery({ cotizador, disabled = false }: {
   cotizador: ReturnType<typeof useCotizacionDelivery>
   disabled?: boolean
 }) {
   const { cotizacion, error, consultando } = cotizador
-  // Sin dirección escrita todavía no hay nada que mostrar.
-  if (!consultando && !error && !cotizacion && disabled) return null
+  // Mientras se escribe la dirección no se muestra nada: el enlace de respaldo aparece
+  // recién cuando la dirección ya parece completa.
+  if (!consultando && !error && !cotizacion && (disabled || !cotizador.direccionCompleta)) return null
   return (
-    <div aria-live="polite" className="flex items-center justify-between gap-3 rounded-2xl border border-border p-3 text-sm">
+    <div
+      aria-live="polite"
+      className={`flex items-center justify-between gap-3 text-sm ${error ? 'rounded-2xl border border-danger/40 bg-danger-surface p-3' : ''}`}
+    >
       {consultando ? <p className="text-muted">Calculando envío…</p>
         : error ? <p role="alert" className="text-danger">{error}</p>
         // El precio ya se ve en la lista de localidades y en el total: acá solo se confirma.
         : cotizacion ? <p className="font-semibold text-success">✓ Llegamos a tu dirección</p>
-        : <p className="text-muted">Elegí tu dirección de la lista.</p>}
+        : null}
       {!consultando && !cotizacion && (
         <button type="button" onClick={() => void cotizador.calcular()} disabled={disabled}
           className="shrink-0 text-sm font-medium text-accent underline disabled:opacity-50">

@@ -1,0 +1,49 @@
+/* =========================================
+   TOKENS DE TAILWIND
+   Conecta las variables de theme.css con las clases (bg-surface, text-muted…).
+   Al agregar una variable nueva en theme.css, se registra también acá.
+========================================= */
+
+/* `inline` es necesario: --font-inter lo define next/font en <html>. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-overlay: var(--overlay);
+
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-on-brand: var(--on-brand);
+
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-on-danger: var(--on-danger);
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+  --color-success-surface: var(--success-surface);
+  --color-danger-surface: var(--danger-surface);
+  --color-info: var(--info);
+  --color-info-surface: var(--info-surface);
+  --color-toast: var(--toast);
+  --color-on-toast: var(--on-toast);
+
+  --color-order-received: var(--order-received);
+  --color-order-preparing: var(--order-preparing);
+  --color-order-ready: var(--order-ready);
+  --color-order-sent: var(--order-sent);
+  --color-order-delivered: var(--order-delivered);
+
+  --font-sans: var(--font-inter), sans-serif;
+
+  /* Texto chico de la interfaz (etiquetas, ayudas): 13px en vez de 12px para que se lea mejor. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.35;
+}

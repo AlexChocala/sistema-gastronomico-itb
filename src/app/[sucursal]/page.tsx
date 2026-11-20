@@ -9,7 +9,7 @@ import { hayVariasSucursales, obtenerMenu, obtenerSucursalOFallar } from './dato
 export async function generateMetadata({ params }: PageProps<'/[sucursal]'>): Promise<Metadata> {
   const { sucursal, negocio } = await obtenerSucursalOFallar((await params).sucursal)
   return {
-    title: `${sucursal.nombre} · ${negocio.nombre}`,
+    title: { absolute: `${sucursal.nombre} · ${negocio.nombre}` },
     description: negocio.descripcion ?? `Pedí online en ${negocio.nombre} ${sucursal.nombre}.`,
   }
 }
@@ -22,7 +22,7 @@ export default async function PaginaMenuSucursal({ params }: PageProps<'/[sucurs
     <div className="flex flex-1 flex-col bg-bg text-text">
       <EncabezadoSucursal negocio={negocio} sucursal={sucursal} variasSucursales={variasSucursales} />
       <main className="flex flex-1 flex-col">
-        <MenuSucursal slug={sucursal.slug} categorias={categorias} />
+        <MenuSucursal slug={sucursal.slug} categorias={categorias} aceptaPedidos={sucursal.aceptaPedidos} />
       </main>
     </div>
   )

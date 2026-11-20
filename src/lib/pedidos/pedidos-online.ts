@@ -14,6 +14,7 @@ import {
   type ItemPedidoOnline, type PedidoOnlineValidado, type TipoEntregaOnline,
 } from './pedidos-validacion'
 import { datosTransferencia } from '@/lib/negocio/negocio'
+import { estaAbierta } from '@/lib/sucursales/horario-online'
 import {
   camposCobertura, exigirRecargoAceptado, prepararCoberturaDelivery, sugerirDireccionesDelivery, verificarCoberturaActual,
   zonasDeliveryDe, type CoberturaVerificada,
@@ -224,9 +225,11 @@ async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineVali
       select: {
         ...camposCobertura,
         idSucursal: true, nombre: true, whatsapp: true, activa: true, ofreceRetiro: true, ofreceDelivery: true,
+        pausaPedidosOnline: true, horarios: { select: { diaSemana: true, abreMin: true, cierraMin: true } },
       },
     })
     if (!sucursal?.activa) throw new ErrorPedido(404, MENSAJE_SUCURSAL_NO_DISPONIBLE)
+    if (!estaAbierta(sucursal)) throw new ErrorPedido(409, 'Ahora no estamos tomando pedidos online. Mirá el horario de la sucursal.')
 
     if (pedido.tipoEntrega === 'retiro' && !sucursal.ofreceRetiro) {
       throw new ErrorPedido(400, 'Esta sucursal no ofrece retiro en el local.')
@@ -260,6 +263,8 @@ async function registrarEnTransaccion(db: PrismaClient, pedido: PedidoOnlineVali
       data: {
         origenPedido: 'online',
         estadoPedido: esTransferencia ? 'pendiente_pago' : 'recibido',
+        // Una transferencia llega a Cocina recién cuando se confirma el pago.
+        fechaEnCocina: esTransferencia ? null : new Date(),
         metodoPago: pedido.metodoPago,
         estadoPago: esTransferencia ? 'pendiente_verificacion' : 'pendiente',
         // En retiro el validador ya los dejó en null.

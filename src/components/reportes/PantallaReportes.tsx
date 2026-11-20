@@ -24,6 +24,12 @@ import { TablaReporte } from './TablaReporte'
 
 const DIA_MS = 24 * 60 * 60 * 1000
 
+// Columnas del detalle que se ven en pantalla; la exportación lleva todas.
+const COLUMNAS_DETALLE_VISIBLES = [
+  'N.º', 'Fecha', 'Cliente', 'Canal', 'Entrega', 'Estado del pedido', 'Pago', 'Vendido',
+  'Subtotal', 'Recargo delivery', 'Total',
+]
+
 // El gráfico de período se agrupa solo según el largo del rango, para que no queden
 // cientos de barras: hasta 31 días, por día; hasta ~6 meses, por semana; más, por mes.
 function agrupacionDelRango(desde: string, hasta: string): Agrupacion {
@@ -136,7 +142,7 @@ function ContenidoReportes({ negocio, sucursalInicial, sucursalFija, opciones }:
     <div className="flex flex-col gap-6">
       <header>
         <h1 className="text-2xl font-semibold text-text">Reportes</h1>
-        <p className="text-sm text-muted">Ventas de los pedidos pagados, independientemente de su entrega.</p>
+        <p className="text-sm text-muted">Ventas de pedidos pagados, aunque todavía no se hayan entregado.</p>
       </header>
 
       <FiltrosReportes filtros={filtros} onCambiar={setFiltros} sucursalFija={sucursalFija} opciones={opciones} />
@@ -300,7 +306,15 @@ function Pestanas({ datos, agrupacion, contexto, descargasHabilitadas }: Pestana
                 formato={actual.columnas[grafico.valor].formato}
               />
             )}
-            {grafico?.tipo !== 'mapa' && <TablaReporte columnas={actual.columnas} filas={filas} compacta={actual.id === 'pedidos'} centrada={['periodo', 'horario', 'productos', 'pago', 'origen', 'entrega'].includes(actual.id)} />}
+            {grafico?.tipo !== 'mapa' && (
+              <TablaReporte
+                columnas={actual.columnas}
+                filas={filas}
+                compacta={actual.id === 'pedidos'}
+                soloColumnas={actual.id === 'pedidos' ? COLUMNAS_DETALLE_VISIBLES : undefined}
+              />
+            )}
+            {actual.id === 'pedidos' && <p className="-mt-3 text-xs text-muted">Al exportar se incluyen todas las columnas (sucursal, productos, cantidad…).</p>}
           </>
         )}
       </div>

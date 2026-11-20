@@ -6,9 +6,12 @@ import { authOptions } from '@/lib/auth/auth'
 import { prisma } from '@/lib/db/prisma'
 import { crearControladorPedidosInternos } from '@/lib/pedidos/pedidos-internos'
 import { obtenerSucursalActiva } from '@/lib/sucursales/sucursal-activa'
+import { accesoDeEsteEquipo } from '@/lib/pantallas/acceso'
 
 export const pedidosInternos = crearControladorPedidosInternos<Session>(
   prisma,
   () => getServerSession(authOptions),
   async (sesion) => (await obtenerSucursalActiva(sesion)).sucursal?.idSucursal ?? null,
+  // Cocina puede trabajar sin sesión, con el acceso propio del equipo.
+  () => accesoDeEsteEquipo(prisma, ['cocina']),
 )

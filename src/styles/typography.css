@@ -1,0 +1,53 @@
+/* =========================================
+   TIPOGRAFÍA — base y utilidades de texto
+========================================= */
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 500; /* grosor general del texto: 400 = normal, 500 = medium */
+}
+
+@media print {
+  body {
+    background: var(--surface);
+  }
+}
+
+/* ---- Panel ---- */
+
+/* Título de cada página del panel. */
+@utility page-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* Títulos de grupo en mayúscula (secciones del sidebar). */
+@utility section-label {
+  font-size: var(--sidebar-titulo);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ---- Pantallas (cocina / mostrador, lectura a distancia) ---- */
+
+@utility screen-title {
+  font-size: 2.5rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+@utility screen-item {
+  font-size: 1.75rem;
+  line-height: 1.3;
+}
+
+/* Número de pedido en la pantalla del mostrador: lo más grande, se lee desde el otro lado del local. */
+@utility screen-number {
+  font-size: 4.5rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}

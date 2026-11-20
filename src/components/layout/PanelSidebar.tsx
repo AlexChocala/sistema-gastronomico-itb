@@ -4,7 +4,6 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LogoMise } from '@/components/acceso/ElementosAcceso'
-import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import {
   ChartColumn, ChefHat, ChevronDown, ClipboardList, ExternalLink, LayoutDashboard, Layers, List,
   Monitor, MonitorPlay, Package, PackageCheck, Settings, Store, Tags, Users, Wallet,
@@ -63,19 +62,13 @@ const secciones: Seccion[] = [
     ],
     pendientes: [],
   },
-  {
-    titulo: 'Preferencias',
-    roles: ['supervisor', 'empleado'],
-    enlaces: [{ href: '/configuracion', texto: 'Configuración', icono: Settings }],
-    pendientes: [],
-  },
 ]
 
 const pantallas = [
   { href: '/pantallas/caja', texto: 'Caja', icono: Wallet },
   { href: '/pantallas/cocina', texto: 'Cocina', icono: ChefHat },
   { href: '/pantallas/entregas', texto: 'Entregas', icono: PackageCheck },
-  { href: '/pantallas/pedidos-mostrador', texto: 'Pedidos Mostrador', icono: Monitor },
+  { href: '/pantallas/pedidos-mostrador', texto: 'Pantalla del cliente', icono: Monitor },
 ]
 
 function esVisible(roles: string[] | undefined, rol: string) {
@@ -87,25 +80,18 @@ const claseSubItem = 'flex items-center gap-2.5 whitespace-nowrap rounded-full p
 const claseIcono = 'size-(--sidebar-icono) shrink-0'
 const trazoIcono = 1.75
 
-export function PanelSidebar({ rol, nombreNegocio }: { rol: string; nombreNegocio: string }) {
+export function PanelSidebar({ rol, nombreNegocio, logoUrl = null }: { rol: string; nombreNegocio: string; logoUrl?: string | null }) {
   const rutaActual = usePathname()
-  const { sucursal } = useSucursalActiva()
   const seccionesVisibles = secciones.filter((seccion) => esVisible(seccion.roles, rol))
   // Grupos con subenlaces que el usuario abrió o cerró con la flecha. Si no lo tocó, el
   // grupo está abierto mientras estás dentro de su sección.
   const [gruposTocados, setGruposTocados] = useState<Record<string, boolean>>({})
 
-  // El monitor de Mostrador es público (sin sesión): la sucursal viaja en la URL.
-  function hrefPantalla(href: string) {
-    return href === '/pantallas/pedidos-mostrador' && sucursal
-      ? `${href}?sucursal=${sucursal.idSucursal}`
-      : href
-  }
 
   return (
     <aside className="flex flex-col gap-8 p-4 md:sticky md:top-0 md:h-screen md:overflow-y-auto scrollbar-oculta">
       <div className="px-2 pt-2">
-        <LogoMise nombreNegocio={nombreNegocio} />
+        <LogoMise nombreNegocio={nombreNegocio} logoUrl={logoUrl} />
       </div>
 
       <nav aria-label="Menú principal" className="flex flex-col gap-6">
@@ -178,7 +164,7 @@ export function PanelSidebar({ rol, nombreNegocio }: { rol: string; nombreNegoci
                   {pantallas.map((pantalla) => {
                     const Icono = pantalla.icono
                     return (
-                      <a key={pantalla.href} href={hrefPantalla(pantalla.href)} target="_blank" rel="noopener noreferrer" className={claseSubItem + ' text-muted hover:bg-surface-muted/60 hover:text-text'}>
+                      <a key={pantalla.href} href={pantalla.href} target="_blank" rel="noopener noreferrer" className={claseSubItem + ' text-muted hover:bg-surface-muted/60 hover:text-text'}>
                         <Icono strokeWidth={trazoIcono} className={claseIcono} />
                         {pantalla.texto}
                         <ExternalLink size={14} strokeWidth={trazoIcono} className="ml-auto opacity-60" />

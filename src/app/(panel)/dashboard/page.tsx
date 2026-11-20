@@ -11,3 +11,5 @@ export default async function DashboardPage() {
     </main>
   )
 }
+
+export const metadata = { title: 'Dashboard' }

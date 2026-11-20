@@ -38,8 +38,8 @@ const formatoMes = new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'nume
 const estiloCalendario = {
   '--rdp-accent-color': 'var(--accent)',
   '--rdp-accent-background-color': 'var(--accent-soft)',
-  '--rdp-range_start-color': 'var(--on-accent)',
-  '--rdp-range_end-color': 'var(--on-accent)',
+  '--rdp-range_start-color': 'var(--on-brand)',
+  '--rdp-range_end-color': 'var(--on-brand)',
   '--rdp-day-height': '40px',
   '--rdp-day-width': '40px',
   '--rdp-day_button-height': '38px',

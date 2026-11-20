@@ -21,6 +21,11 @@ export async function proxy(request: NextRequest) {
   const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
 
   if (!token) {
+    // Cocina también la abre un equipo enlazado con el link de acceso (cookie que deja /p/{código}). Acá solo se mira que haya cookie: el código se valida contra la base
+    // en el layout y en la API, así que una cookie inventada no muestra ni cambia nada.
+    const pathname = request.nextUrl.pathname
+    const esPantallaEnlazable = ['/pantallas/cocina'].some((ruta) => pathname === ruta || pathname.startsWith(ruta + '/'))
+    if (esPantallaEnlazable && request.cookies.has('acceso-pantalla')) return NextResponse.next()
     const loginUrl = new URL('/acceso/login', request.url)
     return NextResponse.redirect(loginUrl)
   }
@@ -29,6 +34,11 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const soloAdmin = pathname === '/usuarios' || pathname.startsWith('/usuarios/')
   if (soloAdmin && token.rol !== 'admin') {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
+  // Configuración es solo del administrador (la página lo vuelve a comprobar con el rol de la base).
+  if ((pathname === '/configuracion' || pathname.startsWith('/configuracion/')) && token.rol !== 'admin') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

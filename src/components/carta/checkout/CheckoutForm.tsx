@@ -281,8 +281,7 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
           />
           {!errores.telefono && (
             <p className="-mt-2 text-xs font-normal text-muted">
-              10 números, con código de área, sin 0 ni 15. Ej: 1123493023 (Buenos Aires) o 3777412142 (Corrientes).
-              Lo usamos solo por tu pedido.
+              Con código de área, sin 0 ni 15. Lo usamos solo para tu pedido.
             </p>
           )}
         </Seccion>
@@ -349,7 +348,7 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
                   onChange={(evento) => { setReferencias(evento.target.value); limpiarError('referencias') }}
                   aria-invalid={errores.referencias ? true : undefined}
                   aria-describedby={errores.referencias ? 'checkout-referencias-error' : undefined}
-                  className="min-h-12 resize-none rounded-xl border border-border bg-surface px-3 py-2 text-text outline-none focus:border-primary"
+                  className="min-h-12 resize-none rounded-xl border border-border bg-surface px-3 py-2 text-text outline-none focus:border-accent"
                 />
                 {errores.referencias && (
                   <span id="checkout-referencias-error" className="text-sm text-danger">{errores.referencias}</span>
@@ -398,12 +397,7 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
           {metodoPago === 'transferencia' && aceptaTransferencia && (
             <div className="flex gap-3 rounded-2xl bg-accent-soft p-4 text-sm font-normal">
               <Info className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
-              <p>
-                Al confirmar te mostramos el alias para transferir, junto con el número de tu pedido.{' '}
-                {sucursal.whatsapp
-                  ? 'Después nos mandás el comprobante por WhatsApp y empezamos a prepararlo cuando verifiquemos el pago.'
-                  : 'Una vez realizada la transferencia, enviá el comprobante por WhatsApp. Empezamos a preparar tu pedido cuando verifiquemos el pago.'}
-              </p>
+              <p>Al confirmar tu pedido te mostramos los datos para hacer la transferencia.</p>
             </div>
           )}
         </Seccion>
@@ -414,12 +408,10 @@ export function CheckoutForm({ slug, sucursal, aceptaTransferencia, productos }:
           </div>
         )}
 
-        <Button type="submit" variant="acento" tamano="grande" disabled={enviando || (tipoEntrega === 'delivery' && (!sucursal.deliveryConfigurado || recargoDelivery === null))} className="shadow-lg">
+        {/* Se puede tocar aunque falte calcular el envío: así la validación marca en rojo el campo que falta. */}
+        <Button type="submit" variant="acento" tamano="grande" disabled={enviando} className="shadow-lg">
           {enviando ? 'Enviando tu pedido…' : recargoDelivery === null ? 'Calculá el envío para confirmar' : `Confirmar pedido · ${formatearPrecio(totalConEnvio)}`}
         </Button>
-        <p className="-mt-2 text-center text-xs font-normal text-muted">
-          Los precios se confirman al enviar el pedido.
-        </p>
       </form>
     </div>
   )
@@ -481,7 +473,7 @@ function Opcion({ nombreGrupo, campo, valor, elegido, onElegir, icono, titulo, d
         aria-describedby={idError}
         className="sr-only"
       />
-      <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${elegido ? 'bg-accent text-on-accent' : 'bg-bg text-muted'}`}>
+      <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${elegido ? 'bg-brand text-on-brand' : 'bg-bg text-muted'}`}>
         {icono}
       </span>
       <span className="flex min-w-0 flex-col">
@@ -495,7 +487,7 @@ function Opcion({ nombreGrupo, campo, valor, elegido, onElegir, icono, titulo, d
 function OpcionFija({ icono, titulo, detalle }: { icono: ReactNode; titulo: string; detalle: string }) {
   return (
     <div className={`${claseTarjetaOpcion} border-accent bg-accent-soft/50`}>
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent">{icono}</span>
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand text-on-brand">{icono}</span>
       <span className="flex min-w-0 flex-col">
         <span className="font-semibold">{titulo}</span>
         <span className="text-sm font-normal text-muted">{detalle}</span>

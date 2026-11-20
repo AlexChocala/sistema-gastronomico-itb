@@ -11,6 +11,7 @@ import {
   Globe, Landmark, Receipt, ShoppingBag, Store, Wallet, type LucideIcon,
 } from '@/components/icons'
 import { EstadoConexion } from '@/components/pedidos/EstadoConexion'
+import { ESTADO_PEDIDO } from '@/components/pedidos/EtiquetasPedido'
 import { useSucursalActiva } from '@/components/sucursal/SucursalActiva'
 import {
   usePedidosPantalla,
@@ -32,15 +33,6 @@ const formatoFecha = new Intl.DateTimeFormat('es-AR', {
 })
 
 const formatoHora = new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit' })
-
-const estados: Record<EstadoPedidoPantalla, { texto: string; color: string; punto: string }> = {
-  pendiente_pago: { texto: 'Esperando pago', color: 'text-warning', punto: 'bg-warning' },
-  recibido: { texto: 'Recibido', color: 'text-accent', punto: 'bg-accent' },
-  en_preparacion: { texto: 'En preparación', color: 'text-order-preparing', punto: 'bg-order-preparing' },
-  listo: { texto: 'Listo', color: 'text-order-ready', punto: 'bg-order-ready' },
-  enviado: { texto: 'Enviado', color: 'text-accent', punto: 'bg-accent' },
-  entregado: { texto: 'Entregado', color: 'text-order-delivered', punto: 'bg-order-delivered' },
-}
 
 function esDeHoy(pedido: PedidoPantalla, hoy: Date) {
   const fecha = new Date(pedido.fecha)
@@ -70,18 +62,19 @@ function Indicador({
 }) {
   return (
     <div
-      className={`flex flex-col gap-4 rounded-3xl p-5 shadow-sm ${destacado ? 'bg-accent text-on-accent' : 'bg-surface'}`}
+      className={`flex flex-col gap-4 rounded-3xl p-5 shadow-sm ${destacado ? 'bg-brand text-on-brand' : 'bg-surface'}`}
     >
       <div className="flex items-center justify-between gap-3">
-        <p className={`text-sm ${destacado ? '' : 'text-muted'}`}>{titulo}</p>
+        <p className={`text-sm ${destacado ? 'font-semibold' : 'text-muted'}`}>{titulo}</p>
         <span
-          className={`flex size-9 items-center justify-center rounded-full ${destacado ? 'bg-on-accent/20' : 'bg-accent-soft text-accent'}`}
+          className={`flex size-9 items-center justify-center rounded-full ${destacado ? 'bg-on-brand/20' : 'bg-accent-soft text-accent'}`}
         >
           <Icono className="size-4" />
         </span>
       </div>
       <p className="text-3xl font-bold tracking-tight">{valor}</p>
-      <p className={`text-xs ${destacado ? 'text-on-accent/80' : 'text-muted'}`}>{detalle}</p>
+      {/* En la tarjeta de marca el blanco sobre naranja contrasta poco: sin transparencia y en seminegrita. */}
+      <p className={`text-xs ${destacado ? 'font-semibold' : 'text-muted'}`}>{detalle}</p>
     </div>
   )
 }
@@ -110,7 +103,8 @@ export function ResumenDelDia({ nombre, puedeAbrirCaja }: { nombre: string; pued
   }
 
   const hoy = new Date()
-  const deHoy = pedidos.filter((pedido) => esDeHoy(pedido, hoy))
+  // Los cancelados no cuentan: ni como venta ni como pedido del día.
+  const deHoy = pedidos.filter((pedido) => esDeHoy(pedido, hoy) && pedido.estado !== 'cancelado')
 
   const cobrados = deHoy.filter((pedido) => pedido.estadoPago === 'pagado')
   const ventas = cobrados.reduce((suma, pedido) => suma + pedido.total, 0)
@@ -127,8 +121,9 @@ export function ResumenDelDia({ nombre, puedeAbrirCaja }: { nombre: string; pued
   const porEstado = (estado: EstadoPedidoPantalla) =>
     deHoy.filter((pedido) => pedido.estado === estado).length
 
+  // Sale de los pagos de cada pedido, así un pago dividido suma cada parte donde corresponde.
   const cobradoPor = (metodo: PedidoPantalla['metodoPago']) =>
-    cobrados.filter((pedido) => pedido.metodoPago === metodo).reduce((suma, pedido) => suma + pedido.total, 0)
+    cobrados.reduce((suma, pedido) => suma + pedido.pagos.filter((pago) => pago.metodo === metodo).reduce((parcial, pago) => parcial + pago.monto, 0), 0)
 
   const unidadesPorProducto = new Map<string, number>()
   for (const pedido of deHoy) {
@@ -159,10 +154,10 @@ export function ResumenDelDia({ nombre, puedeAbrirCaja }: { nombre: string; pued
             href="/pantallas/caja"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm text-on-accent transition-colors hover:bg-accent-hover"
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm text-on-brand transition-colors hover:bg-brand-hover"
           >
             <Wallet className="size-4" />
-            Abrir caja
+            Caja
             <ExternalLink className="size-3.5" />
           </a>
         )}
@@ -218,16 +213,16 @@ export function ResumenDelDia({ nombre, puedeAbrirCaja }: { nombre: string; pued
               { estado: 'enviado', icono: Bike },
             ] as const).map(({ estado, icono: Icono }) => (
               <div key={estado} className="flex flex-col gap-3 rounded-2xl bg-bg p-4">
-                <span className={`inline-flex items-center gap-1.5 text-xs ${estados[estado].color}`}>
-                  <Icono className="size-4" />
-                  {estados[estado].texto}
+                <span className={`inline-flex items-center gap-1.5 text-xs ${ESTADO_PEDIDO[estado].color}`}>
+                  <Icono className={`size-4 ${ESTADO_PEDIDO[estado].colorIcono}`} />
+                  {ESTADO_PEDIDO[estado].texto}
                 </span>
                 <span className="text-4xl font-bold">{porEstado(estado)}</span>
               </div>
             ))}
             <span aria-hidden="true" className="hidden w-px self-stretch bg-border sm:block" />
             <div className="col-span-2 flex flex-col gap-3 rounded-2xl border border-border p-4 sm:col-span-1">
-              <span className={`inline-flex items-center gap-1.5 text-xs ${estados.entregado.color}`}>
+              <span className={`inline-flex items-center gap-1.5 text-xs ${ESTADO_PEDIDO.entregado.color}`}>
                 <CheckCheck className="size-4" />
                 Entregados hoy
               </span>
@@ -270,7 +265,7 @@ export function ResumenDelDia({ nombre, puedeAbrirCaja }: { nombre: string; pued
               {masVendidos.map(([producto, unidades], indice) => (
                 <li key={producto} className="flex items-center gap-3 rounded-2xl px-2 py-2">
                   <span
-                    className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm ${indice === 0 ? 'bg-accent text-on-accent' : 'bg-bg text-muted'}`}
+                    className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm ${indice === 0 ? 'bg-brand text-on-brand' : 'bg-bg text-muted'}`}
                   >
                     {indice === 0 ? <Flame className="size-4" /> : indice + 1}
                   </span>
@@ -311,9 +306,9 @@ export function ResumenDelDia({ nombre, puedeAbrirCaja }: { nombre: string; pued
                         {pedido.estadoPago !== 'pagado' && <span className="text-warning"> · Pago pendiente</span>}
                       </p>
                     </div>
-                    <span className={`hidden items-center gap-1.5 text-xs sm:inline-flex ${estados[pedido.estado].color}`}>
-                      <span className={`size-1.5 rounded-full ${estados[pedido.estado].punto}`} />
-                      {estados[pedido.estado].texto}
+                    <span className={`hidden items-center gap-1.5 text-xs sm:inline-flex ${ESTADO_PEDIDO[pedido.estado].color}`}>
+                      <span className={`size-1.5 rounded-full ${ESTADO_PEDIDO[pedido.estado].punto}`} />
+                      {ESTADO_PEDIDO[pedido.estado].texto}
                     </span>
                     <span className="w-24 shrink-0 text-right font-bold">{formatoPrecio.format(pedido.total)}</span>
                   </li>

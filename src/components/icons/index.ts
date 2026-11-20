@@ -14,7 +14,7 @@ export {
 export { Bike, ShoppingBag, CircleUserRound, Check } from 'lucide-react'
 
 // Caja — categorías y carrito
-export { Hamburger, Pizza, Sandwich, CupSoda, IceCreamCone, Salad, Search, Plus, Minus, Trash2 } from 'lucide-react'
+export { Hamburger, Pizza, Sandwich, CupSoda, IceCreamCone, Salad, Croissant, Popcorn, Search, Plus, Minus, Trash2 } from 'lucide-react'
 
 // Caja — cobro
 export { Banknote, Landmark, ArrowLeft, Printer, CircleCheck } from 'lucide-react'
@@ -25,7 +25,7 @@ export { Pencil, Power, Store, X, ChevronLeft, ChevronRight } from 'lucide-react
 export { List, Tags, Layers } from 'lucide-react'
 
 // Dashboard
-export { Receipt, Flame, Globe, CalendarDays, Clock, CheckCheck } from 'lucide-react'
+export { Receipt, Flame, Globe, CalendarDays, Clock, CheckCheck, Truck } from 'lucide-react'
 
 // Acceso (login y contraseñas)
 export { Mail, MailCheck, LockKeyhole, Eye, EyeOff, ArrowRight, ShieldCheck, TriangleAlert } from 'lucide-react'
@@ -55,7 +55,7 @@ export { ChevronDown, ExternalLink, RotateCcw } from 'lucide-react'
 export { CircleX } from 'lucide-react'
 
 // Barra superior — notificaciones
-export { Bell } from 'lucide-react'
+export { Bell, Volume2, VolumeOff } from 'lucide-react'
 
 // Apariencia
 export { Moon, Sun } from 'lucide-react'

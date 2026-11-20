@@ -4,7 +4,8 @@
 //
 //   Lista    GET /api/pedidos/sucursal (la sucursal la decide el servidor por la sesión),
 //            cada 5 s mientras la pestaña está visible; al volver a la pestaña o darle
-//            foco se actualiza en el momento.
+//            foco se actualiza en el momento. Cocina pide `segundoPlano`: sigue consultando
+//            aunque la pestaña quede oculta, para que no se pierda un pedido nuevo.
 //   Acciones PATCH /api/pedidos/{id}. Se muestran al instante (actualización optimista)
 //            y después se reemplazan por lo que responde el servidor, que es el que
 //            decide (lib/pedidos/pedidos-estados.ts). Si el pedido ya había cambiado (409) o
@@ -74,7 +75,7 @@ type Resultado<T> = { clave: string; datos: T | null; error: string | null }
 // identifica qué se está mirando (la sucursal): si cambia, lo anterior deja de valer.
 // `invalidar()` descarta las respuestas que estaban en camino (las acciones lo llaman para
 // que una lista vieja no pise un cambio recién hecho).
-function useConsultaPeriodica<T>(url: string | null, clave: string) {
+function useConsultaPeriodica<T>(url: string | null, clave: string, segundoPlano = false) {
   const [resultado, setResultado] = useState<Resultado<T> | null>(null)
   const generacion = useRef(0)
   const enCurso = useRef(false)
@@ -113,7 +114,7 @@ function useConsultaPeriodica<T>(url: string | null, clave: string) {
     }
     // Con la pestaña oculta no se consulta; al volver, se actualiza enseguida.
     const alCambiarVisibilidad = () => {
-      if (document.hidden) {
+      if (document.hidden && !segundoPlano) {
         parar()
       } else {
         void consultar()
@@ -123,7 +124,7 @@ function useConsultaPeriodica<T>(url: string | null, clave: string) {
     const alEnfocar = () => void consultar()
 
     void consultar(true)
-    if (!document.hidden) arrancar()
+    if (segundoPlano || !document.hidden) arrancar()
     document.addEventListener('visibilitychange', alCambiarVisibilidad)
     window.addEventListener('focus', alEnfocar)
     return () => {
@@ -133,7 +134,7 @@ function useConsultaPeriodica<T>(url: string | null, clave: string) {
       // Lo que llegue de esta consulta ya no corresponde.
       invalidar()
     }
-  }, [url, consultar, invalidar])
+  }, [url, consultar, invalidar, segundoPlano])
 
   const recargar = useCallback(() => consultar(true), [consultar])
 
@@ -163,6 +164,11 @@ export type NuevoPedidoMostrador = {
   tipoEntrega: TipoEntrega
   metodoPago: MetodoPago
   items: { idProducto: number; cantidad: number; idVariacion?: number; extras?: number[] }[]
+  // Caja donde se cobra y PIN de quien cobra.
+  idCaja: number
+  pin: string
+  // Pago dividido (efectivo + transferencia). Sin esto se paga todo con `metodoPago`.
+  pagos?: { metodo: MetodoPago; monto: number }[]
   // Para la cocina, de todo el pedido (vacía no se manda).
   aclaracion?: string
   recargoDeliveryAceptado?: number
@@ -174,6 +180,8 @@ export type NuevoPedidoMostrador = {
   ubicacion?: string | null
   referencias?: string
 }
+
+export type ItemAgregado = { idProducto: number; cantidad: number; idVariacion?: number; extras?: number[] }
 
 export type DatosDelivery = { recargoDeliveryAceptado?: number; telefono: string; direccion: string; idLocalidad: number | null; ubicacion?: string | null; referencias: string }
 
@@ -197,6 +205,9 @@ export function cuerpoPedidoCaja(datos: NuevoPedidoMostrador) {
     },
     tipoEntrega: datos.tipoEntrega,
     metodoPago: datos.metodoPago,
+    idCaja: datos.idCaja,
+    pin: datos.pin,
+    ...(datos.pagos ? { pagos: datos.pagos } : {}),
     ...(datos.aclaracion?.trim() ? { aclaracion: datos.aclaracion.trim() } : {}),
     items: datos.items,
     ...(datos.tipoEntrega === 'delivery'
@@ -230,10 +241,11 @@ export async function crearPedidoMostrador(datos: NuevoPedidoMostrador): Promise
 // Pedidos de UNA sucursal: la activa de la sesión. `idSucursal` (del contexto) sirve para
 // volver a consultar cuando el admin cambia de sucursal; con null (usuario sin sucursal)
 // no consulta nada.
-export function usePedidosPantalla(idSucursal: number | null) {
+export function usePedidosPantalla(idSucursal: number | null, { segundoPlano = false } = {}) {
   const consulta = useConsultaPeriodica<RespuestaLista>(
     idSucursal === null ? null : '/api/pedidos/sucursal',
     String(idSucursal),
+    segundoPlano,
   )
   const { invalidar, modificar, recargar } = consulta
   const [errorAccion, setErrorAccion] = useState<string | null>(null)
@@ -313,8 +325,19 @@ export function usePedidosPantalla(idSucursal: number | null) {
     marcarListo: (idPedido: number) => cambiarEstado(idPedido, 'marcarListo'),
     // Solo delivery: el cadete sale con el pedido.
     marcarEnviado: (idPedido: number) => cambiarEstado(idPedido, 'marcarEnviado'),
-    // Si el pago estaba pendiente (efectivo al entregar), entregar también lo cobra.
-    marcarEntregado: (idPedido: number) => cambiarEstado(idPedido, 'marcarEntregado'),
+    // Si el pago estaba pendiente (efectivo al entregar), entregar también lo cobra: en ese caso
+    // hacen falta el PIN de quien recibe la plata y la caja donde entra. No es optimista: el
+    // PIN lo valida el servidor.
+    marcarEntregado: (idPedido: number, cobro?: { pin: string; idCaja: number }) =>
+      cobro
+        ? mutar(idPedido, { accion: 'marcarEntregado', pin: cobro.pin, idCaja: cobro.idCaja }, () => null)
+        : cambiarEstado(idPedido, 'marcarEntregado'),
+    // Solo antes de "En preparación". Pide el motivo y el PIN de quien cancela.
+    cancelarPedido: (idPedido: number, motivo: string, pin: string) =>
+      mutar(idPedido, { accion: 'cancelar', motivo, pin }, () => null),
+    // Agregar productos a un pedido online que todavía no empezó a prepararse.
+    agregarProductos: (idPedido: number, items: ItemAgregado[], pin: string) =>
+      mutar(idPedido, { accion: 'agregarProductos', items, pin }, () => null),
     // A retiro: se borran dirección, localidad e indicaciones. A delivery: hacen falta
     // celular y dirección (y localidad si la sucursal tiene zonas).
     cambiarTipoEntrega: (idPedido: number, tipoEntrega: TipoEntrega, entrega?: DatosDelivery) =>

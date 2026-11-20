@@ -61,6 +61,24 @@ export type PedidoReporte = {
   total: number
 }
 
+// Un turno de caja (de la apertura al cierre) con lo cobrado. Los cancelados no cuentan.
+export type TurnoReporte = {
+  idTurno: number
+  caja: string
+  sucursal: string
+  abrio: string
+  cerro: string | null // null = todavía abierto
+  apertura: string // 'AAAA-MM-DDTHH:mm'
+  cierre: string | null
+  montoInicial: number
+  efectivoCobrado: number
+  transferenciaCobrada: number
+  // Arqueo (solo en turnos cerrados): lo que el sistema esperaba, lo contado y la diferencia.
+  efectivoEsperado: number | null
+  efectivoContado: number | null
+  diferencia: number | null
+}
+
 export type DatosReportes = {
   resumen: ResumenVentas
   ventasPorPeriodo: VentaPorPeriodo[]
@@ -72,4 +90,5 @@ export type DatosReportes = {
   ventasPorEntrega: VentaPorEntrega[]
   demanda: DemandaEsperada[]
   pedidos: PedidoReporte[]
+  turnos: TurnoReporte[]
 }

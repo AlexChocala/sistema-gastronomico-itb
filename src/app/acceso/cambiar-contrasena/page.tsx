@@ -24,3 +24,5 @@ export default async function CambiarContrasenaPage() {
 
   return <CambiarContrasenaForm accion={actualizarContrasena} cambioObligatorio={usuario.debeCambiarContrasena} />
 }
+
+export const metadata = { title: 'Cambiar contraseña' }

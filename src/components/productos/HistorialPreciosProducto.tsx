@@ -68,9 +68,9 @@ export function HistorialPreciosProducto({ producto, onCerrar }: {
       {error && <Aviso tipo="error" accion={{ texto: 'Reintentar', onClick: () => setIntento(n => n + 1) }}>{error}</Aviso>}
       {datos && !error && !cargando && <>
         <div className="flex min-w-0 gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Precio a consultar">
-          <Button variant={datos.historial.tipo === 'base' ? 'primario' : 'secundario'} className="w-auto! shrink-0 rounded-full!" role="tab" aria-selected={datos.historial.tipo === 'base'} onClick={() => elegirHistorial(null)}>Precio base</Button>
+          <Button variant={datos.historial.tipo === 'base' ? 'acento' : 'secundario'} className="w-auto! shrink-0 rounded-full!" role="tab" aria-selected={datos.historial.tipo === 'base'} onClick={() => elegirHistorial(null)}>Precio base</Button>
           {datos.variaciones.map(variacion => <Button key={variacion.idVariacion}
-            variant={datos.historial.idVariacion === variacion.idVariacion ? 'primario' : 'secundario'}
+            variant={datos.historial.idVariacion === variacion.idVariacion ? 'acento' : 'secundario'}
             className="w-auto! shrink-0 rounded-full!" role="tab"
             aria-selected={datos.historial.idVariacion === variacion.idVariacion}
             onClick={() => elegirHistorial(variacion.idVariacion)}>

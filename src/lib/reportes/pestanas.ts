@@ -6,7 +6,7 @@ import type { EstadoPedido, EstadoPago, MetodoPago, OrigenPedido, TipoEntrega } 
 import { formatearPrecio } from '@/lib/utils/precio'
 import type { Agrupacion, DatosReportes } from './tipos'
 
-export type IdPestana = 'periodo' | 'horario' | 'productos' | 'sucursales' | 'pago' | 'origen' | 'entrega' | 'demanda' | 'pedidos'
+export type IdPestana = 'periodo' | 'horario' | 'productos' | 'sucursales' | 'pago' | 'origen' | 'entrega' | 'demanda' | 'pedidos' | 'turnos'
 export type TipoGrafico = 'linea' | 'barras' | 'barrasHorizontales' | 'torta' | 'mapa'
 export type Formato = 'texto' | 'numero' | 'precio'
 export type Valor = string | number
@@ -27,7 +27,7 @@ export type Pestana = {
 export const NOMBRES_METODO_PAGO: Record<MetodoPago, string> = { efectivo: 'Efectivo', transferencia: 'Transferencia' }
 const NOMBRES_ESTADO_PEDIDO: Record<EstadoPedido, string> = {
   pendiente_pago: 'Pendiente de pago', recibido: 'Recibido', en_preparacion: 'En preparación',
-  listo: 'Listo', enviado: 'Enviado', entregado: 'Entregado',
+  listo: 'Listo', enviado: 'Enviado', entregado: 'Entregado', cancelado: 'Cancelado',
 }
 const NOMBRES_ESTADO_PAGO: Record<EstadoPago, string> = {
   pagado: 'Pagado', pendiente: 'Pendiente', pendiente_verificacion: 'Pendiente de verificación',
@@ -72,7 +72,7 @@ export const PESTANAS: Pestana[] = [
     columnas: [{ titulo: 'Período', formato: 'texto' }, PEDIDOS, TOTAL],
     filas: (datos, agrupacion) =>
       datos.ventasPorPeriodo.map((f) => [nombrePeriodo(f.periodo, agrupacion), f.cantidadPedidos, f.totalVendido]),
-    grafico: { tipo: 'linea', etiqueta: 0, valor: 2 },
+    grafico: { tipo: 'barras', etiqueta: 0, valor: 2 },
   },
   {
     id: 'horario',
@@ -152,6 +152,32 @@ export const PESTANAS: Pestana[] = [
         p.registradoPor ?? (p.origen === 'online' ? 'Pedido online' : 'Sin registro'),
         NOMBRES_ORIGEN[p.origen], NOMBRES_ENTREGA[p.tipoEntrega], NOMBRES_ESTADO_PEDIDO[p.estadoPedido], NOMBRES_METODO_PAGO[p.metodoPago],
         NOMBRES_ESTADO_PAGO[p.estadoPago], p.vendido ? 'Sí' : 'No', (p.productos ?? []).join(', '), p.cantidadProductos, p.subtotal, p.recargoDelivery, p.total,
+      ]),
+    grafico: null,
+  },
+  {
+    // Arqueo de cada turno de caja: lo cobrado y la diferencia entre lo esperado y lo contado.
+    id: 'turnos',
+    titulo: 'Cajas y turnos',
+    columnas: [
+      { titulo: 'Caja', formato: 'texto' },
+      { titulo: 'Sucursal', formato: 'texto' },
+      { titulo: 'Abrió', formato: 'texto', multilinea: true },
+      { titulo: 'Cerró', formato: 'texto', multilinea: true },
+      { titulo: 'Apertura', formato: 'texto', multilinea: true },
+      { titulo: 'Cierre', formato: 'texto', multilinea: true },
+      { titulo: 'Efectivo inicial', formato: 'precio', multilinea: true },
+      { titulo: 'Efectivo cobrado', formato: 'precio', multilinea: true },
+      { titulo: 'Transferencias', formato: 'precio' },
+      { titulo: 'Esperado', formato: 'precio' },
+      { titulo: 'Contado', formato: 'precio' },
+      { titulo: 'Diferencia', formato: 'precio' },
+    ],
+    filas: (datos) =>
+      datos.turnos.map((t) => [
+        t.caja, t.sucursal, t.abrio, t.cerro ?? 'Abierta', fechaYHora(t.apertura), t.cierre ? fechaYHora(t.cierre) : '-',
+        t.montoInicial, t.efectivoCobrado, t.transferenciaCobrada,
+        t.efectivoEsperado ?? '-', t.efectivoContado ?? '-', t.diferencia ?? '-',
       ]),
     grafico: null,
   },
